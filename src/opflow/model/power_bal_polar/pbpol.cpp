@@ -1,3 +1,6 @@
+#include <iostream>
+#include <iomanip>
+
 #include "pbpol.h"
 #include "exago_config.h"
 #include <private/opflowimpl.h>
@@ -1818,6 +1821,23 @@ PetscErrorCode OPFLOWModelSetNumConstraints_PBPOL(OPFLOW opflow,
   PetscFunctionReturn(0);
 }
 
+
+static PetscErrorCode
+MatSetValues_and_Print(Mat M, int nrow, int row[], int ncol, int col[],
+                       PetscScalar val[], InsertMode mode)
+{
+  for (int r = 0; r < nrow; ++r) {
+    for (int c = 0; c < ncol; ++c) {
+      std::cout << "M: "
+                << std::setw(5) << std::right << row[r] << " "
+                << std::setw(5) << std::right << col[c] 
+                << std::endl;
+    }
+  }
+  return MatSetValues(M, nrow, row, ncol, col, val, mode);
+}
+      
+  
 /*
   OPFLOWComputeEqualityConstraintsHessian - Computes the Hessian for the
 equality constraints function part
@@ -2020,7 +2040,8 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsHessian_PBPOL(OPFLOW opflow,
             lambda_gloc * dPf_dVmf_dthetat + lambda_gloc1 * dQf_dVmf_dthetat;
         val[7] = lambda_gloc * dPf_dVmf_dVmt + lambda_gloc1 * dQf_dVmf_dVmt;
 
-        ierr = MatSetValues(H, 2, row, 4, col, val, ADD_VALUES);
+        // ierr = MatSetValues(H, 2, row, 4, col, val, ADD_VALUES);
+        ierr = MatSetValues_and_Print(H, 2, row, 4, col, val, ADD_VALUES);
         CHKERRQ(ierr);
 
         row[0] = xloct;
@@ -2049,7 +2070,8 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsHessian_PBPOL(OPFLOW opflow,
             lambda_gloc * dPf_dVmt_dthetat + lambda_gloc1 * dQf_dVmt_dthetat;
         val[7] = lambda_gloc * dPf_dVmt_dVmt + lambda_gloc1 * dQf_dVmt_dVmt;
 
-        ierr = MatSetValues(H, 2, row, 4, col, val, ADD_VALUES);
+        // ierr = MatSetValues(H, 2, row, 4, col, val, ADD_VALUES);
+        ierr = MatSetValues_and_Print(H, 2, row, 4, col, val, ADD_VALUES);
         CHKERRQ(ierr);
 
       } else {
@@ -2155,7 +2177,8 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsHessian_PBPOL(OPFLOW opflow,
             lambda_gloc * dPt_dVmt_dthetaf + lambda_gloc1 * dQt_dVmt_dthetaf;
         val[7] = lambda_gloc * dPt_dVmt_dVmf + lambda_gloc1 * dQt_dVmt_dVmf;
 
-        ierr = MatSetValues(H, 2, row, 4, col, val, ADD_VALUES);
+        // ierr = MatSetValues(H, 2, row, 4, col, val, ADD_VALUES);
+        ierr = MatSetValues_and_Print(H, 2, row, 4, col, val, ADD_VALUES);
         CHKERRQ(ierr);
 
         row[0] = xlocf;
@@ -2184,7 +2207,8 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsHessian_PBPOL(OPFLOW opflow,
             lambda_gloc * dPt_dVmf_dthetaf + lambda_gloc1 * dQt_dVmf_dthetaf;
         val[7] = lambda_gloc * dPt_dVmf_dVmf + lambda_gloc1 * dQt_dVmf_dVmf;
 
-        ierr = MatSetValues(H, 2, row, 4, col, val, ADD_VALUES);
+        // ierr = MatSetValues(H, 2, row, 4, col, val, ADD_VALUES);
+        ierr = MatSetValues_and_Print(H, 2, row, 4, col, val, ADD_VALUES);
         CHKERRQ(ierr);
       }
     }
@@ -2276,7 +2300,8 @@ PetscErrorCode OPFLOWComputeInequalityConstraintsHessian_PBPOL(OPFLOW opflow,
           val[1] = -lambda_gloc - lambda_gloc1;
           val[2] = gen->apf * (lambda_gloc + lambda_gloc1);
 
-          ierr = MatSetValues(H, 1, row, 3, col, val, ADD_VALUES);
+          // ierr = MatSetValues(H, 1, row, 3, col, val, ADD_VALUES);
+          ierr = MatSetValues_and_Print(H, 1, row, 3, col, val, ADD_VALUES);
 
           //	  df1_ddelPg = -(Pg - gen->pt);
           //	  df2_ddelPg = gen->pb - Pg;
@@ -2806,14 +2831,16 @@ PetscErrorCode OPFLOWComputeObjectiveHessian_PBPOL(OPFLOW opflow, Vec X,
       col[0] = xlocglob;
       val[0] = 0.0;
 
-      ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+      // ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+      ierr = MatSetValues_and_Print(H, 1, row, 1, col, val, ADD_VALUES);
       CHKERRQ(ierr);
 
       row[0] = xlocglob + 1;
       col[0] = xlocglob + 1;
       val[0] = 0.0;
 
-      ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+      // ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+      ierr = MatSetValues_and_Print(H, 1, row, 1, col, val, ADD_VALUES);
       CHKERRQ(ierr);
     }
 
@@ -2831,7 +2858,8 @@ PetscErrorCode OPFLOWComputeObjectiveHessian_PBPOL(OPFLOW opflow, Vec X,
 
         val[0] = weight * obj_factor * 2.0 * gen->cost_alpha * ps->MVAbase *
                  ps->MVAbase;
-        ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+        // ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+        ierr = MatSetValues_and_Print(H, 1, row, 1, col, val, ADD_VALUES);
         CHKERRQ(ierr);
         flps += 4;
       } else if (opflow->objectivetype == MIN_GENSETPOINT_DEVIATION) {
@@ -2839,7 +2867,8 @@ PetscErrorCode OPFLOWComputeObjectiveHessian_PBPOL(OPFLOW opflow, Vec X,
         row[0] = xlocglob;
         col[0] = xlocglob;
         val[0] = weight * obj_factor * 2.0;
-        ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+        // ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+        ierr = MatSetValues_and_Print(H, 1, row, 1, col, val, ADD_VALUES);
         CHKERRQ(ierr);
 
         flps += 1;
@@ -2857,13 +2886,15 @@ PetscErrorCode OPFLOWComputeObjectiveHessian_PBPOL(OPFLOW opflow, Vec X,
         row[0] = xlocglob;
         col[0] = xlocglob;
         val[0] = 0.0;
-        ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+        // ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+        ierr = MatSetValues_and_Print(H, 1, row, 1, col, val, ADD_VALUES);
         CHKERRQ(ierr);
 
         row[0] = xlocglob + 1;
         col[0] = xlocglob + 1;
         val[0] = 0.0;
-        ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+        // ierr = MatSetValues(H, 1, row, 1, col, val, ADD_VALUES);
+        ierr = MatSetValues_and_Print(H, 1, row, 1, col, val, ADD_VALUES);
         CHKERRQ(ierr);
       }
     }
