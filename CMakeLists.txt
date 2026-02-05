@@ -148,6 +148,12 @@ endif()
 # If MPI support is enabled, find MPI includes and libraries
 if(EXAGO_ENABLE_MPI)
   find_package(MPI REQUIRED COMPONENTS C CXX)
+  message(STATUS "MPI max ranks: ${MPIEXEC_MAX_NUMPROCS}")
+  set(TESTING_MAX_NUMPROCS 3)
+  if(${TESTING_MAX_NUMPROCS} GREATER_EQUAL ${MPIEXEC_MAX_NUMPROCS})
+    set(TESTING_MAX_NUMPROCS ${MPIEXEC_MAX_NUMPROCS})
+  endif()
+  message(STATUS "Max ranks for testing: ${TESTING_MAX_NUMPROCS}")
   if(NOT DEFINED MPI_CXX_COMPILER)
     set(CMAKE_CXX_COMPILER ${MPI_CXX_COMPILER})
     set(CMAKE_C_COMPILER ${MPI_C_COMPILER})
@@ -160,6 +166,8 @@ if(EXAGO_ENABLE_MPI)
       ""
       CACHE STRING "Extra args to mpiexec when running tests"
   )
+else()
+  set(TESTING_MAX_NUMPROCS 1)
 endif(EXAGO_ENABLE_MPI)
 
 # If GPU support is enabled, find CUDA
@@ -241,6 +249,8 @@ if(EXAGO_ENABLE_OMP)
   find_package(OpenMP REQUIRED COMPONENTS C CXX)
 endif()
 
+set(EXAGO_ENABLE_HIOP_SPARSE OFF)
+mark_as_advanced(EXAGO_ENABLE_HIOP_SPARSE FORCE)
 if(EXAGO_ENABLE_HIOP)
   include(ExaGOFindHiOp)
   if(NOT TARGET RAJA)
@@ -291,9 +301,8 @@ if(EXAGO_RUN_TESTS)
 endif()
 
 if(EXAGO_ENABLE_LOGGING)
-  add_subdirectory(${PROJECT_SOURCE_DIR}/tpl/spdlog/)
-  # -fPIC required for spdlog for use with python wrapper
-  set_property(TARGET spdlog PROPERTY POSITION_INDEPENDENT_CODE ON)
+  find_package(spdlog REQUIRED)
+  find_package(fmt REQUIRED)
 endif()
 
 # Build libraries (specified in src/CMakeLists.txt)

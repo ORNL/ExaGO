@@ -17,11 +17,14 @@ set(num_copies 3 600)
 
 list(TRANSFORM obj_network_files PREPEND ${prefix})
 
-set(solvers IPOPT HIOP HIOP HIOPSPARSE)
-set(models POWER_BALANCE_POLAR POWER_BALANCE_HIOP PBPOLRAJAHIOP
-           POWER_BALANCE_POLAR
-)
-set(dependencies IPOPT HIOP HIOP HIOP_SPARSE)
+set(solvers IPOPT HIOP HIOPSPARSE)
+set(models POWER_BALANCE_POLAR POWER_BALANCE_HIOP POWER_BALANCE_POLAR)
+set(dependencies IPOPT HIOP HIOP_SPARSE)
+if(EXAGO_ENABLE_RAJA)
+  set(solvers ${solvers} HIOP)
+  set(models ${models} PBPOLRAJAHIOP)
+  set(dependencies ${dependencies} HIOP)
+endif()
 
 if(EXAGO_INSTALL_TESTS)
   install(TARGETS objective_acopf DESTINATION tests/unit/opflow/objective)

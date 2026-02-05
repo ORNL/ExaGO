@@ -45,26 +45,18 @@ if(EXAGO_INSTALL_TESTS)
     HIOP_SPARSE
   )
 
-  if(EXAGO_ENABLE_GPU)
-    exago_add_test(
-      NAME
-      FUNCTIONALITY_TEST_OPFLOW_RAJAHIOP_SPARSE_GPU_TOML_TESTSUITE
-      COMMAND
-      ${RUNCMD}
-      $<TARGET_FILE:test_opflow_functionality>
-      ${CMAKE_CURRENT_SOURCE_DIR}/hiop_pbpolrajahiopsparse_gpu.toml
-      DEPENDS
-      HIOP
-      RAJA
-    )
-    if(EXAGO_ENABLE_HIOP AND EXAGO_ENABLE_RAJA)
-      # This test passes on Ascent...
-      set_tests_properties(
-        FUNCTIONALITY_TEST_OPFLOW_RAJAHIOP_SPARSE_GPU_TOML_TESTSUITE
-        PROPERTIES LABELS "incline-skip;"
-      )
-    endif()
-  endif(EXAGO_ENABLE_GPU)
+  exago_add_test(
+    NAME
+    FUNCTIONALITY_TEST_OPFLOW_RAJAHIOP_SPARSE_GPU_TOML_TESTSUITE
+    COMMAND
+    ${RUNCMD}
+    $<TARGET_FILE:test_opflow_functionality>
+    ${CMAKE_CURRENT_SOURCE_DIR}/hiop_pbpolrajahiopsparse_gpu.toml
+    DEPENDS
+    HIOP_SPARSE
+    RAJA
+    GPU
+  )
 
   # Note: All cartesian and/or current balance models are way behind. These
   # models should not be used and their tests should be disabled.
