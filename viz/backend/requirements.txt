@@ -1,9 +1,13 @@
 Flask==2.3.2
 Flask-Cors==4.0.0
-openai==0.27.8
-openapi-schema-pydantic==1.2.4
-langchain==0.0.233
-langsmith==0.0.5
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-anthropic>=0.3.0
+anthropic>=0.40.0
+openai>=1.0.0
+langsmith>=0.1.0
 shapely==2.1.2
 pandas==2.3.3
 geopandas==1.1.1
+psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0
