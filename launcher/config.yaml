@@ -2,7 +2,7 @@
 # Edit these paths when deploying on a different machine
 
 # Root ExaGO directory
-exago_dir: /home/samimk/Documents/Fakultet/Projekti/Slaven/exago/ExaGO
+exago_dir: {$EXAGO_PARENT_FOLDER}/ExaGO
 
 # Path to compiled application binaries
 applications_dir: ${exago_dir}/build/applications
@@ -23,10 +23,10 @@ output_dir: ${exago_dir}/../LLMSim/launcher/output
 environment:
   # Additional library paths (colon-separated, appended to LD_LIBRARY_PATH)
   ld_library_path:
-    - /home/samimk/Documents/Fakultet/Projekti/Slaven/exago/lib/libcoinhsl/lib64
+    - {$LIBCOINHSL_PATH}
   # Additional binary paths (colon-separated, prepended to PATH)
   path:
-    - /home/samimk/Documents/Fakultet/Projekti/Slaven/exago/ExaGO/petsc/petsc-install/bin
+    - {$PETSC_BIN_PATH}
   # Additional Python paths (colon-separated, prepended to PYTHONPATH)
   pythonpath:
-    - /home/samimk/Documents/Fakultet/Projekti/Slaven/exago/ExaGO/build/interfaces/python
+    - {$EXAGO_PARENT_FOLDER}/ExaGO/build/interfaces/python
