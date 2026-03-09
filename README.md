@@ -1,4 +1,4 @@
-# <b>Exa</b>scale <b>G</b>rid <b>O</b>ptimization toolkit (ExaGO<sup>TM</sup>) [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) ![PNNL GitLab Push Mirror](https://github.com/pnnl/ExaGO/actions/workflows/pnnl_mirror.yaml/badge.svg) ![ORNL Ascent GitLab Push Mirror](https://github.com/pnnl/ExaGO/actions/workflows/ornl_ascent_mirror.yaml/badge.svg) ![pre-commit GitHub Action](https://github.com/pnnl/ExaGO/actions/workflows/pre_commit.yaml/badge.svg?event=pull_request) ![Spack CPU Build](https://github.com/pnnl/ExaGO/actions/workflows/spack_cpu_build.yaml/badge.svg?event=pull_request)
+# <b>Exa</b>scale <b>G</b>rid <b>O</b>ptimization toolkit (ExaGO<sup>TM</sup>) [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) ![pre-commit GitHub Action](https://github.com/ornl/ExaGO/actions/workflows/pre_commit.yaml/badge.svg?event=pull_request) ![Spack CPU Build](https://github.com/ornl/ExaGO/actions/workflows/spack_cpu_build.yaml/badge.svg?event=pull_request)
 
 <!--![](viz/images/network_gen_load_us.png)-->
 <img src="viz/images/network_gen_load_us.png">
@@ -64,7 +64,8 @@ Instructions for executing the different ExaGO<sup>TM</sup> applications is give
 - [SCOPFLOW](docs/web/scopflow.md)
 - [PFLOW](docs/web/pflow.md)
 
-We also provide our user manual as a pdf [manual.pdf](docs/manual/manual.pdf) -> need to update this regularly with CI / move to quarto docs.
+We also provide our user manual as a pdf [manual.pdf](docs/manual/manual.pdf)
+-> need to update this regularly with CI / move to quarto docs.
 
 ## Tutorials
 
@@ -79,7 +80,9 @@ We also provide our user manual as a pdf [manual.pdf](docs/manual/manual.pdf) ->
 
 ### Options
 
-Each application has a different set of options that are described in depth in the usage notes. These options can be passed optionally through an options file (`-optionsfile <option_file>`), or directly on the command line.
+Each application has a different set of options that are described in depth in
+the usage notes. These options can be passed optionally through an options file
+(`-optionsfile <option_file>`), or directly on the command line.
 
 Since options may be specified in more than one location (on the command line, and through an options file), it is worth noting that the option specified on the command line supersede those in the options file. For example, if `opflowoptions` options file set the network file via the option `-netfile case9mod.m`, the following behavior occurs:
 
@@ -92,35 +95,50 @@ Since options may be specified in more than one location (on the command line, a
 ```
 
 ## Visualization (experimental)
-ExaGO has an experimental visualization to display the results of `OPFLOW` application on a map. See the [visualization README](viz/README.md) for more information.
+ExaGO has an experimental visualization to display the results of `OPFLOW`
+application on a map. See the [visualization README](viz/README.md) for more
+information.
 
 ## Contributing
 
-Please see [the developer guidelines](docs/developer_guidelines.md) before attempting to contribute.
-Feel free to raise an issue or contact the team if the guidelines are ambiguous or you have a particular question.
+Please see [the developer guidelines](docs/developer_guidelines.md) before
+attempting to contribute. Feel free to raise an issue or contact the team if
+the guidelines are ambiguous or you have a particular question.
 
 ## Authors
-- Shrirang Abhyankar
+ExaGO<sup>TM</sup> was designed and implemented by Shrirang Abhyankar. It has
+received significant from following developers: 
 - Slaven Peles
+- Nicholson Koukpaizan
+- Maksudul Alam
 - Asher Mancinelli
 - Cameron Rutherford
+- Joshua Hambrick
+- Philip Fackler
+- Eve Tsybina
 - Bruce Palmer
 - Jaelyn Litzinger
 - William Perkins
 - Sayef Azad Sakin
 - Joseph Macam
 - Ryan Danehy
-- Nicholson Koukpaizan
 
 ## Acknowledgement
-This package is developed as a part of [ExaSGD](https://www.exascaleproject.org/research-project/exasgd/) project under the [Exascale computing project](https://www.exascaleproject.org/).
+ExaGO<sup>TM</sup> has been originally developed as a part of
+[ExaSGD](https://www.exascaleproject.org/research-project/exasgd/)
+project under the [Exascale computing project](https://www.exascaleproject.org/).
 
 ## Copyright
-Copyright &copy; 2020, Battelle Memorial Institute.
 
-ExaGO<sup>TM</sup> is a free software distributed under a BSD 2-clause license. You may reuse, modify, and redistribute the software. See the [license](LICENSE) file for details.
+Copyright &copy; 2026, UT Battelle.
 
+ExaGO<sup>TM</sup> (v2) is a free software distributed under a BSD-style
+license. See the [LICENSE](LICENSE) and [NOTICE](NOTICE) files for details.
+All new contributions to ExaGO<sup>TM</sup> must be made under the same
+licensing terms. ExaGO<sup>TM</sup> v2 contains code from ExaGO v1.6.0,
+licensed under 2-clause BSD [license](LICENSE-1.6.0).
 
-## Disclaimer
-This material was prepared as an account of work sponsored by an agency of the United States Government.  Neither the United States Government nor the United States Department of Energy, nor Battelle, nor any of their employees, nor any jurisdiction or organization that has cooperated in the development of these materials, makes any warranty, express or implied, or assumes any legal liability or responsibility for the accuracy, completeness, or usefulness or any information, apparatus, product, software, or process disclosed, or represents that its use would not infringe privately owned rights.
-Reference herein to any specific commercial product, process, or service by trade name, trademark, manufacturer, or otherwise does not necessarily constitute or imply its endorsement, recommendation, or favoring by the United States Government or any agency thereof, or Battelle Memorial Institute. The views and opinions of authors expressed herein do not necessarily state or reflect those of the United States Government or any agency thereof.
+Please Note If you are using ExaGO<sup>TM</sup> with any third party libraries
+linked in (e.g., CoinHSL), be sure to review the respective license of the
+package as that license may have more restrictive terms than the
+ExaGO<sup>TM</sup> license.
