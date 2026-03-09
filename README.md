@@ -64,8 +64,7 @@ Instructions for executing the different ExaGO<sup>TM</sup> applications is give
 - [SCOPFLOW](docs/web/scopflow.md)
 - [PFLOW](docs/web/pflow.md)
 
-We also provide our user manual as a pdf [manual.pdf](docs/manual/manual.pdf)
--> need to update this regularly with CI / move to quarto docs.
+We also provide our user manual as a pdf [manual.pdf](docs/manual/manual.pdf).
 
 ## Tutorials
 
@@ -84,7 +83,11 @@ Each application has a different set of options that are described in depth in
 the usage notes. These options can be passed optionally through an options file
 (`-optionsfile <option_file>`), or directly on the command line.
 
-Since options may be specified in more than one location (on the command line, and through an options file), it is worth noting that the option specified on the command line supersede those in the options file. For example, if `opflowoptions` options file set the network file via the option `-netfile case9mod.m`, the following behavior occurs:
+Since options may be specified in more than one location (on the command line,
+and through an options file), it is worth noting that the option specified on
+the command line supersede those in the options file. For example, if
+`opflowoptions` options file set the network file via the option
+`-netfile case9mod.m`, the following behavior occurs:
 
 ```bash
 # This uses case9mod.m
@@ -106,22 +109,11 @@ attempting to contribute. Feel free to raise an issue or contact the team if
 the guidelines are ambiguous or you have a particular question.
 
 ## Authors
-ExaGO<sup>TM</sup> was designed and implemented by Shrirang Abhyankar. It has
-received significant from following developers: 
-- Slaven Peles
-- Nicholson Koukpaizan
-- Maksudul Alam
-- Asher Mancinelli
-- Cameron Rutherford
-- Joshua Hambrick
-- Philip Fackler
-- Eve Tsybina
-- Bruce Palmer
-- Jaelyn Litzinger
-- William Perkins
-- Sayef Azad Sakin
-- Joseph Macam
-- Ryan Danehy
+ExaGO<sup>TM</sup> was designed and implemented by Shrirang Abhyankar and has
+received significant from Slaven Peles, Nicholson Koukpaizan, Maksudul Alam,
+Asher Mancinelli, Cameron Rutherford, Joshua Hambrick, Philip Fackler, Eve
+Tsybina, Bruce Palmer, Jaelyn Litzinger, William Perkins, Sayef Azad Sakin,
+Joseph Macam, and Ryan Danehy.
 
 ## Acknowledgement
 ExaGO<sup>TM</sup> has been originally developed as a part of
@@ -135,8 +127,7 @@ Copyright &copy; 2026, UT Battelle.
 ExaGO<sup>TM</sup> (v2) is a free software distributed under a BSD-style
 license. See the [LICENSE](LICENSE) and [NOTICE](NOTICE) files for details.
 All new contributions to ExaGO<sup>TM</sup> must be made under the same
-licensing terms. ExaGO<sup>TM</sup> v2 contains code from ExaGO v1.6.0,
-licensed under 2-clause BSD [license](LICENSE-1.6.0).
+licensing terms.
 
 Please Note If you are using ExaGO<sup>TM</sup> with any third party libraries
 linked in (e.g., CoinHSL), be sure to review the respective license of the
