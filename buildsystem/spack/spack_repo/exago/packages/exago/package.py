@@ -25,8 +25,8 @@ class Exago(CMakePackage, CudaPackage, ROCmPackage):
     problems on parallel and distributed architectures, particularly targeted
     for exascale machines."""
 
-    homepage = "https://github.com/pnnl/ExaGO"
-    git = "https://github.com/pnnl/ExaGO.git"
+    homepage = "https://github.com/ornl/ExaGO"
+    git = "https://github.com/ornl/ExaGO.git"
     maintainers("ryandanehy", "cameronrutherford", "pelesh")
 
     version(
