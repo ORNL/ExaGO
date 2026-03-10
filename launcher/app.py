@@ -75,25 +75,33 @@ def validate_directories(cfg: dict) -> list[tuple[str, str, bool]]:
     return results
 
 
+def _normalize_paths(items):
+    """Convert config items into a list of path strings."""
+    paths = []
+    for item in items:
+        if isinstance(item, str):
+            paths.append(item)
+        elif isinstance(item, dict):
+            p = item.get("path")
+            if p:
+                paths.append(p)
+    return paths
+
+def _merge_env(env, key, values):
+    values = _normalize_paths(values or [])
+    if not values:
+        return
+    existing = env.get(key)
+    env[key] = ":".join([*values, existing] if existing else values)
+
+
 def build_env(cfg: dict) -> dict:
-    """Build subprocess environment dict from config."""
     env = os.environ.copy()
     env_cfg = cfg.get("environment", {}) or {}
 
-    ld_extra = env_cfg.get("ld_library_path", []) or []
-    if ld_extra:
-        existing = env.get("LD_LIBRARY_PATH", "")
-        env["LD_LIBRARY_PATH"] = ":".join(ld_extra) + (":" + existing if existing else "")
-
-    path_extra = env_cfg.get("path", []) or []
-    if path_extra:
-        existing = env.get("PATH", "")
-        env["PATH"] = ":".join(path_extra) + (":" + existing if existing else "")
-
-    py_extra = env_cfg.get("pythonpath", []) or []
-    if py_extra:
-        existing = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = ":".join(py_extra) + (":" + existing if existing else "")
+    _merge_env(env, "LD_LIBRARY_PATH", env_cfg.get("ld_library_path"))
+    _merge_env(env, "PATH", env_cfg.get("path"))
+    _merge_env(env, "PYTHONPATH", env_cfg.get("pythonpath"))
 
     return env
 
