@@ -134,6 +134,8 @@ cfg = st.session_state.cfg
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
+    st.image("figs/ornl-logo.png", width='stretch')
+
     st.title("⚡ ExaGO Launcher")
     st.caption(f"Config: `{config_path}`")
     if st.button("Reload Config"):
