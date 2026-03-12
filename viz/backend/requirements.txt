@@ -9,5 +9,5 @@ langsmith>=0.1.0
 shapely==2.1.2
 pandas==2.3.3
 geopandas==1.1.1
-psycopg2-binary>=2.9.0
+psycopg2-binary>=2.9.11
 sqlalchemy>=2.0.0
