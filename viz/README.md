@@ -8,6 +8,32 @@ ExaGO has an experimental visualization platform for visualizing the results of 
   - Filters based on network voltage, generation dispatch level, and voltage/load level
   - Zoomed-in display of county load or voltage (aggregated)
 
+## Enhanced features
+The following features have been added on top of the base visualization:
+
+### Settings panel
+A persistent settings dialog (gear icon in the control panel) allows users to configure visualization options without reloading. Settings are saved to the browser's local storage and restored on next launch. Configurable options include:
+
+- **Map style** — switch between Positron, Positron (no labels), Dark Matter, or no basemap
+- **Active power flow layer** — toggle animation, clustering, and adaptive scales; set gradient colour (low → high loading) and overall layer opacity
+- **Reactive power flow layer** — same options as the active flow layer, with independent colour and opacity controls
+- **Network display** — adjust node circle radius (px), line width scale, and toggle/colour county and state boundary overlays
+- **Generation bars** — set bar radius (km), height scale (MW multiplier), and enable zoom-adaptive radius so bars maintain a consistent on-screen size as the user zooms in and out
+
+### Hover tooltips
+Rich hover tooltips appear when the cursor moves over network elements:
+
+- **Bus (substation)** — shows voltage level (kV), voltage magnitude (p.u.), voltage angle (°), real/reactive load (MW/MVAR), bus type, area, and zone
+- **Transmission line** — shows voltage (kV), active/reactive power from/to (MW/MVAR), thermal rating (MW), and P loading % with colour coding (green < 70%, amber 70–90%, red > 90%)
+- **Generator bar** — shows generator name, fuel type, bus, area, zone, output (Pg MW), capacity (Pcap MW), loading %, reactive power (Qg MVAR), and voltage setpoint (Vg p.u.); all fields render conditionally based on data availability
+
+### Control panel
+All controls are consolidated into a single right-hand panel (300 px wide):
+
+- **Case selector** — dropdown to switch between pre-loaded network cases; the map automatically flies to the extent of the newly loaded dataset while preserving the current camera pitch
+- **File upload** — upload any compatible `.json` case file directly from the panel
+- **Screenshot** — capture the current map view (including all active layers) as a PNG, preview the thumbnail in the panel, and download with a single click
+
 
 ## Installation
 ExaGO visualization uses the following tools to generate the visuals.
@@ -46,7 +72,7 @@ For example, with Texas 2000 bus synthetic data, executing the following `opflow
 opflow -netfile case_ACTIVSg2000.m -save_output -opflow_output_format JSON -gicfile ACTIVSg2000_GIC_data.gic
 ```
 
-Next, you can put the `opflowout.json` file in the `viz/data` folder. When the visualization tool will be launched, it will find all `*.json` files in the `viz/data` folder and show a list of files in the top left corner. The first item in the list will be visualized as default. Users can change the selection and the visualization will be updated accordingly. In addition, users can upload a compatible `json` case file (generated via `opflow`) using the file upload button next to the selection list.
+Next, you can put the `opflowout.json` file in the `viz/data` folder. When the visualization tool will be launched, it will find all `*.json` files in the `viz/data` folder and show a list of files in the top right corner. The first item in the list will be visualized as default. Users can change the selection and the visualization will be updated accordingly. In addition, users can upload a compatible `json` case file (generated via `opflow`) using the file upload button next to the selection list.
 
 Now you are ready to launch the visualization now. 
 
