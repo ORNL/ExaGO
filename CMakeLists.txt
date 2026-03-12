@@ -410,9 +410,8 @@ endif()
 
 # Generate YAML config
 configure_file(
-    ${CMAKE_SOURCE_DIR}/launcher/config.yaml.in
-    ${CMAKE_SOURCE_DIR}/launcher/config.yaml
-    @ONLY
+  ${CMAKE_SOURCE_DIR}/launcher/config.yaml.in
+  ${CMAKE_SOURCE_DIR}/launcher/config.yaml @ONLY
 )
 
 set(EXAGO_LAUNCHER_FILES
@@ -422,6 +421,6 @@ set(EXAGO_LAUNCHER_FILES
     ${CMAKE_SOURCE_DIR}/launcher/run.sh
 )
 
-if (EXAGO_ENABLE_PYTHON)
+if(EXAGO_ENABLE_PYTHON)
   install(FILES ${EXAGO_LAUNCHER_FILES} DESTINATION bin)
 endif()
