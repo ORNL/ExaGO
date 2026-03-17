@@ -23,6 +23,7 @@ The launcher supports six ExaGO applications:
 
 - Python 3.10+
 - ExaGO compiled and installed (binaries available in `build/applications/`)
+    - Building ExaGO will generate `launcher/config.yaml` file.
 - Required Python packages: `streamlit`, `pyyaml`
 
 ### Install and Run
@@ -43,7 +44,10 @@ The application opens in your browser at `http://localhost:8501`.
 
 ## Configuration
 
-All paths are loaded from a single **`config.yaml`** file. No paths are hardcoded in the application code, making it portable across machines. To deploy on a new machine, only `config.yaml` needs to be edited.
+All paths are loaded from a single **`config.yaml`** file. No paths are
+hardcoded in the application code, making it portable across machines.
+Configuration file `launcher/config.yaml` is generated during ExaGO build.
+Edit it only if you know what you are doing.
 
 ### Config File Location
 
