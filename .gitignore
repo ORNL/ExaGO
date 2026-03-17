@@ -16,3 +16,5 @@ spack_*
 hiop/
 solution
 myenv/
+*.DS_Store
+launcher/config.yaml

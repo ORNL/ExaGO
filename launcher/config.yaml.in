@@ -1,0 +1,29 @@
+# ExaGO Launcher Configuration
+# Edit these paths when deploying on a different machine
+
+# Root ExaGO directory
+exago_dir: @CMAKE_SOURCE_DIR@
+
+# Path to compiled application binaries
+applications_dir: @PROJECT_BINARY_DIR@/applications
+
+# Path to data files (network files, contingencies, scenarios, load profiles)
+datafiles_dir: @CMAKE_SOURCE_DIR@/datafiles
+
+# Path to visualization directory
+viz_dir: @CMAKE_SOURCE_DIR@/viz
+
+# Path to GIC data files
+gic_data_dir: @CMAKE_SOURCE_DIR@/viz/data
+
+# Directory for simulation output files
+output_dir: @CMAKE_SOURCE_DIR@/../LLMSim/launcher/output
+
+# Environment variables needed at runtime
+environment:
+  ld_library_path:
+    - @IPOPT_ROOT_DIR@/lib
+  path:
+    - @PETSC_DIR@/bin
+  pythonpath:
+    - @PROJECT_BINARY_DIR@/interfaces/python
