@@ -479,13 +479,8 @@ const INITIAL_VIEW_STATE = {
   bearing: 0,
 };
 
-const CASES = [
-  { label: "500", file: "opflowout-500.json" },
-  { label: "10K", file: "opflowout-10K.json" },
-  { label: "70K", file: "opflowout-70K.json" },
-];
-
-const DATA_FILES = Object.keys(import.meta.glob("../data/*.json", { eager: true })).map((path) =>
+// For now it's only the default file. TODO: need to get rid of relative path.
+const DATA_FILES = Object.keys(import.meta.glob("../data/opflowout.json", { eager: true })).map((path) =>
   path.split("/").pop()
 );
 
@@ -1611,19 +1606,6 @@ function App({
           maxHeight: "100vh", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box",
         }}
       >
-        {/* ── Case selector ───────────────────────────────────────────────── */}
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#888", marginBottom: 4 }}>Case</div>
-          <select
-            value={selected}
-            onChange={(e) => onSelectCase(e.target.value)}
-            style={{ width: "100%", padding: "4px 6px", borderRadius: 4, border: "1px solid #ccc", fontSize: 13, boxSizing: "border-box" }}
-          >
-            {DATA_FILES.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
 
         {/* ── File upload ─────────────────────────────────────────────────── */}
         <div style={{ marginBottom: 8 }}>
