@@ -31,83 +31,71 @@ class Exago(CMakePackage, CudaPackage, ROCmPackage):
 
     version(
         "1.6.0",
-        tag="v1.6.0",
         commit="159cd173572280ac0f6f094a71dcc3ebeeb34076",
         submodules=submodules,
     )
     version(
         "1.5.1",
-        tag="v1.5.1",
         commit="84e9faf9d9dad8d851075eba26038338d90e6d3a",
         submodules=submodules,
     )
     version(
         "1.5.0",
-        tag="v1.5.0",
         commit="227f49573a28bdd234be5500b3733be78a958f15",
         submodules=submodules,
     )
     version(
         "1.4.1",
-        tag="v1.4.1",
         commit="ea607c685444b5f345bfdc9a59c345f0f30adde2",
         submodules=submodules,
     )
     version(
         "1.4.0",
-        tag="v1.4.0",
         commit="4f4c3fdb40b52ace2d6ba000e7f24b340ec8e886",
         submodules=submodules,
     )
     version(
         "1.3.0",
-        tag="v1.3.0",
         commit="58b039d746a6eac8e84b0afc01354cd58caec485",
         submodules=submodules,
     )
     version(
         "1.2.0",
-        tag="v1.2.0",
         commit="255a214ec747b7bdde7a6d8151c083067b4d0907",
         submodules=submodules,
     )
     version(
         "1.1.2",
-        tag="v1.1.2",
         commit="db3bb16e19c09e01402071623258dae4d13e5133",
         submodules=submodules,
     )
     version(
         "1.1.1",
-        tag="v1.1.1",
         commit="0e0a3f27604876749d47c06ec71daaca4b270df9",
         submodules=submodules,
     )
     version(
         "1.1.0",
-        tag="v1.1.0",
         commit="dc8dd85544ff1b55a64a3cbbbdf12b8a0c6fdaf6",
         submodules=submodules,
     )
-    version("1.0.0", tag="v1.0.0", commit="230d7df2f384f68b952a1ea03aad41431eaad283")
-    version("0.99.2", tag="v0.99.2", commit="56961641f50827b3aa4c14524f2f978dc48b9ce5")
-    version("0.99.1", tag="v0.99.1", commit="0ae426c76651ba5a9dbcaeb95f18d1b8ba961690")
+    version("1.0.0", commit="230d7df2f384f68b952a1ea03aad41431eaad283")
+    version("0.99.2", commit="56961641f50827b3aa4c14524f2f978dc48b9ce5")
+    version("0.99.1", commit="0ae426c76651ba5a9dbcaeb95f18d1b8ba961690")
     version("main", branch="main", submodules=submodules)
     version("develop", branch="develop", submodules=submodules)
     version(
         "snapshot.5-18-2022",
-        tag="5-18-2022-snapshot",
         commit="3eb58335db71bb72341153a7867eb607402067ca",
         submodules=submodules,
     )
     version(
         "kpp2",
-        tag="kpp2",
         commit="1da764d80a2db793f4c43ca50e50981f7ed3880a",
         submodules=submodules,
     )
 
-    # Progrmming model options
+    # Programming model options
     variant("mpi", default=True, description="Enable/Disable MPI")
     variant("raja", default=False, description="Enable/Disable RAJA")
     variant("python", default=True, when="@1.4:", description="Enable/Disable Python bindings")
@@ -204,26 +192,24 @@ class Exago(CMakePackage, CudaPackage, ROCmPackage):
 
     depends_on("hiop~mpi", when="+hiop~mpi")
     depends_on("hiop+mpi", when="+hiop+mpi")
+    depends_on("hiop+raja", when="+hiop+raja")
 
     # RAJA dependency logic
     # ExaGO will support +raja~hiop in the future
-    depends_on("hiop+raja", when="+hiop+raja")
-    ## This is duplicated from HiOp
-    ## RAJA > 0.14 and Umpire > 6.0 require c++ std 14
-    ## We are working on supporting newer Umpire/RAJA versions
-    #depends_on("raja@0.14.0:0.14 +shared", when="@1.1.0:+raja")
-    #depends_on("umpire@6.0.0:6", when="@1.1.0:+raja")
-    #depends_on("camp@0.2.3:0.2", when="@1.1.0:+raja")
-    ## This is no longer a requirement in RAJA > 0.14
-    #depends_on("umpire+cuda~shared", when="+raja+cuda ^raja@:0.14")
+    depends_on("raja", when="+raja")
+    depends_on("umpire", when="+raja")
 
+    # This is no longer a requirement in RAJA > 0.14
+    depends_on("umpire+cuda~shared", when="+raja+cuda ^raja@:0.14")
+
+    # PETSc dependency logic
     depends_on("petsc@3.13:3.14", when="@:1.2")
     depends_on("petsc@3.16", when="@1.3:1.4")
     depends_on("petsc@3.18:3.19", when="@1.5")
     depends_on("petsc@3.19:", when="@1.6:")
-
     depends_on("petsc~mpi", when="~mpi")
 
+    # cuda_arch and amdgpu_target dependency logic
     for arch in CudaPackage.cuda_arch_values:
         cuda_dep = "+cuda cuda_arch={0}".format(arch)
         depends_on("hiop {0}".format(cuda_dep), when=cuda_dep)
