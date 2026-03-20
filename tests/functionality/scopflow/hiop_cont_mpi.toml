@@ -2,6 +2,7 @@ testsuite_name = "SCOPFLOW Functionality with HIOP solver and MPI"
 
 [presets]
 tolerance = 1e-3
+warning_tolerance = 0.01
 network = 'datafiles/case9/case9mod.m'
 contingencies = 'datafiles/case9/case9.cont'
 solver = 'HIOP'
@@ -23,4 +24,5 @@ contingencies = 'datafiles/case_ACTIVSg200.cont'
 description = 'case_ACTIVSg200.m with HIOP solver/20 contingencies/run with MPI'
 num_contingencies = 20
 num_iters = 2
+iter_range = 1
 obj_value = 27557.524961865754

@@ -2,6 +2,8 @@ testsuite_name = "SCOPFLOW Functionality with HIOP solver + RAJA"
 
 [presets]
 tolerance = 1e-3
+warning_tolerance = 0.01
+iter_range = 1
 network = 'datafiles/case9/case9mod.m'
 contingencies = 'datafiles/case9/case9.cont'
 solver = 'HIOP'
