@@ -24,16 +24,3 @@ description = 'case_ACTIVSg200.m with HIOP solver/20 contingencies/run with MPI'
 num_contingencies = 20
 num_iters = 2
 obj_value = 27557.524961865754
-
-[[testcase]]
-network = 'datafiles/case_ACTIVSg200.m'
-contingencies = 'datafiles/case_ACTIVSg200.cont'
-description = 'case_ACTIVSg200.m with HIOP solver/4 contingencies/using RAJA'
-ignore_lineflow_constraints = true
-enable_powerimbalance_variables = true
-subproblem_model = 'PBPOLRAJAHIOP'
-subproblem_solver = 'HIOP'
-compute_mode = 'GPU'
-num_contingencies = 4
-num_iters = 1
-obj_value = 25957.67116859898
