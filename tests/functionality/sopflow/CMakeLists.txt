@@ -11,13 +11,8 @@ set(tolerance "1e-3")
 
 #[[ Configure SOPFLOW functionality tests ]]
 target_link_libraries(test_sopflow_functionality ExaGO::SOPFLOW)
-if(EXAGO_INSTALL_TESTS)
+if(EXAGO_RUN_TESTS)
   message(STATUS "Configuring SOPFLOW functionality tests")
-
-  install(TARGETS test_sopflow_functionality
-          RUNTIME DESTINATION tests/functionality
-  )
-
   exago_add_test(
     NAME
     FUNCTIONALITY_TEST_SOPFLOW_SCENARIO_TOML

@@ -13,11 +13,7 @@ set(tolerance "1e-3")
 
 #[[ Configure TCOPFLOW functionality tests ]]
 target_link_libraries(test_tcopflow_functionality ExaGO::TCOPFLOW)
-if(EXAGO_INSTALL_TESTS)
-  install(TARGETS test_tcopflow_functionality
-          RUNTIME DESTINATION tests/functionality
-  )
-
+if(EXAGO_RUN_TESTS)
   message(STATUS "Configuring TCOPFLOW functionality tests")
   exago_add_test(
     NAME

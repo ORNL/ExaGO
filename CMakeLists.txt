@@ -106,9 +106,6 @@ mark_as_advanced(FORCE EXAGO_ENABLE_OMP)
 # Enable tests
 option(EXAGO_RUN_TESTS "Enable tests" ON)
 
-# If tests are enabled, decides if tests are installed
-option(EXAGO_INSTALL_TESTS "Install testing binaries" ON)
-
 set(EXAGO_CTEST_LAUNCH_COMMAND
     ""
     CACHE STRING "Command to use when launching tests"

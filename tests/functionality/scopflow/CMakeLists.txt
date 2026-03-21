@@ -7,10 +7,7 @@ target_include_directories(
 
 #[[ Configure SCOPFLOW functionality tests ]]
 target_link_libraries(test_scopflow_functionality ExaGO::SCOPFLOW)
-if(EXAGO_INSTALL_TESTS)
-  install(TARGETS test_scopflow_functionality
-          RUNTIME DESTINATION tests/functionality
-  )
+if(EXAGO_RUN_TESTS)
   # SCOPFLOW Functionality Tests
   message(STATUS "Configuring SCOPFLOW Functionality Tests.")
 

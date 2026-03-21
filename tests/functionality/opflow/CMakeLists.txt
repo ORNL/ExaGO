@@ -9,7 +9,7 @@ target_include_directories(
 
 #[[ Configure OPFLOW functionality tests ]]
 target_link_libraries(test_opflow_functionality ExaGO::OPFLOW)
-if(EXAGO_INSTALL_TESTS)
+if(EXAGO_RUN_TESTS)
 
   exago_add_test(
     NAME
@@ -203,15 +203,4 @@ if(EXAGO_INSTALL_TESTS)
   # -opflow_model PBPOLRAJAHIOP -hiop_compute_mode GPU -hiop_mem_space DEVICE
   # -hiop_verbosity_level 3 -opflow_initialization ACPF
   # -opflow_monitor_line_kvlevels 115.0 DEPENDS IPOPT HIOP )
-
-  install(TARGETS test_opflow_functionality
-          RUNTIME DESTINATION tests/functionality
-  )
-
-  set(test_suites hiop_pbpolhiop.toml hiop_pbpolrajahiop.toml
-                  hiopsparse_pbpol.toml ipopt_pbpol.toml ipopt_pbcart.toml
-  )
-
-  install(FILES ${test_suites} DESTINATION share/exago/testsuites)
-
 endif()

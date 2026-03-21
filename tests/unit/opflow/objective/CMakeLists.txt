@@ -26,8 +26,7 @@ if(EXAGO_ENABLE_RAJA)
   set(dependencies ${dependencies} HIOP)
 endif()
 
-if(EXAGO_INSTALL_TESTS)
-  install(TARGETS objective_acopf DESTINATION tests/unit/opflow/objective)
+if(EXAGO_RUN_TESTS)
   foreach(
     model
     solver

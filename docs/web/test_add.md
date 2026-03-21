@@ -35,9 +35,6 @@ target_include_directories(testMyappFunctionality PUBLIC ${CMAKE_CURRENT_SOURCE_
 
 #[[ Configure MYAPP functionality tests ]]
 target_link_libraries(testMyappFunctionality ${EXAGO_APP_LIBS})
-if(EXAGO_INSTALL_TESTS)
-  install(TARGETS testMyappFunctionality RUNTIME DESTINATION bin/tests/functionality)
-endif()
 ```
 The <code>target_include_directories</code> line is included so that the notation
 ```

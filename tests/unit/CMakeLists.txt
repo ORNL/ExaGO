@@ -19,11 +19,7 @@ target_link_libraries(test_error_handler ExaGO::UTILS)
 add_executable(test_logger test_logger.cpp)
 target_link_libraries(test_logger ExaGO::UTILS)
 
-if(EXAGO_INSTALL_TESTS)
-  install(TARGETS test_logger test_acopf test_error_handler
-          DESTINATION tests/unit
-  )
-
+if(EXAGO_RUN_TESTS)
   # Unit tests
   exago_add_test(
     NAME

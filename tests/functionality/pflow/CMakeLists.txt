@@ -11,7 +11,7 @@ target_include_directories(
 
 #[[ Configure PFLOW functionality tests ]]
 target_link_libraries(test_pflow_functionality ExaGO::PFLOW)
-if(EXAGO_INSTALL_TESTS)
+if(EXAGO_RUN_TESTS)
   message(STATUS "Configuring PFLOW Functionality Tests.")
 
   # PFLOW Functionality Tests
@@ -30,9 +30,4 @@ if(EXAGO_INSTALL_TESTS)
       ${CMAKE_SOURCE_DIR}
     )
   endforeach(np)
-
-  install(TARGETS test_pflow_functionality
-          RUNTIME DESTINATION tests/functionality
-  )
-
 endif()
