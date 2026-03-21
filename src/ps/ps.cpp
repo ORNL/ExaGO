@@ -66,7 +66,7 @@ PetscErrorCode PSCheckandSetRefBus(PS ps) {
     }
   }
 
-  ierr = MPI_Allreduce(&pshaslocalref, &pshasref, 1, MPIU_BOOL, MPI_LOR,
+  ierr = MPI_Allreduce(&pshaslocalref, &pshasref, 1, MPI_C_BOOL, MPI_LOR,
                        ps->comm->type);
   CHKERRQ(ierr);
 
