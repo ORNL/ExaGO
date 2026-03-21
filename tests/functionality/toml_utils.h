@@ -230,9 +230,6 @@ public:
              "#####################\n"
           << "\n";
       // extract final filename from string
-      std::string file = filename;
-      filename = ("../");
-      filename.append(file);
       if (rank == 0) {
         std::ofstream fout;
         fout.open(filename.c_str());
