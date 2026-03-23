@@ -127,4 +127,3 @@ The command spans 13 time steps (2 hours / 10 minutes) and exports every snapsho
 - Profiles should be pre-aligned to the desired time step; TCOPFLOW does not resample CSV data.
 - Use PETSc logging (`-log_summary`) alongside the provided stage markers to diagnose read vs. solve time.
 - The TCOPFLOW API (see [include/tcopflow.h](include/tcopflow.h)) enables embedding the solver into custom drivers; reuse `TCOPFLOWCreate`, `TCOPFLOWSetLoadProfiles`, `TCOPFLOWSolve`, and `TCOPFLOWSaveSolutionAll` as shown in [applications/tcopflow_main.cpp](applications/tcopflow_main.cpp).
-
