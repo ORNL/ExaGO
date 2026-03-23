@@ -3173,6 +3173,8 @@ PetscErrorCode OPFLOWModelSetUp_PBPOL(OPFLOW opflow) {
     if (!line->isdcline) {
       /* Set starting location for slack variable */
       if (opflow->allow_lineflow_violation) {
+        ierr = PSLINEGetVariableLocation(line, &loc);
+        CHKERRQ(ierr);
         line->startxslackloc = loc;
       }
       line->startineqloc = ineqloc;
