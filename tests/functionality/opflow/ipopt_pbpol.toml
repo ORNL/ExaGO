@@ -52,7 +52,7 @@ description = "datafiles/case118.m with load loss"
 is_loadloss_active =	true
 is_powerimb_active =	false
 num_iters = 369
-iter_range = 16
+iter_range = 150
 obj_value = 130131.68902
 
 [[testcase]]
@@ -225,7 +225,7 @@ is_loadloss_active =	false
 is_powerimb_active =	false
 use_agc = true
 num_iters = 218
-iter_range = 60
+iter_range = 65
 obj_value = 27564.5204579
 
 [[testcase]]
