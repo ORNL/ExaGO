@@ -4,19 +4,14 @@ from pathlib import Path
 import shutil
 import os
 
-destination_directory = "./data"
-os.makedirs(destination_directory, exist_ok=True)
 
-filename = sys.argv[1]
-
-def get_filename_and_extension(file_path_str):
+def copy_file(file_path_str, dest_dir):
     p = Path(file_path_str)
     if p.is_file():
-
         try:
-            shutil.copy(filename, destination_directory)
+            shutil.copy(file_path_str, dest_dir)
         except FileNotFoundError:
-            print(f"Error: The source file '{filename}' was not found or the destination directory is invalid.")
+            print(f"Error: The source file '{file_path_str}' was not found or the destination directory is invalid.")
         except PermissionError:
             print(f"Error: Permission denied. Check write permissions for the destination directory.")
         except shutil.SameFileError:
@@ -24,20 +19,25 @@ def get_filename_and_extension(file_path_str):
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
-        return f"{p.stem}{p.suffix}"
+        return dest_dir + f"/{p.stem}{p.suffix}"
     else:
         return None
 
 
-basefile = get_filename_and_extension(filename)
-if basefile is None:
+filename = sys.argv[1]
+destdir = sys.argv[2]
+os.makedirs(destdir, exist_ok=True)
+vizsrcdir = sys.argv[3]
+
+filepath = copy_file(filename, destdir)
+if filepath is None:
     print("Error: File does not exist.")
     sys.exit(1)
 
-with open("src/module_casedata.js", "w") as f:
+with open(vizsrcdir + "/module_casedata.js", "w") as f:
     f.write("// ExaGo Viz Input File\n")
     f.write("\n")
-    f.write('import inputcasedata from "../data/' + basefile + '" with { type: "json" };\n')
+    f.write('import inputcasedata from "' + filepath + '" with { type: "json" };\n')
     f.write("\n")
     f.write("export default {\n")
     f.write("  get_casedata() {\n")

@@ -403,21 +403,8 @@ if((NOT EXAGO_ENABLE_IPOPT) AND (NOT EXAGO_ENABLE_HIOP))
   )
 endif()
 
-# Install launcher
-
-# Generate YAML config
-configure_file(
-  ${CMAKE_SOURCE_DIR}/launcher/config.yaml.in
-  ${CMAKE_SOURCE_DIR}/launcher/config.yaml @ONLY
-)
-
-set(EXAGO_LAUNCHER_FILES
-    ${CMAKE_SOURCE_DIR}/launcher/app.py
-    ${CMAKE_SOURCE_DIR}/launcher/figs/ornl-logo.png
-    ${CMAKE_SOURCE_DIR}/launcher/config.yaml
-    ${CMAKE_SOURCE_DIR}/launcher/run.sh
-)
-
 if(EXAGO_ENABLE_PYTHON)
-  install(FILES ${EXAGO_LAUNCHER_FILES} DESTINATION bin)
+  add_subdirectory(launcher)
+  add_subdirectory(viz)
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/datafiles DESTINATION share/exago)
 endif()

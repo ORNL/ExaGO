@@ -1,0 +1,8 @@
+#!/bin/bash
+# ExaGO Launcher - Streamlit Application
+# Optional: activate conda environment
+# conda activate exago312
+
+readonly _launcher_dir=@LAUNCH_EXAGO_LAUNCHER_DIR@
+
+streamlit run ${_launcher_dir}/app.py -- --config ${_launcher_dir}/config.yaml

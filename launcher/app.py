@@ -134,7 +134,8 @@ cfg = st.session_state.cfg
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.image("figs/ornl-logo.png", width='stretch')
+    app_path = os.path.dirname(sys.path[0])
+    st.image(app_path + "/figs/ornl-logo.png", width='stretch')
 
     st.title("⚡ ExaGO Launcher")
     st.caption(f"Config: `{config_path}`")
@@ -559,10 +560,15 @@ with tab_viz:
                     geninput_script = str(Path(viz_dir) / "geninputfile.py")
                     try:
                         result = subprocess.run(
-                            [sys.executable, geninput_script, str(latest_json)],
+                            [
+                                sys.executable,
+                                geninput_script,
+                                str(latest_json),
+                                str(viz_dir) + "/data",
+                                str(viz_dir) + "/src",
+                            ],
                             capture_output=True,
                             text=True,
-                            cwd=viz_dir,
                         )
                         if result.returncode == 0:
                             st.success("File copied and viz configured")
@@ -585,10 +591,15 @@ with tab_viz:
             geninput_script = str(Path(viz_dir) / "geninputfile.py")
             try:
                 result = subprocess.run(
-                    [sys.executable, geninput_script, json_path],
+                    [
+                        sys.executable,
+                        geninput_script,
+                        json_path,
+                        str(viz_dir) + "/data",
+                        str(viz_dir) + "/src",
+                    ],
                     capture_output=True,
                     text=True,
-                    cwd=viz_dir,
                 )
                 if result.returncode == 0:
                     st.success("Viz configured successfully")
