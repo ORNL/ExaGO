@@ -1028,7 +1028,7 @@ public:
     // Test the sparse component
     int *iRow, *jCol;
     double *values;
-    int nnz = nxsparse;
+    int nnz = opflow->nnz_hesssp;
     iRow = new int[nnz]();
     jCol = new int[nnz]();
     values = new double[nnz]();
