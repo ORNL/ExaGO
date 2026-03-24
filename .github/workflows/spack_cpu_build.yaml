@@ -100,6 +100,7 @@ jobs:
         # Minimal Build(s) - GHCR mirror speeds these up a lot!
         spack_spec:
           - exago@develop+mpi~ipopt+hiop~python~raja ^openmpi ^hiop~raja~sparse
+          - exago@develop+mpi~ipopt+hiop+python~raja ^openmpi ^hiop~raja~sparse
           - exago@develop+mpi~ipopt+hiop~python+raja ^openmpi ^hiop+raja~sparse
           - exago@develop+mpi+ipopt+hiop~python+raja ^openmpi ^hiop+raja~sparse
           - exago@develop+mpi+ipopt+hiop+python+raja ^openmpi ^hiop+raja~sparse
@@ -174,7 +175,7 @@ jobs:
 
       - name: Test Build
         run: cd $(spack -e . location --build-dir exago@develop) && ctest -VV
-        if: ${{ matrix.spack_spec == 'exago@develop+mpi+ipopt+hiop+python~raja ^openmpi ^hiop~raja~sparse'}}
+        if: ${{ matrix.spack_spec == 'exago@develop+mpi~ipopt+hiop+python~raja ^openmpi ^hiop~raja~sparse'}}
 
       # Push with force to override existing binaries...
       - name: Push binaries to buildcache
