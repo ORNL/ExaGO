@@ -3074,10 +3074,10 @@ PetscErrorCode OPFLOWSetLinesMonitored(OPFLOW opflow, PetscInt mon_mode,
 
   if (mon_mode < 0 || mon_mode > 2) {
     SETERRQ(opflow->comm->type, PETSC_ERR_SUP,
-             "mon_mode input for OPFLOWSetLinesMonitored should \
+            "mon_mode input for OPFLOWSetLinesMonitored should \
             be either 0 (list of given lines), 1 (list of KV levels), 2 (list from input file. Incorrect \
             mon_mode = %d given",
-             mon_mode);
+            mon_mode);
   }
 
   if (mon_mode == 0) {
