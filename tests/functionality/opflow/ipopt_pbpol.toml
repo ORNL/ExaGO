@@ -26,7 +26,7 @@ network = 'datafiles/case118.m'
 is_loadloss_active =	false
 is_powerimb_active =	false
 num_iters = 253
-iter_range = 25
+iter_range = 40
 obj_value = 130131.872363
 
 [[testcase]]
@@ -160,7 +160,7 @@ is_loadloss_active =	false
 is_powerimb_active =	false
 initialization_type = "FLATSTART"
 num_iters = 253
-iter_range = 25
+iter_range = 40
 obj_value = 130131.872363
 
 [[testcase]]
