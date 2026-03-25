@@ -9,6 +9,7 @@ import sys
 import time
 import zipfile
 from pathlib import Path
+import shutil
 
 import streamlit as st
 import yaml
@@ -556,27 +557,7 @@ with tab_viz:
                 st.info(f"JSON output: `{latest_json.name}`")
 
                 if st.button("Copy to viz/data & Configure", key="viz_copy_btn"):
-                    # Run geninputfile.py
-                    geninput_script = str(Path(viz_dir) / "geninputfile.py")
-                    try:
-                        result = subprocess.run(
-                            [
-                                sys.executable,
-                                geninput_script,
-                                str(latest_json),
-                                str(viz_dir) + "/data",
-                                str(viz_dir) + "/src",
-                            ],
-                            capture_output=True,
-                            text=True,
-                        )
-                        if result.returncode == 0:
-                            st.success("File copied and viz configured")
-                            st.session_state.viz_ready = True
-                        else:
-                            st.error(f"geninputfile.py failed: {result.stderr}")
-                    except FileNotFoundError:
-                        st.error(f"Script not found: `{geninput_script}`")
+                    shutil.copy(latest_json, viz_dir + "/data")
             else:
                 st.warning("No JSON output found. Run OPFLOW first.")
 
@@ -588,26 +569,7 @@ with tab_viz:
 
         if st.button("Configure Viz with Selected File", key="viz_existing_btn",
                      disabled=json_path is None):
-            geninput_script = str(Path(viz_dir) / "geninputfile.py")
-            try:
-                result = subprocess.run(
-                    [
-                        sys.executable,
-                        geninput_script,
-                        json_path,
-                        str(viz_dir) + "/data",
-                        str(viz_dir) + "/src",
-                    ],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    st.success("Viz configured successfully")
-                    st.session_state.viz_ready = True
-                else:
-                    st.error(f"geninputfile.py failed: {result.stderr}")
-            except FileNotFoundError:
-                st.error(f"Script not found: `{geninput_script}`")
+            shutil.copy(json_path, viz_dir + "/data")
 
     # Launch viz server
     st.divider()

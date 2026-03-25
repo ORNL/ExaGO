@@ -6,7 +6,6 @@ set(EXAGO_VIZ_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(EXAGO_VIZ_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/exago-logo.png
     ${CMAKE_CURRENT_SOURCE_DIR}/favicon.png
-    ${CMAKE_CURRENT_SOURCE_DIR}/geninputfile.py
     ${CMAKE_CURRENT_SOURCE_DIR}/index.css
     ${CMAKE_CURRENT_SOURCE_DIR}/index.html
     ${CMAKE_CURRENT_SOURCE_DIR}/package.json

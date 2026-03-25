@@ -135,7 +135,7 @@ Generates JSON output from OPFLOW and feeds it to the ExaGO visualization fronte
 
 Two modes:
 
-- **Run OPFLOW & Visualize**: Upload a network file (and optionally a GIC file), run OPFLOW with JSON output, copy the result to `viz/data/` via `geninputfile.py`, then launch the viz server.
+- **Run OPFLOW & Visualize**: Upload a network file (and optionally a GIC file), run OPFLOW with JSON output, copy the result to `viz/data/`, then launch the viz server.
 - **Use Existing JSON**: Upload a previously generated JSON file and configure the viz engine directly.
 
 The visualization server runs on `http://localhost:5173` (Vite dev server). Use the Launch/Stop buttons to control it.
