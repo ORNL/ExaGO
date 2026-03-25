@@ -580,7 +580,7 @@ with tab_viz:
         if st.button("🚀 Launch Viz Server", key="viz_launch_btn"):
             try:
                 proc = subprocess.Popen(
-                    ["npm", "start"],
+                    ["yarn", "start"],
                     cwd=viz_dir,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -589,7 +589,7 @@ with tab_viz:
                 st.session_state.viz_pid = proc.pid
                 st.success(f"Viz server started (PID: {proc.pid})")
             except FileNotFoundError:
-                st.error("npm not found. Install Node.js to use the visualization server.")
+                st.error("yarn not found. Install Node.js to use the visualization server.")
 
     with col_status:
         if st.session_state.get("viz_pid"):

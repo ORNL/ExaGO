@@ -21,7 +21,7 @@ message(STATUS "Found yarn: ${YARN_EXECUTABLE}")
 
 set(YARN_STAMP "${CMAKE_CURRENT_BINARY_DIR}/yarn_install.stamp")
 add_custom_command(
-  OUTPUT  ${YARN_STAMP}
+  OUTPUT ${YARN_STAMP}
   COMMAND ${YARN_EXECUTABLE} install
   COMMAND ${CMAKE_COMMAND} -E touch ${YARN_STAMP}
   WORKING_DIRECTORY ${EXAGO_VIZ_DIR}
