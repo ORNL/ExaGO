@@ -2119,7 +2119,7 @@ PetscErrorCode OPFLOWSolve(OPFLOW opflow) {
     OPFLOW opflow2;
     PetscBool has_overload = PETSC_FALSE;
     PetscInt lazy_iter = 0;
-    PetscInt max_lazy_iter = 10;
+    PetscInt max_lazy_iter = 2;
     PetscInt nlines_overloaded;
     PetscInt *lines_overloaded;
 
