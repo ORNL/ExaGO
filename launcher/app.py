@@ -547,19 +547,16 @@ with tab_viz:
                     st.error(f"Binary not found: `{opflow_bin}`")
                     st.session_state.viz_opflow_output = None
 
-        if st.session_state.get("viz_opflow_output"):
-            st.subheader("Step 3: Copy Output to Viz")
-            # Find the JSON output file
-            output_dir = cfg.get("output_dir", "")
-            json_outputs = list(Path(output_dir).glob("*.json"))
-            if json_outputs:
-                latest_json = max(json_outputs, key=lambda p: p.stat().st_mtime)
-                st.info(f"JSON output: `{latest_json.name}`")
-
-                if st.button("Copy to viz/data & Configure", key="viz_copy_btn"):
+            if st.session_state.get("viz_opflow_output"):
+                # Find the JSON output file
+                output_dir = cfg.get("output_dir", "")
+                json_outputs = list(Path(output_dir).glob("*.json"))
+                if json_outputs:
+                    latest_json = max(json_outputs, key=lambda p: p.stat().st_mtime)
+                    st.info(f"JSON output: `{latest_json.name}`")
                     shutil.copy(latest_json, viz_dir + "/data")
-            else:
-                st.warning("No JSON output found. Run OPFLOW first.")
+                else:
+                    st.warning("No JSON output found. Run OPFLOW first.")
 
     else:
         # Use existing JSON
