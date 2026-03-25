@@ -7,6 +7,7 @@ configure_file(
   ${CMAKE_SOURCE_DIR}/launcher/config.yaml @ONLY
 )
 set(LAUNCH_EXAGO_LAUNCHER_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(LAUNCH_EXAGO_STREAMLIT_CMD "'${Python_EXECUTABLE} -m streamlit run'")
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/run.sh.in ${CMAKE_CURRENT_SOURCE_DIR}/run.sh
   @ONLY
@@ -30,6 +31,7 @@ string(
   "\n"
   install_script
   "set(EXAGO_PYTHON_SITELIB ${EXAGO_PYTHON_SITELIB})"
+  "set(LAUNCH_EXAGO_STREAMLIT_CMD \"${LAUNCH_EXAGO_STREAMLIT_CMD}\")"
   [[
   get_filename_component(LAUNCH_INSTALL_DIR ${CMAKE_INSTALL_PREFIX} ABSOLUTE)
   set(LAUNCH_EXAGO_DIR ${LAUNCH_INSTALL_DIR}/share/exago)

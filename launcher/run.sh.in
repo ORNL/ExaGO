@@ -4,5 +4,6 @@
 # conda activate exago312
 
 readonly _launcher_dir=@LAUNCH_EXAGO_LAUNCHER_DIR@
+readonly _streamlit_cmd=@LAUNCH_EXAGO_STREAMLIT_CMD@
 
-streamlit run ${_launcher_dir}/app.py -- --config ${_launcher_dir}/config.yaml
+${_streamlit_cmd} ${_launcher_dir}/app.py -- --config ${_launcher_dir}/config.yaml

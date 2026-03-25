@@ -1,10 +1,10 @@
 set(pythonpath ${CMAKE_INSTALL_PREFIX}/${EXAGO_PYTHON_SITELIB}:$ENV{PYTHONPATH})
 set(pythonpath ${pythonpath}:${PROJECT_SOURCE_DIR}/tests/interfaces/python)
 
-find_program(PYTEST_EXE "pytest")
-if("${PYTEST_EXE}" STREQUAL "PYTEST_EXE-NOTFOUND")
+if(NOT PY_pytest)
   message(FATAL_ERROR "Pytest module path not found")
 endif()
+set(PYTEST_EXE "${Python_EXECUTABLE} -m pytest")
 
 list(TRANSFORM RUNCMD APPEND " ")
 string(CONCAT CMD ${RUNCMD} " " ${PYTEST_EXE})

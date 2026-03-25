@@ -135,7 +135,7 @@ cfg = st.session_state.cfg
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    app_path = os.path.dirname(sys.path[0])
+    app_path = os.path.dirname(os.path.realpath(__file__))
     st.image(app_path + "/figs/ornl-logo.png", width='stretch')
 
     st.title("⚡ ExaGO Launcher")

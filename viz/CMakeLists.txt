@@ -1,7 +1,22 @@
 set(__install_dest share/exago/viz)
 
+find_program(
+  YARN_EXECUTABLE yarn REQUIRED DOC "Path to the yarn package manager"
+)
+message(STATUS "Found yarn: ${YARN_EXECUTABLE}")
+
+set(YARN_STAMP "${CMAKE_CURRENT_BINARY_DIR}/yarn_install.stamp")
+add_custom_command(
+  OUTPUT ${YARN_STAMP}
+  COMMAND ${YARN_EXECUTABLE} install
+  COMMAND ${CMAKE_COMMAND} -E touch ${YARN_STAMP}
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  COMMENT "Running yarn install in ${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM
+)
+add_custom_target(yarn_install ALL DEPENDS ${YARN_STAMP})
+
 set(EXAGO_VIZ_SUBDIRS backend components data geo_data images src)
-set(EXAGO_VIZ_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
 set(EXAGO_VIZ_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/exago-logo.png
@@ -13,24 +28,6 @@ set(EXAGO_VIZ_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/tsconfig.node.json
     ${CMAKE_CURRENT_SOURCE_DIR}/vite.config.ts
 )
-
-find_program(
-  YARN_EXECUTABLE yarn REQUIRED DOC "Path to the yarn package manager"
-)
-message(STATUS "Found yarn: ${YARN_EXECUTABLE}")
-
-set(YARN_STAMP "${CMAKE_CURRENT_BINARY_DIR}/yarn_install.stamp")
-add_custom_command(
-  OUTPUT ${YARN_STAMP}
-  COMMAND ${YARN_EXECUTABLE} install
-  COMMAND ${CMAKE_COMMAND} -E touch ${YARN_STAMP}
-  WORKING_DIRECTORY ${EXAGO_VIZ_DIR}
-  DEPENDS ${EXAGO_VIZ_DIR}/package.json
-  # ${EXAGO_VIZ_DIR}/yarn.lock
-  COMMENT "Running yarn install in ${EXAGO_VIZ_DIR}"
-  VERBATIM
-)
-add_custom_target(yarn_install ALL DEPENDS ${YARN_STAMP})
 
 install(DIRECTORY ${EXAGO_VIZ_SUBDIRS} DESTINATION ${__install_dest})
 install(FILES ${EXAGO_VIZ_FILES} DESTINATION ${__install_dest})
