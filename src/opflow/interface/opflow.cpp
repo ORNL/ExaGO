@@ -1001,6 +1001,7 @@ PetscErrorCode OPFLOWDestroy(OPFLOW *opflow) {
   ierr = MatDestroy(&(*opflow)->Jac_Gi);
   CHKERRQ(ierr);
 
+  /* Hessian */
   ierr = MatDestroy(&(*opflow)->Hes);
   CHKERRQ(ierr);
 

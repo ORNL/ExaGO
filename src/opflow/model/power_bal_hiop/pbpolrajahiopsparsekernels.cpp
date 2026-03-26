@@ -1695,8 +1695,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
 
     if (debugmsg)
       std::cout << "Official Hessian Size: " << nrow << " rows x " << ncol
-                << " cols"
-                << "(should be" << opflow->Nx << " x " << opflow->Nx << ")"
+                << " cols "
+                << "(should be " << opflow->Nx << " x " << opflow->Nx << ")"
                 << std::endl;
 
     /* Copy over locations to triplet format */
