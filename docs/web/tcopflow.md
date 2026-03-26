@@ -23,7 +23,7 @@ Here $x_t$ contains the ACOPF state at time $t$, $f$ is the total generation cos
 ## Build and Solver Dependencies
 
 - TCOPFLOW depends on the PETSc-based ExaGO infrastructure and currently supports only Ipopt optimization solver. Ensure ExaGO is configured with Ipopt before building the applications target so that `tcopflow` is generated alongside the other solvers.
-- The executable is produced by the CMake target defined in [applications/tcopflow_main.cpp](../../applications/tcopflow_main.cpp), and will appear in `bin/tcopflow` after running `cmake --build` on the main project.
+- The executable is produced by the CMake target defined in [`applications/tcopflow_main.cpp`](../../applications/tcopflow_main.cpp), and will appear in `bin/tcopflow` after running `cmake --build` on the main project.
 
 ## Key Include and Source Files
 
@@ -67,7 +67,7 @@ Currently Ipopt runs on a single MPI rank, so `-n 1` is sufficient to run the ex
 ### Output Artifacts
 
 - When `-save_output` is set, MATPOWER snapshots for each time step are written under `tcopflowout/`.
-- `-print_output` streams solver statistics, nodal injections, line flows, and generator set-points to stdout (mirrors the sample log in [docs/manual/tcopflow.tex](../docs/manual/tcopflow.tex)).
+- `-print_output` streams solver statistics, nodal injections, line flows, and generator set-points to stdout (mirrors the sample log in [`docs/manual/tcopflow.tex`](../manual/tcopflow.tex)).
 
 ## Runtime Options
 
