@@ -22,35 +22,35 @@ Here $x_t$ contains the ACOPF state at time $t$, $f$ is the total generation cos
 
 ## Build and Solver Dependencies
 
-- TCOPFLOW depends on the PETSc-based ExaGO infrastructure and currently supports the IPOPT nonlinear solver. Ensure ExaGO is configured with IPOPT before building the applications target so that `tcopflow` is generated alongside the other solvers.
-- The executable is produced by the CMake target defined in [applications/tcopflow_main.cpp](applications/tcopflow_main.cpp), and will appear in `bin/tcopflow` after running `cmake --build` on the main project.
+- TCOPFLOW depends on the PETSc-based ExaGO infrastructure and currently supports only Ipopt optimization solver. Ensure ExaGO is configured with Ipopt before building the applications target so that `tcopflow` is generated alongside the other solvers.
+- The executable is produced by the CMake target defined in [applications/tcopflow_main.cpp](../../applications/tcopflow_main.cpp), and will appear in `bin/tcopflow` after running `cmake --build` on the main project.
 
 ## Key Include and Source Files
 
 | Component | Purpose |
 | --- | --- |
-| [include/tcopflow.h](include/tcopflow.h) | Public C API for creating TCOPFLOW objects, setting data, solving, and retrieving solutions. |
-| [src/tcopflow/interface/tcopflow.cpp](src/tcopflow/interface/tcopflow.cpp) | High-level application logic: option parsing, PS/OPFLOW object creation, model/solver registration, and coupling setup. |
-| [src/tcopflow/interface/tcopflowreadprofiles.cpp](src/tcopflow/interface/tcopflowreadprofiles.cpp) | CSV profile ingestion for load and wind data. |
-| [src/tcopflow/interface/tcopflowoutput.cpp](src/tcopflow/interface/tcopflowoutput.cpp) | Routines that format per-time-step solutions and write MATPOWER files. |
-| [src/tcopflow/model/genramp/genramp.cpp](src/tcopflow/model/genramp/genramp.cpp) | Default temporal coupling model that enforces generator ramping constraints. |
-| [src/tcopflow/solver/ipopt/tcopflow_ipopt.cpp](src/tcopflow/solver/ipopt/tcopflow_ipopt.cpp) | IPOPT bindings (objective, gradient, Jacobian, and Hessian callbacks). |
+| [`include/tcopflow.h`](../../include/tcopflow.h) | Public C API for creating TCOPFLOW objects, setting data, solving, and retrieving solutions. |
+| [`src/tcopflow/interface/tcopflow.cpp`](../../src/tcopflow/interface/tcopflow.cpp) | High-level application logic: option parsing, PS/OPFLOW object creation, model/solver registration, and coupling setup. |
+| [`src/tcopflow/interface/tcopflowreadprofiles.cpp`](../../src/tcopflow/interface/tcopflowreadprofiles.cpp) | CSV profile ingestion for time-varying inputs (e.g. load and wind data). |
+| [`src/tcopflow/interface/tcopflowoutput.cpp`](../../src/tcopflow/interface/tcopflowoutput.cpp) | Routines that format per-time-step solutions and write MATPOWER files. |
+| [`src/tcopflow/model/genramp/genramp.cpp`](../../src/tcopflow/model/genramp/genramp.cpp) | Default temporal coupling model that enforces generator ramping constraints. |
+| [`src/tcopflow/solver/ipopt/tcopflow_ipopt.cpp`](../../src/tcopflow/solver/ipopt/tcopflow_ipopt.cpp) | Ipopt bindings (objective, gradient, Jacobian, and Hessian callbacks). |
 
 Use these entry points when extending the formulation (e.g., adding new coupling models or solvers) or when embedding TCOPFLOW via the public API.
 
 ## Required Input Files
 
 1. **Network case** (`-netfile`) — MATPOWER `.m` or `.mat` describing buses, branches, and generators. Example: `datafiles/case9/case9mod.m`.
-2. **Active load profile** (`-tcopflow_ploadprofile`) — CSV with one column per bus and one row per time step representing MW demand. Example: `datafiles/case9/load_P.csv`.
-3. **Reactive load profile** (`-tcopflow_qloadprofile`) — CSV analogous to the active profile but for MVAr demand. Example: `datafiles/case9/load_Q.csv`.
+2. **Active load profile** (`-tcopflow_ploadprofile`) — CSV with one column per bus and one row per time step representing power demand in MW. Example: [`datafiles/case9/load_P.csv`](../../datafiles/case9/load_P.csv).
+3. **Reactive load profile** (`-tcopflow_qloadprofile`) — CSV analogous to the active profile but for reactive power in MVAr. Example: [`datafiles/case9/load_Q.csv`](../../datafiles/case9/load_Q.csv).
 4. **Wind generation profile** (`-tcopflow_windgenprofile`, optional) — CSV with time-series injections per wind unit. If omitted, wind injection stays at the base-case level.
 
 If any profile is omitted, TCOPFLOW assumes a flat profile (the base-case value is replicated across all time steps). Time-series files must provide at least `duration / (dT/60)` rows; extra rows are ignored.
 
 ## Running TCOPFLOW
 
-1. Build ExaGO with IPOPT enabled.
-2. Prepare or copy the MATPOWER network file and CSV profile files into an accessible directory (the project ships reusable examples under `datafiles/`).
+1. Build ExaGO with Ipopt optimization solver enabled.
+2. Prepare or copy the MATPOWER network file and CSV profile files into an accessible directory (the project ships reusable examples under [`datafiles/`](../../datafiles).
 3. Launch the executable:
 
 ```bash
@@ -62,16 +62,16 @@ mpiexec -n 1 ./bin/tcopflow \
   -print_output -save_output
 ```
 
-PETSc handles MPI initialization, so `-n 1` is sufficient today (IPOPT support is single-rank), but the command is future-proof for multi-rank solvers.
+Currently Ipopt runs on a single MPI rank, so `-n 1` is sufficient to run the example (running with e.g. `-n 2` will just run the same computation twice). The command will allow for MPI parallel optimization solvers to be used with ExaGO.
 
 ### Output Artifacts
 
 - When `-save_output` is set, MATPOWER snapshots for each time step are written under `tcopflowout/`.
-- `-print_output` streams solver statistics, nodal injections, line flows, and generator set-points to stdout (mirrors the sample log in [docs/manual/tcopflow.tex](docs/manual/tcopflow.tex)).
+- `-print_output` streams solver statistics, nodal injections, line flows, and generator set-points to stdout (mirrors the sample log in [docs/manual/tcopflow.tex](../docs/manual/tcopflow.tex)).
 
 ## Runtime Options
 
-All options can be passed on the command line or via an options file (see [options/tcopflowoptions](options/tcopflowoptions)).
+All options can be passed on the command line or via an options file (see [`options/tcopflowoptions`](../../options/tcopflowoptions)).
 
 | Option | Description | Default / Notes |
 | --- | --- | --- |
@@ -83,8 +83,8 @@ All options can be passed on the command line or via an options file (see [optio
 | `-tcopflow_duration <hours>` | Simulation horizon in hours. | Sample options file uses `0.5` (30 minutes). |
 | `-tcopflow_iscoupling <0/1>` | Enable/disable inter-temporal coupling (generator ramping). | `1` (enabled). |
 | `-tcopflow_tolerance <value>` | Optimality tolerance passed to the solver. | Inherits IPOPT default if not set. |
-| `-tcopflow_model <name>` | Temporal model. | `GENRAMP` (see [src/tcopflow/model/genramp](src/tcopflow/model/genramp)). |
-| `-tcopflow_solver <name>` | Nonlinear solver backend. | `IPOPT` (see [src/tcopflow/solver/ipopt](src/tcopflow/solver/ipopt)). |
+| `-tcopflow_model <name>` | Temporal model. | `GENRAMP` (see [`src/tcopflow/model/genramp`](../../src/tcopflow/model/genramp)). |
+| `-tcopflow_solver <name>` | Nonlinear solver backend. | `IPOPT` (see [`src/tcopflow/solver/ipopt`](../../src/tcopflow/solver/ipopt)). |
 | `-print_output` | Dump solution summary to stdout. | Disabled by default. |
 | `-save_output` | Write MATPOWER files for each step into `tcopflowout/`. | Disabled by default. |
 | `-opflow_ignore_lineflow_constraints <0/1>` | Forwarded to each embedded OPFLOW instance to toggle thermal limits. | Defaults to `0`. |
@@ -111,10 +111,10 @@ This runs 5 time steps (1 hour / 15 minutes) and prints the solver summary so yo
 
 ```
 mpiexec -n 1 ./bin/tcopflow \
-  -netfile $SCRATCH/cases/activesg2000.m \
-  -tcopflow_ploadprofile $SCRATCH/cases/load_P.csv \
-  -tcopflow_qloadprofile $SCRATCH/cases/load_Q.csv \
-  -tcopflow_windgenprofile $SCRATCH/cases/wind.csv \
+  -netfile $HOME/cases/activesg2000.m \
+  -tcopflow_ploadprofile $HOME/cases/load_P.csv \
+  -tcopflow_qloadprofile $HOME/cases/load_Q.csv \
+  -tcopflow_windgenprofile $HOME/cases/wind.csv \
   -tcopflow_dT 10 -tcopflow_duration 2.0 \
   -tcopflow_tolerance 1e-5 \
   -save_output -print_output
@@ -126,4 +126,4 @@ The command spans 13 time steps (2 hours / 10 minutes) and exports every snapsho
 
 - Profiles should be pre-aligned to the desired time step; TCOPFLOW does not resample CSV data.
 - Use PETSc logging (`-log_summary`) alongside the provided stage markers to diagnose read vs. solve time.
-- The TCOPFLOW API (see [include/tcopflow.h](include/tcopflow.h)) enables embedding the solver into custom drivers; reuse `TCOPFLOWCreate`, `TCOPFLOWSetLoadProfiles`, `TCOPFLOWSolve`, and `TCOPFLOWSaveSolutionAll` as shown in [applications/tcopflow_main.cpp](applications/tcopflow_main.cpp).
+- The TCOPFLOW API (see [`include/tcopflow.h`](../../include/tcopflow.h)) enables embedding the solver into custom drivers; reuse `TCOPFLOWCreate`, `TCOPFLOWSetLoadProfiles`, `TCOPFLOWSolve`, and `TCOPFLOWSaveSolutionAll` as shown in [`applications/tcopflow_main.cpp`](../../applications/tcopflow_main.cpp).
