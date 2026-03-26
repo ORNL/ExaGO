@@ -99,8 +99,8 @@ PetscErrorCode OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 
     if (opflow->include_powerimbalance_variables) {
       loc = bus->startxpimbloc;
-      bus->pimb = x[loc];
-      bus->qimb = x[loc + 1];
+      bus->pimb = x[loc] - x[loc + 1];
+      bus->qimb = x[loc + 2] - x[loc + 3];
     }
 
     for (k = 0; k < bus->ngen; k++) {
