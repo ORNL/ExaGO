@@ -85,6 +85,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 // ─── Persistent settings ──────────────────────────────────────────────────────
 const SETTINGS_KEY = "exago-grid-settings-v2";
+const DEFAULT_JSON_FILENAME = "opflowout.json";
 
 const DEFAULT_SETTINGS = {
   // ── Map appearance ──────────────────────────────────────────────────────
@@ -479,10 +480,6 @@ const INITIAL_VIEW_STATE = {
   bearing: 0,
 };
 
-// For now it's only the default file. TODO: need to get rid of relative path.
-const DATA_FILES = Object.keys(import.meta.glob("../data/opflowout.json", { eager: true })).map((path) =>
-  path.split("/").pop()
-);
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 function App({
@@ -1950,9 +1947,32 @@ const btnStyle = (bg) => ({
   boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
 });
 
+// ─── Empty fallback so the UI renders before any case is loaded ───────────────
+const EMPTY_GEO = { type: "FeatureCollection", features: [] };
+const EMPTY_FLOW = { locations: [], flows: [], maxloading: 120 };
+const EMPTY_DERIVED = {
+  geodata: EMPTY_GEO,
+  grid_data: EMPTY_GEO,
+  areas: EMPTY_GEO,
+  zones: EMPTY_GEO,
+  grid_flowdata: EMPTY_FLOW,
+  grid_flowdata_reactive: EMPTY_FLOW,
+  Points: [],
+  Vcontour: [],
+  gendata: { Gens: [], minPg: 0, maxPg: 0 },
+  generation: [],
+  loaddata: [],
+  countymaxPd: 0,
+  countyload: EMPTY_GEO,
+  countyloaddata: { maxPd: 0, data: EMPTY_GEO, updatedata: EMPTY_GEO },
+  mapcenter: { geometry: { coordinates: [-98.5795, 39.8283] } },
+  homeViewState: INITIAL_VIEW_STATE,
+};
+
 // ─── AppContainer ─────────────────────────────────────────────────────────────
 function AppContainer() {
-  const [selected, setSelected] = useState(DATA_FILES[0]);
+  const urlFile = new URLSearchParams(window.location.search).get("file");
+  const [selected, setSelected] = useState(urlFile ?? DEFAULT_JSON_FILENAME);
   const [casedata, setCasedata] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
@@ -1962,13 +1982,14 @@ function AppContainer() {
     (async () => {
       setLoading(true);
       setErr(null);
+      setCasedata(null);
       try {
         const res = await fetch(`/data/${selected}`);
-        if (!res.ok) throw new Error(`Failed to load ${selected}: ${res.status}`);
+        if (!res.ok) return;   // file not on server — stay blank, no error
         const json = await res.json();
         if (!cancelled) setCasedata(json);
-      } catch (e) {
-        if (!cancelled) setErr(e);
+      } catch {
+        // network / parse error — stay blank silently
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -2097,44 +2118,47 @@ function AppContainer() {
         </div>
       )}
 
-      {derived && (
-        <App
-          refdata={derived.grid_data}
-          refflowdata={derived.grid_flowdata}
-          refflowdata_reactive={derived.grid_flowdata_reactive}
-          ggdata={derived.geodata}
-          gendata={derived.gendata}
-          generation={derived.generation}
-          areas={derived.areas}
-          zones={derived.zones}
-          countyload={derived.countyload}
-          countyloaddata={derived.countyloaddata}
-          countymaxPd={derived.countymaxPd}
-          mapcenter={derived.mapcenter}
-          homeViewState={derived.homeViewState}
-          selected={selected}
-          onSelectCase={setSelected}
-          onFileUpload={(file) => {
-            setLoading(true);
-            setErr(null);
-            const reader = new FileReader();
-            reader.onload = () => {
-              try {
-                setCasedata(JSON.parse(reader.result));
-              } catch (e) {
-                setErr(e);
-              } finally {
+      {(() => {
+        const d = derived ?? EMPTY_DERIVED;
+        return (
+          <App
+            refdata={d.grid_data}
+            refflowdata={d.grid_flowdata}
+            refflowdata_reactive={d.grid_flowdata_reactive}
+            ggdata={d.geodata}
+            gendata={d.gendata}
+            generation={d.generation}
+            areas={d.areas}
+            zones={d.zones}
+            countyload={d.countyload}
+            countyloaddata={d.countyloaddata}
+            countymaxPd={d.countymaxPd}
+            mapcenter={d.mapcenter}
+            homeViewState={d.homeViewState}
+            selected={selected}
+            onSelectCase={setSelected}
+            onFileUpload={(file) => {
+              setLoading(true);
+              setErr(null);
+              const reader = new FileReader();
+              reader.onload = () => {
+                try {
+                  setCasedata(JSON.parse(reader.result));
+                } catch (e) {
+                  setErr(e);
+                } finally {
+                  setLoading(false);
+                }
+              };
+              reader.onerror = () => {
+                setErr(new Error("Failed to read file"));
                 setLoading(false);
-              }
-            };
-            reader.onerror = () => {
-              setErr(new Error("Failed to read file"));
-              setLoading(false);
-            };
-            reader.readAsText(file);
-          }}
-        />
-      )}
+              };
+              reader.readAsText(file);
+            }}
+          />
+        );
+      })()}
     </>
   );
 }
