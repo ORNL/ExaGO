@@ -1,8 +1,7 @@
 # <b>Exa</b>scale <b>G</b>rid <b>O</b>ptimization toolkit (ExaGO<sup>TM</sup>) [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) ![pre-commit GitHub Action](https://github.com/ornl/ExaGO/actions/workflows/pre_commit.yaml/badge.svg?event=pull_request) ![Spack CPU Build](https://github.com/ornl/ExaGO/actions/workflows/spack_cpu_build.yaml/badge.svg?event=pull_request)
 
-<!--![](viz/images/network_gen_load_us.png)-->
 <img src="viz/images/network_gen_load_us.png">
-<img src="docs/manual/figures/three_in_one.png">
+<img src="viz/images/launcher.png">
 
 
 ExaGO<sup>TM</sup> is a package for solving large-scale  power grid optimization problems on parallel and distributed architectures, particularly targeted for exascale machines with heteregenous architectures (GPU). Combinations of stochastic, contingency-constrained, multiperiod ACOPF problems can be solved with ExaGO. The package is written in C/C++ with python bindings available for python-based applications. An overview of the package is given on this page. For extended information, including the modeling details and formulations, see the [ExaGO manual](docs/manual/manual.pdf). 
@@ -17,7 +16,7 @@ ExaGO<sup>TM</sup> includes the following applications for solving different pow
 ExaGO<sup>TM</sup> applications are interfaced with the following optimization solver packaages:
 
 - [Ipopt](https://github.com/coin-or/Ipopt) is a popular optimization package for solving nonlinear optimization problems that uses an interior-point algorithm.
-- [HiOp](https://github.com/LLNL/hiop) is a HPC package for optimization. ExaGO interfaces with two of its solvers -- a mixed sparse-dense interior-point solver (NewtonMDS) and a sparse interior-point solver (HiOPSparse). NewtonMDS  allows execution of the optimization either on CPU and GPU. The sparse HiOp solver is currently supported on CPU only.
+- [HiOp](https://github.com/LLNL/hiop) is a HPC package for optimization. ExaGO interfaces with two of its solvers -- an interior-point method solver (HIOPSPARSE) and a primal decomposition two-level solver HiOp PriDec.
 
 Note that not all applications can utilize all solvers yet. The following table lists the solver-application compatibility.
 
@@ -110,10 +109,10 @@ the guidelines are ambiguous or you have a particular question.
 
 ## Authors
 ExaGO<sup>TM</sup> was designed and implemented by Shrirang Abhyankar and has
-received significant from Slaven Peles, Nicholson Koukpaizan, Maksudul Alam,
-Asher Mancinelli, Cameron Rutherford, Joshua Hambrick, Philip Fackler, Eve
-Tsybina, Bruce Palmer, Jaelyn Litzinger, William Perkins, Sayef Azad Sakin,
-Joseph Macam, and Ryan Danehy.
+received significant contributions from Slaven Peles, Nicholson Koukpaizan,
+Maksudul Alam, Asher Mancinelli, Cameron Rutherford, Joshua Hambrick, Philip
+Fackler, Eve Tsybina, Bruce Palmer, Jaelyn Litzinger, William Perkins, Sayef
+Azad Sakin, Joseph Macam, and Ryan Danehy.
 
 ## Acknowledgement
 ExaGO<sup>TM</sup> has been originally developed as a part of
