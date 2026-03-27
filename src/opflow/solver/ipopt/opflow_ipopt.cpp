@@ -351,8 +351,8 @@ Bool eval_opflow_h(PetscInt n, PetscScalar *x, Bool new_x,
 }
 
 Bool OPFLOWSolverMonitor_IPOPT(ipindex alg_mod, ipindex iter_count,
-                               ipnumber obj_value, ipnumber inf_pr, ipnumber inf_du,
-                               ipnumber mu, ipnumber d_norm,
+                               ipnumber obj_value, ipnumber inf_pr,
+                               ipnumber inf_du, ipnumber mu, ipnumber d_norm,
                                ipnumber regularization_size, ipnumber alpha_du,
                                ipnumber alpha_pr, ipindex ls_trials,
                                UserDataPtr user_data) {
