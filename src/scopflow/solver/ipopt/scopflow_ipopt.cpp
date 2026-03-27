@@ -248,11 +248,11 @@ Bool eval_scopflow_h(PetscInt n, PetscScalar *x, Bool new_x,
   return TRUE;
 }
 
-Bool SCOPFLOWSolverMonitor_IPOPT(Index alg_mod, Index iter_count,
-                                 Number obj_value, Number inf_pr, Number inf_du,
-                                 Number mu, Number d_norm,
-                                 Number regularization_size, Number alpha_du,
-                                 Number alpha_pr, Index ls_trials,
+Bool SCOPFLOWSolverMonitor_IPOPT(ipindex alg_mod, ipindex iter_count,
+                                 ipnumber obj_value, ipnumber inf_pr, ipnumber inf_du,
+                                 ipnumber mu, ipnumber d_norm,
+                                 ipnumber regularization_size, ipnumber alpha_du,
+                                 ipnumber alpha_pr, ipindex ls_trials,
                                  UserDataPtr user_data) {
   (void)alg_mod;
   (void)iter_count;
