@@ -3196,6 +3196,7 @@ PetscErrorCode OPFLOWSetSummaryStats(OPFLOW opflow) {
   CHKERRQ(ierr);
 
   ps->solve_real_time = opflow->solve_real_time;
+  ps->numits = opflow->numits;
 
   PetscFunctionReturn(0);
 }
