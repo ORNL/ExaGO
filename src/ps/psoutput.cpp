@@ -272,6 +272,9 @@ PetscErrorCode PSSaveSolution_MATPOWER(PS ps, const char outfile[]) {
   fprintf(fd, "\n%%%% solve time\n");
   fprintf(fd, "%ssolve_time = %.5g;\n", prefix, ps->solve_real_time);
 
+  fprintf(fd, "\n%%%% number of iterations\n");
+  fprintf(fd, "%snum_iter = %d;\n", prefix, ps->numits);
+
   fclose(fd);
   PetscFunctionReturn(0);
 }
@@ -888,7 +891,8 @@ PetscErrorCode PSSaveSolution_JSON(PS ps, const char outfile[]) {
   PrintJSONArray(fd, "LOAD", 2, &ps->sys_info.total_load[0], true);
   PrintJSONArray(fd, "LOADSHED", 2, &ps->sys_info.total_loadshed[0], true);
 
-  PrintJSONDouble(fd, "SolveRealTime", ps->solve_real_time, false);
+  PrintJSONDouble(fd, "SolveRealTime", ps->solve_real_time, true);
+  PrintJSONInt(fd, "NumIter", ps->numits, false);
 
   PrintJSONObjectEnd(fd, false); // System summary object end
 
@@ -944,6 +948,7 @@ PetscErrorCode PSSaveSolution_MINIMAL(PS ps, const char outfile[]) {
   fprintf(fd, "\tTotal Load Shed P, Q: %9g, %9g\n",
           ps->sys_info.total_loadshed[0], ps->sys_info.total_loadshed[1]);
   fprintf(fd, "\tSolve Time: %5g\n", ps->solve_real_time);
+  fprintf(fd, "\tNumber of iterations: %d\n", ps->numits);
   fprintf(fd, "\tNzones: %d\n", ps->nzones);
   fprintf(fd, "\tNareas: %d\n", ps->nareas);
 
