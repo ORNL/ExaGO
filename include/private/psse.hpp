@@ -194,7 +194,46 @@ struct AreaInterchange {
   std::string arname{};
 };
 
-struct TwoTerminalDCLine {};
+struct Converter {
+  BusRef ip;
+  std::size_t nb;
+  double anmx;
+  double anmn;
+  double rc;
+  double xc;
+  double ebas;
+  double tr{1.0};
+  double tap{1.0};
+  double tmx{1.5};
+  double tmn{0.51};
+  double stp{0.00625};
+  BusRef ic{0};
+  BusRef ifrom{0};
+  BusRef ito{0};
+  int id{1};
+  double xcap{0.0};
+  std::size_t nd{0};
+};
+
+struct TwoTerminalDCLine {
+  enum class Code { R, I };
+
+  std::string name;
+  int mdc{0};
+  double rdc;
+  double setvl;
+  double vschd;
+  double vcmod{0.0};
+  double rcomp{0.0};
+  double delti{0.0};
+  Code meter{Code::I};
+  double dcvmin{0.0};
+  std::size_t cccitmx{20};
+  double cccacc{1.0};
+
+  Converter rectifier;
+  Converter inverter;
+};
 
 struct VSCDCLine {};
 
@@ -282,8 +321,8 @@ struct Network {
           std::vector<Load> &&, std::vector<FixedBusShunt> &&,
           std::vector<Generator> &&, std::vector<Branch> &&,
           std::vector<Transformer> &&, std::vector<AreaInterchange> &&,
-          std::vector<Zone> &&, std::vector<Owner> &&,
-          std::vector<SwitchedShunt> &&);
+          std::vector<TwoTerminalDCLine> &&, std::vector<Zone> &&,
+          std::vector<Owner> &&, std::vector<SwitchedShunt> &&);
 
   void ResolveBusIds();
   void ResolveDefaults();
@@ -299,7 +338,7 @@ struct Network {
   // std::vector<SystemSwitchingDevice> system_switching_devices;
   std::vector<Transformer> transformers;
   std::vector<AreaInterchange> area_interchanges;
-  // std::vector<TwoTerminalDCLine> two_terminal_dc_lines;
+  std::vector<TwoTerminalDCLine> two_terminal_dc_lines;
   // std::vector<VSCDCLine> vsc_dc_lines;
   // std::vector<ImpedanceCorrection> impedance_corrections;
   // std::vector<MultiTerminalDCLine> multi_terminal_dc_lines;

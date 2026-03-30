@@ -1,5 +1,8 @@
 add_executable(test_psse_parser test_psse_parser.cpp)
 target_link_libraries(test_psse_parser ExaGO::PS)
+target_include_directories(test_psse_parser PRIVATE
+  ${CMAKE_SOURCE_DIR}/tests/unit
+)
 execute_process(
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/data
           ${CMAKE_CURRENT_BINARY_DIR}/data

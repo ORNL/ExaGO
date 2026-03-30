@@ -491,7 +491,51 @@ struct Parser {
     area.arname = Strip(arname);
   }
 
-  void ParseRecord(LineItemStream &, TwoTerminalDCLine &) {}
+  TwoTerminalDCLine::Code ParseMeteredEndCode(CheckedLineItemStream &clis) {
+    std::string meter = "I";
+    clis >> meter;
+    if (meter == "I") {
+      return TwoTerminalDCLine::Code::I;
+    } else if (meter == "R") {
+      return TwoTerminalDCLine::Code::R;
+    } else {
+      Error("PSS(R)E parser: Two-Terminal DC Line metered end code must be "
+            "either \'I\' or \'R\', got \'" +
+            meter + "\'");
+    }
+  }
+
+  Converter ParseConverter(LineItemStream &lis) {
+    Converter c;
+    IntOrStringParse ip;
+    lis >> ip;
+    c.ip = ip.ToBusRef();
+    lis >> c.nb >> c.anmx >> c.anmn >> c.rc >> c.xc >> c.ebas;
+    auto clis = lis.Checked();
+    clis >> c.tr >> c.tap >> c.tmx >> c.tmn >> c.stp;
+    IntOrStringParse ic;
+    IntOrStringParse ifrom;
+    IntOrStringParse ito;
+    clis >> ic >> ifrom >> ito;
+    c.ic = ic.ToBusRef();
+    c.ifrom = ifrom.ToBusRef();
+    c.ito = ito.ToBusRef();
+    clis >> c.id >> c.xcap >> c.nd;
+    return c;
+  }
+
+  void ParseRecord(LineItemStream &lis, TwoTerminalDCLine &dc) {
+    QuoteStringParse name;
+    lis >> name;
+    dc.name = Strip(name);
+    lis >> dc.mdc >> dc.rdc >> dc.setvl >> dc.vschd;
+    auto clis = lis.Checked();
+    clis >> dc.vcmod >> dc.rcomp >> dc.delti;
+    dc.meter = ParseMeteredEndCode(clis);
+    clis >> dc.dcvmin >> dc.cccitmx >> dc.cccacc;
+    dc.rectifier = ParseConverter(lis.NextLine());
+    dc.inverter = ParseConverter(lis.NextLine());
+  }
 
   void ParseRecord(LineItemStream &, VSCDCLine &) {}
 
@@ -679,6 +723,16 @@ void Network::ResolveBusIds() {
   for (auto &ar : area_interchanges) {
     bus_mapping.Resolve(ar.isw, Optional{true});
   }
+  for (auto &dc : two_terminal_dc_lines) {
+    bus_mapping.Resolve(dc.rectifier.ip);
+    bus_mapping.Resolve(dc.rectifier.ic, Optional{true});
+    bus_mapping.Resolve(dc.rectifier.ifrom, Optional{true});
+    bus_mapping.Resolve(dc.rectifier.ito, Optional{true});
+    bus_mapping.Resolve(dc.inverter.ip);
+    bus_mapping.Resolve(dc.inverter.ic, Optional{true});
+    bus_mapping.Resolve(dc.inverter.ifrom, Optional{true});
+    bus_mapping.Resolve(dc.inverter.ito, Optional{true});
+  }
   for (auto &sh : switched_shunts) {
     bus_mapping.Resolve(sh.i);
     bus_mapping.Resolve(sh.swreg, Optional{true});
@@ -738,14 +792,16 @@ Network::Network(bool ref_bus_names, CaseID &&cid, std::vector<Bus> &&bus,
                  std::vector<Load> &&load, std::vector<FixedBusShunt> &&fbshunt,
                  std::vector<Generator> &&gen, std::vector<Branch> &&branch,
                  std::vector<Transformer> &&trans,
-                 std::vector<AreaInterchange> &&area, std::vector<Zone> &&zone,
-                 std::vector<Owner> &&owner,
+                 std::vector<AreaInterchange> &&area,
+                 std::vector<TwoTerminalDCLine> &&ttdcline,
+                 std::vector<Zone> &&zone, std::vector<Owner> &&owner,
                  std::vector<SwitchedShunt> &&swshunt)
     : case_id(std::move(cid)), buses(std::move(bus)),
       bus_mapping(buses, ref_bus_names), loads(std::move(load)),
       fixed_bus_shunts(std::move(fbshunt)), generators(std::move(gen)),
       branches(std::move(branch)), transformers(std::move(trans)),
-      area_interchanges(std::move(area)), zones(std::move(zone)),
+      area_interchanges(std::move(area)),
+      two_terminal_dc_lines(std::move(ttdcline)), zones(std::move(zone)),
       owners(std::move(owner)), switched_shunts(std::move(swshunt)) {
   ResolveBusIds();
   ResolveDefaults();
@@ -770,8 +826,8 @@ Network ParseNetwork(std::istream &is) {
   // }
   auto transformers = parser.ParseRecords<Transformer>(is);
   auto area_interchanges = parser.ParseRecords<AreaInterchange>(is);
-  // { TODO
   auto two_terminal_dc_lines = parser.ParseRecords<TwoTerminalDCLine>(is);
+  // { TODO
   auto vsc_dc_lines = parser.ParseRecords<VSCDCLine>(is);
   auto impedance_corrections = parser.ParseRecords<ImpedanceCorrection>(is);
   auto multi_terminal_dc_lines = parser.ParseRecords<MultiTerminalDCLine>(is);
@@ -802,6 +858,7 @@ Network ParseNetwork(std::istream &is) {
              std::move(branches),
              std::move(transformers),
              std::move(area_interchanges),
+             std::move(two_terminal_dc_lines),
              std::move(zones),
              std::move(owners),
              std::move(switched_shunts)};
@@ -995,7 +1052,10 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
   }
 
   // lines
-  ps->Nline = ps->nline = nw.branches.size() + nw.transformers.size();
+  int nbranch = nw.branches.size();
+  int ntrans = nw.transformers.size();
+  int nttdc = nw.two_terminal_dc_lines.size();
+  ps->Nline = ps->nline = nbranch + ntrans + nttdc;
   ierr = PetscCalloc1(ps->Nline, &ps->line);
   CHKERRQ(ierr);
   auto configure_line = [&nw](auto &line) {
@@ -1030,8 +1090,6 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
     line.ytt[0] = G;
     line.ytt[1] = B + Bc / 2.0;
   };
-  int nbranch = nw.branches.size();
-  int ntrans = nw.transformers.size();
   for (int i = 0; i < nbranch; ++i) {
     auto &dline = ps->line[i];
     auto &sline = nw.branches[i];
@@ -1090,6 +1148,11 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
     // the rest are skipped
 
     configure_line(dline);
+  }
+  for (int i = 0; i < nttdc; ++i) {
+    auto &dline = ps->line[i + nbranch + ntrans];
+    auto &sline = nw.two_terminal_dc_lines[i];
+    // TODO: set up line as dc line
   }
 
   auto unsupported_contents_error = [&nw](const std::string &label) {

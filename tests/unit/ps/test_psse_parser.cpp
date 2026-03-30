@@ -1,12 +1,16 @@
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include <mpi.h>
 
 #include <psimpl.h>
 #include <psse.hpp>
 #include <utils.h>
+#include <utils/test_base.h>
 
 #define STRINGIFY(x) #x
 #define TO_STRING(x) STRINGIFY(x)
@@ -106,15 +110,65 @@ struct LocalResult {
   mutable bool result{true};
 };
 
-#define TEST_FUNCTION(name) auto name = [__local = LocalResult()]
+#define TEST_FUNCTION(name, args)                                              \
+  struct testfn##name {                                                        \
+    LocalResult __local = LocalResult();                                       \
+    bool operator() args;                                                      \
+  };                                                                           \
+  testfn##name name;                                                           \
+  bool testfn##name::operator() args
 
 #define TEST_FUNCTION_RETURN                                                   \
   bool __result = __local.result;                                              \
   __local.result = true;                                                       \
   return __result;
-#define END_TEST_FUNCTION ;
 
-TEST_FUNCTION(check_ps_data_ieee9bus)(PS ps) {
+struct TestCase {
+  TestCase(const std::string &name_) : name(name_) {}
+  std::string name;
+  virtual bool operator()() = 0;
+
+protected:
+  LocalResult __local = LocalResult();
+};
+
+#define TEST_CASE(name)                                                        \
+  struct testcase_##name : TestCase {                                          \
+    testcase_##name() : TestCase{TO_STRING(name)} {}                           \
+    bool operator()() override;                                                \
+  };                                                                           \
+  struct registrator_##name {                                                  \
+    testcase_##name name;                                                      \
+    registrator_##name() { test_cases.push_back(&name); }                      \
+  } name;                                                                      \
+  bool testcase_##name::operator()()
+
+#define TEST_CASE_RETURN return __local.result ? 0 : 1;
+
+#define TEST_SUITE(name)                                                       \
+  namespace testsuite_##name {                                                 \
+    std::vector<TestCase *> test_cases;
+
+#define TEST_SUITE_END                                                         \
+  struct Suite : exago::tests::TestBase {                                      \
+    static int RunAllTests() {                                                 \
+      int fail = 0;                                                            \
+      for (auto *test_case : test_cases) {                                     \
+        auto case_fail = (*test_case)();                                       \
+        const auto &case_name = test_case->name;                               \
+        printMessage(case_fail, case_name.c_str(), 0);                         \
+        fail += case_fail;                                                     \
+      }                                                                        \
+      return fail;                                                             \
+    }                                                                          \
+  };                                                                           \
+  }
+
+#define RUN_TEST_SUITE(name) testsuite_##name::Suite::RunAllTests();
+
+TEST_SUITE(TestPSSEParser)
+
+TEST_FUNCTION(check_ps_data_ieee9bus, (PS ps)) {
   auto MVAbase = ps->MVAbase;
   TEST_EQUAL(ps->MVAbase, 100.0);
   TEST_EQUAL(ps->nbus, 9);
@@ -511,9 +565,8 @@ TEST_FUNCTION(check_ps_data_ieee9bus)(PS ps) {
 
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(check_equal_bus)(PSBUS a, PSBUS b) {
+TEST_FUNCTION(check_equal_bus, (PSBUS a, PSBUS b)) {
   TEST_EQUAL(a->bus_i, b->bus_i);
   TEST_EQUAL(Strip(a->i), Strip(b->i));
   TEST_EQUAL(Strip(a->name), Strip(b->name));
@@ -578,9 +631,8 @@ TEST_FUNCTION(check_equal_bus)(PSBUS a, PSBUS b) {
 
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(check_equal_load)(PSLOAD a, PSLOAD b) {
+TEST_FUNCTION(check_equal_load, (PSLOAD a, PSLOAD b)) {
   TEST_EQUAL(a->bus_i, b->bus_i);
   TEST_EQUAL(Strip(a->i), Strip(b->i));
   TEST_EQUAL(Strip(a->id), Strip(b->id));
@@ -614,9 +666,8 @@ TEST_FUNCTION(check_equal_load)(PSLOAD a, PSLOAD b) {
 
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(check_equal_gen)(PSGEN a, PSGEN b) {
+TEST_FUNCTION(check_equal_gen, (PSGEN a, PSGEN b)) {
   TEST_EQUAL(a->bus_i, b->bus_i);
   TEST_EQUAL(Strip(a->i), Strip(b->i));
   TEST_EQUAL(Strip(a->id), Strip(b->id));
@@ -680,9 +731,8 @@ TEST_FUNCTION(check_equal_gen)(PSGEN a, PSGEN b) {
 
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(check_equal_line)(PSLINE a, PSLINE b) {
+TEST_FUNCTION(check_equal_line, (PSLINE a, PSLINE b)) {
   TEST_EQUAL(a->fbus, b->fbus);
   TEST_EQUAL(a->tbus, b->tbus);
   TEST_EQUAL(Strip(a->i), Strip(b->i));
@@ -767,9 +817,8 @@ TEST_FUNCTION(check_equal_line)(PSLINE a, PSLINE b) {
 
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(check_equal)(PS n1, PS n2) {
+TEST_FUNCTION(check_equal, (PS n1, PS n2)) {
   TEST_EQUAL(n1->MVAbase, n2->MVAbase);
   TEST_EQUAL(n1->Nbus, n2->Nbus);
   TEST_EQUAL(n1->Ngen, n2->Ngen);
@@ -828,10 +877,9 @@ TEST_FUNCTION(check_equal)(PS n1, PS n2) {
 
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(check_bus_ref)
-(const exago::psse::BusMapping &bus_mapping, const exago::psse::BusRef &ref) {
+TEST_FUNCTION(check_bus_ref, (const exago::psse::BusMapping &bus_mapping,
+                              const exago::psse::BusRef &ref)) {
   const auto &bus = bus_mapping.GetBus(ref.id);
   TEST_EQUAL(bus.i, ref.id);
   TEST_EQUAL(&bus, ref.bus);
@@ -841,9 +889,8 @@ TEST_FUNCTION(check_bus_ref)
   }
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(check_bus_ids)(const exago::psse::Network &nw) {
+TEST_FUNCTION(check_bus_ids, (const exago::psse::Network &nw)) {
   for (std::size_t i = 0; i < nw.buses.size(); ++i) {
     const auto &bus = nw.buses[i];
     TEST_EQUAL(nw.bus_mapping.GetInternalIndex(bus.i), i);
@@ -893,9 +940,8 @@ TEST_FUNCTION(check_bus_ids)(const exago::psse::Network &nw) {
 
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(ieee9bus_v33)() {
+TEST_CASE(ieee9bus_v33) {
   std::string filename{"ieee9bus_v33.raw"};
 
   auto psh = ReadPSData(filename);
@@ -909,11 +955,10 @@ TEST_FUNCTION(ieee9bus_v33)() {
 
   TEST(check_bus_ids(nw));
 
-  TEST_FUNCTION_RETURN;
+  TEST_CASE_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(check_network_ieee9bus_shunts)(const exago::psse::Network &nw) {
+TEST_FUNCTION(check_network_ieee9bus_shunts, (const exago::psse::Network &nw)) {
   TEST_EQUAL(nw.case_id.ic, 0);
   TEST_EQUAL(nw.case_id.sbase, 100.0);
   TEST_EQUAL(nw.case_id.rev, 34);
@@ -1051,9 +1096,8 @@ TEST_FUNCTION(check_network_ieee9bus_shunts)(const exago::psse::Network &nw) {
 
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(ieee9bus_v34_shunts)() {
+TEST_CASE(ieee9bus_v34_shunts) {
   std::string filename{"ieee9bus_v34_shunts.raw"};
 
   auto nw = exago::psse::ParseNetwork(filename);
@@ -1061,11 +1105,64 @@ TEST_FUNCTION(ieee9bus_v34_shunts)() {
   TEST(check_bus_ids(nw));
   auto nw_psh = NetworkToPS(nw);
 
+  TEST_CASE_RETURN;
+}
+
+TEST_FUNCTION(check_network_ttdc, (const exago::psse::Network &nw)) {
+  TEST_EQUAL(nw.case_id.ic, 0);
+  TEST_EQUAL(nw.case_id.sbase, 100.0);
+  TEST_EQUAL(nw.case_id.rev, 33);
+
+  const auto &buses = nw.buses;
+  TEST_EQUAL(buses[0].i, 1001);
+  TEST_EQUAL(buses[0].name, "FAV SPOT 01");
+  TEST_EQUAL(buses[0].baskv, 87.0);
+  TEST_EQUAL(buses[0].evlo, 0.9);
+  TEST_EQUAL(buses[1].i, 1002);
+  TEST_EQUAL(buses[1].name, "FAV SPOT 02");
+  TEST_EQUAL(buses[1].baskv, 87.0);
+  TEST_EQUAL(buses[1].evlo, 0.9);
+
+  const auto &loads = nw.loads;
+  TEST_EQUAL(loads[0].i, 1002);
+  TEST_EQUAL(loads[0].id, "Z0");
+  TEST_EQUAL(loads[0].owner, 301);
+
+  const auto &gens = nw.generators;
+  TEST_EQUAL(gens[0].i, 1002);
+  TEST_EQUAL(gens[0].id, "1");
+  TEST_EQUAL(gens[0].pb, -250.0);
+
+  const auto &branches = nw.branches;
+  TEST_EQUAL(branches[0].i, 1001);
+  TEST_EQUAL(branches[0].j, 1002);
+  TEST_EQUAL(branches[0].ckt, "1");
+  TEST_EQUAL(branches[0].len, 9.4);
+
+  const auto &ttdc = nw.two_terminal_dc_lines;
+  TEST_EQUAL(ttdc[0].name, "TTDC Ln 1");
+  TEST_EQUAL(ttdc[0].vschd, 7.5);
+  TEST_EQUAL(ttdc[0].rectifier.ip, 1002);
+  TEST_EQUAL(ttdc[0].rectifier.ebas, 230.0);
+  TEST_EQUAL(ttdc[0].rectifier.tr, 0.09772);
+  TEST_EQUAL(ttdc[0].inverter.ip, 1001);
+  TEST_EQUAL(ttdc[0].inverter.ebas, 230.0);
+  TEST_EQUAL(ttdc[0].inverter.tr, 0.07134);
+
   TEST_FUNCTION_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(choke_tests)() {
+TEST_CASE(two_terminal_dc_line) {
+  std::string filename{"two_terminal_hvdc_test.raw"};
+
+  auto nw = exago::psse::ParseNetwork(filename);
+  TEST(check_network_ttdc(nw));
+  TEST(check_bus_ids(nw));
+
+  TEST_CASE_RETURN;
+}
+
+TEST_CASE(choke_tests) {
   std::vector<std::string> shouldPass{"case14.raw",
                                       "case24.raw",
                                       "case3.raw",
@@ -1094,7 +1191,6 @@ TEST_FUNCTION(choke_tests)() {
                                       "three_winding_mag_test.raw",
                                       "three_winding_test.raw",
                                       "three_winding_test_2.raw",
-                                      "two_terminal_hvdc_test.raw",
                                       "two_winding_mag_test.raw",
                                       "vsc_hvdc_test.raw"};
   for (auto &&file : shouldPass) {
@@ -1118,25 +1214,28 @@ TEST_FUNCTION(choke_tests)() {
     TEST_THROWS(ExaGOError, exago::psse::ParseNetwork(file));
   }
 
-  TEST_FUNCTION_RETURN;
+  TEST_CASE_RETURN;
 }
-END_TEST_FUNCTION
 
-TEST_FUNCTION(driver)() {
-  TEST(ieee9bus_v33());
-  TEST(ieee9bus_v34_shunts());
-  TEST(choke_tests());
-  TEST_FUNCTION_RETURN;
-}
-END_TEST_FUNCTION
+// int RunAllTests() {
+//   int fail = 0;
+//   fail += ieee9bus_v33();
+//   fail += ieee9bus_v34_shunts();
+//   fail += two_terminal_dc_line();
+//   fail += choke_tests();
+//   return fail;
+// }
+
+TEST_SUITE_END
 
 int main(int argc, char *argv[]) {
   char appname[] = "test_psse_parser";
   char help[] = "";
   ExaGOInitialize(MPI_COMM_WORLD, &argc, &argv, appname, help);
 
-  driver();
+  // auto result = TestPSSEParser().RunAllTests();
+  auto result = RUN_TEST_SUITE(TestPSSEParser);
 
   ExaGOFinalize();
-  return TEST_RESULT;
+  return result;
 }
