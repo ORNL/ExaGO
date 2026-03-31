@@ -362,9 +362,9 @@ void init_exago_opflow(pybind11::module &m) {
            [](OPFLOW_wrapper &w, const int &nkvlevels,
               const std::string &monitorfile) {
              PetscErrorCode ierr;
-             ierr = OPFLOWSetLinesMonitored(w.opf, 1, 0, NULL,
-                                            (PetscInt)nkvlevels, NULL,
-                                            monitorfile.c_str());
+             ierr =
+                 OPFLOWSetLinesMonitored(w.opf, 1, 0, NULL, (PetscInt)nkvlevels,
+                                         NULL, monitorfile.c_str());
              ExaGOCheckError(ierr);
            })
 
