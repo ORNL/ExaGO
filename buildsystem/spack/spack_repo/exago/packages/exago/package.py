@@ -208,12 +208,17 @@ class Exago(CMakePackage, CudaPackage, ROCmPackage):
     # This is no longer a requirement in RAJA > 0.14
     depends_on("umpire+cuda~shared", when="+raja+cuda ^raja@:0.14")
 
-    # PETSc dependency logic
+    # PETSc version dependency logic
     depends_on("petsc@3.13:3.14", when="@:1.2")
     depends_on("petsc@3.16", when="@1.3:1.4")
     depends_on("petsc@3.18:3.19", when="@1.5")
-    depends_on("petsc@3.19:", when="@1.6:")
+    depends_on("petsc@3.19:3.23", when="@1.6")
+    depends_on("petsc@3.24:", when="@develop")
     depends_on("petsc~mpi", when="~mpi")
+
+    # Ipopt versiondependency logic
+    depends_on("ipopt@3.12", when="@:1.6")
+    depends_on("ipopt@3.14:", when="@develop")
 
     # cuda_arch and amdgpu_target dependency logic
     for arch in CudaPackage.cuda_arch_values:
