@@ -115,7 +115,7 @@ PetscErrorCode OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
       gen->pg = x[loc];
       gen->qg = x[loc + 1];
 
-      if (opflow->has_gensetpoint) {
+      if (opflow->has_gensetpoint && !gen->isrenewable) {
         gloc += gen->nconeq;
       }
     }
@@ -125,69 +125,66 @@ PetscErrorCode OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
         ierr = PSBUSGetLoad(bus, k, &load);
         CHKERRQ(ierr);
         loc = load->startxloadlossloc;
-        load->pl = load->pl - x[loc];
-        load->ql = load->ql - x[loc + 1];
+        load->pl_loss = x[loc];
+        load->ql_loss = x[loc + 1];
       }
     }
   }
 
-  if (!opflow->ignore_lineflow_constraints) {
-    for (i = 0; i < ps->nline; i++) {
-      line = &ps->line[i];
-      if (!line->status) {
-        line->mult_sf = line->mult_st = 0.0;
-        continue;
-      }
-
-      Gff = line->yff[0];
-      Bff = line->yff[1];
-      Gft = line->yft[0];
-      Bft = line->yft[1];
-      Gtf = line->ytf[0];
-      Btf = line->ytf[1];
-      Gtt = line->ytt[0];
-      Btt = line->ytt[1];
-
-      ierr = PSLINEGetConnectedBuses(line, &connbuses);
-      CHKERRQ(ierr);
-      busf = connbuses[0];
-      bust = connbuses[1];
-
-      xlocf = busf->startxVloc;
-      xloct = bust->startxVloc;
-
-      thetaf = x[xlocf];
-      Vmf = x[xlocf + 1];
-      thetat = x[xloct];
-      Vmt = x[xloct + 1];
-      thetaft = thetaf - thetat;
-      thetatf = thetat - thetaf;
-
-      Pf = Gff * Vmf * Vmf +
-           Vmf * Vmt * (Gft * cos(thetaft) + Bft * sin(thetaft));
-      Qf = -Bff * Vmf * Vmf +
-           Vmf * Vmt * (-Bft * cos(thetaft) + Gft * sin(thetaft));
-
-      Pt = Gtt * Vmt * Vmt +
-           Vmt * Vmf * (Gtf * cos(thetatf) + Btf * sin(thetatf));
-      Qt = -Btt * Vmt * Vmt +
-           Vmt * Vmf * (-Btf * cos(thetatf) + Gtf * sin(thetatf));
-
-      line->pf = Pf;
-      line->qf = Qf;
-      line->pt = Pt;
-      line->qt = Qt;
-      line->sf = PetscSqrtScalar(Pf * Pf + Qf * Qf);
-      line->st = PetscSqrtScalar(Pt * Pt + Qt * Qt);
-
-      if (line->rateA > 1e5) {
-        line->mult_sf = line->mult_st = 0.0;
-      } else {
-        gloc = line->startineqloc;
-        line->mult_sf = lambdai[gloc];
-        line->mult_st = lambdai[gloc + 1];
-      }
+  for (i = 0; i < ps->nline; i++) {
+    line = &ps->line[i];
+    if (!line->status) {
+      line->mult_sf = line->mult_st = 0.0;
+      continue;
     }
+
+    Gff = line->yff[0];
+    Bff = line->yff[1];
+    Gft = line->yft[0];
+    Bft = line->yft[1];
+    Gtf = line->ytf[0];
+    Btf = line->ytf[1];
+    Gtt = line->ytt[0];
+    Btt = line->ytt[1];
+
+    ierr = PSLINEGetConnectedBuses(line, &connbuses);
+    CHKERRQ(ierr);
+    busf = connbuses[0];
+    bust = connbuses[1];
+
+    xlocf = busf->startxVloc;
+    xloct = bust->startxVloc;
+
+    thetaf = x[xlocf];
+    Vmf = x[xlocf + 1];
+    thetat = x[xloct];
+    Vmt = x[xloct + 1];
+    thetaft = thetaf - thetat;
+    thetatf = thetat - thetaf;
+
+    Pf =
+        Gff * Vmf * Vmf + Vmf * Vmt * (Gft * cos(thetaft) + Bft * sin(thetaft));
+    Qf = -Bff * Vmf * Vmf +
+         Vmf * Vmt * (-Bft * cos(thetaft) + Gft * sin(thetaft));
+
+    Pt =
+        Gtt * Vmt * Vmt + Vmt * Vmf * (Gtf * cos(thetatf) + Btf * sin(thetatf));
+    Qt = -Btt * Vmt * Vmt +
+         Vmt * Vmf * (-Btf * cos(thetatf) + Gtf * sin(thetatf));
+
+    line->pf = Pf;
+    line->qf = Qf;
+    line->pt = Pt;
+    line->qt = Qt;
+    line->sf = PetscSqrtScalar(Pf * Pf + Qf * Qf);
+    line->st = PetscSqrtScalar(Pt * Pt + Qt * Qt);
+  }
+
+  for (i = 0; i < opflow->nlinesmon; i++) {
+    line = &ps->line[opflow->linesmon[i]];
+    gloc = line->startineqloc;
+    line->mult_sf = lambdai[gloc];
+    line->mult_st = lambdai[gloc + 1];
   }
 
   ierr = VecRestoreArrayRead(X, &x);
@@ -348,12 +345,10 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     }
   }
 
-  if (!opflow->ignore_lineflow_constraints) {
-    for (int iline = 0; iline < opflow->nlinesmon; ++iline) {
-      // PSLINE line = &ps->line[opflow->linesmon[iline]];
-      lineparams->jac_ieq_idx[iline] = nnz_eqjac + nnz_ineqjac;
-      nnz_ineqjac += 8;
-    }
+  for (int iline = 0; iline < opflow->nlinesmon; ++iline) {
+    // PSLINE line = &ps->line[opflow->linesmon[iline]];
+    lineparams->jac_ieq_idx[iline] = nnz_eqjac + nnz_ineqjac;
+    nnz_ineqjac += 8;
   }
 
   std::cout << "Inequality Jacobian nonzero count: " << nnz_ineqjac
