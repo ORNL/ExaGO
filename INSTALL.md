@@ -42,11 +42,11 @@ Dependencies are broken down into three categories:
 
 | Dependency | Dependency Version | CMake Variable (if applicable) | Notes |
 |---|---|---|---|
-| PETSC | ==3.16 | `EXAGO_ENABLE_PETSC`. `PETSC_DIR` sets the PETSC installation prefix. | Required. PETSC needs to be built with MPI if building ExaGO with MPI. [See the linked document for more information on building PETSC for ExaGO.](docs/web/petsc_install.md) |
+| PETSC | >=3.24.0 | `EXAGO_ENABLE_PETSC`. `PETSC_DIR` sets the PETSC installation prefix. | Required. PETSC needs to be built with MPI if building ExaGO with MPI. [See the linked document for more information on building PETSC for ExaGO.](docs/web/petsc_install.md) |
 | CMake | >=3.18 | N/A |  |
 | blas |  | `BLAS_LIBRARIES` sets the blas libraries. | ExaGO uses the builtin [`FindBLAS` cmake module](https://cmake.org/cmake/help/latest/module/FindBLAS.html). Please refer to the linked documentation. |
 | MPI | >=3 | `EXAGO_ENABLE_MPI`. `MPI_HOME` sets the MPI installation prefix. | Optional. ExaGO uses the builtin [`FindMPI` cmake module](https://cmake.org/cmake/help/latest/module/FindMPI.html). |
-| Python | >=3.5 | `EXAGO_ENABLE_PYTHON`, `Python3_DIR` | ExaGO uses builtin [`FindPython` cmake module](https://cmake.org/cmake/help/latest/module/FindPython.html). Please refer to linked documentation. |
+| Python | >=3.12 | `EXAGO_ENABLE_PYTHON`, `Python3_DIR` | ExaGO uses builtin [`FindPython` cmake module](https://cmake.org/cmake/help/latest/module/FindPython.html). Please refer to linked documentation. |
 
 #### Third-Party Solvers
 
@@ -55,8 +55,8 @@ Additional documentation on installing these dependencies are linked below.
 
 | Dependency | Dependency Version | CMake Variable (if applicable) | Notes |
 |---|---|---|---|
-| HiOp | v0.5.3 | `EXAGO_ENABLE_HIOP`, `HIOP_DIR` | Optional, needs to be built with CUDA and MPI if using those options. [See HiOp repo linked here for more information.](https://github.com/LLNL/hiop) |
-| Ipopt | >=3.12 | `EXAGO_ENABLE_IPOPT`, `IPOPT_DIR` | Needs to be built with COINHSL if using HiOp sparse linear algebra. [See the linked document for more information on building Ipopt for ExaGO](./docs/web/ipopt_install.md), [and see this link for PETSC documentation.](https://petsc.org/release/)|
+| HiOp | >=1.0 | `EXAGO_ENABLE_HIOP`, `HIOP_DIR` | Optional, needs to be built with CUDA and MPI if using those options. [See HiOp repo linked here for more information.](https://github.com/LLNL/hiop) |
+| Ipopt | >=3.14 | `EXAGO_ENABLE_IPOPT`, `IPOPT_DIR` | Needs to be built with COINHSL if using HiOp sparse linear algebra. [See the linked document for more information on building Ipopt for ExaGO](./docs/web/ipopt_install.md), [and see this link for PETSC documentation.](https://petsc.org/release/)|
 
 #### GPU-Related Dependencies
 

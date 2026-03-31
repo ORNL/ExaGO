@@ -648,7 +648,7 @@ PetscErrorCode OPFLOWSetUpInitPflow(OPFLOW opflow) {
   CHKERRQ(ierr);
 
   /* Get default sections associated with this plex */
-  ierr = DMGetSection(plexdm, &opflow->defaultsection);
+  ierr = DMGetLocalSection(plexdm, &opflow->defaultsection);
   CHKERRQ(ierr);
   ierr = PetscObjectReference((PetscObject)opflow->defaultsection);
   CHKERRQ(ierr);
@@ -659,7 +659,7 @@ PetscErrorCode OPFLOWSetUpInitPflow(OPFLOW opflow) {
   CHKERRQ(ierr);
 
   /* Set the new section created for initial power flow */
-  ierr = DMSetSection(plexdm, opflow->initpflowpsection);
+  ierr = DMSetLocalSection(plexdm, opflow->initpflowpsection);
   CHKERRQ(ierr);
   ierr = DMGetGlobalSection(plexdm, &opflow->initpflowpglobsection);
   CHKERRQ(ierr);
@@ -680,7 +680,7 @@ PetscErrorCode OPFLOWSetUpInitPflow(OPFLOW opflow) {
   CHKERRQ(ierr);
 
   /* Reset the sections */
-  ierr = DMSetSection(plexdm, opflow->defaultsection);
+  ierr = DMSetLocalSection(plexdm, opflow->defaultsection);
   CHKERRQ(ierr);
   ierr = DMSetGlobalSection(plexdm, opflow->defaultglobalsection);
   CHKERRQ(ierr);
@@ -720,7 +720,7 @@ PetscErrorCode OPFLOWComputePrePflow(OPFLOW opflow, PetscBool *converged) {
   CHKERRQ(ierr);
 
   /* Set the new section created for initial power flow. */
-  ierr = DMSetSection(plexdm, opflow->initpflowpsection);
+  ierr = DMSetLocalSection(plexdm, opflow->initpflowpsection);
   CHKERRQ(ierr);
   ierr = DMSetGlobalSection(plexdm, opflow->initpflowpglobsection);
   CHKERRQ(ierr);
@@ -745,7 +745,7 @@ PetscErrorCode OPFLOWComputePrePflow(OPFLOW opflow, PetscBool *converged) {
 
   /*
      Update the ref. counts for init pflow sections so that they do not
-     get destroyed when DMSetSection is called
+     get destroyed when DMSetLocalSection is called
   */
   ierr = PetscObjectReference((PetscObject)opflow->initpflowpsection);
   CHKERRQ(ierr);
@@ -753,7 +753,7 @@ PetscErrorCode OPFLOWComputePrePflow(OPFLOW opflow, PetscBool *converged) {
   CHKERRQ(ierr);
 
   /* Reset the sections */
-  ierr = DMSetSection(plexdm, opflow->defaultsection);
+  ierr = DMSetLocalSection(plexdm, opflow->defaultsection);
   CHKERRQ(ierr);
   ierr = DMSetGlobalSection(plexdm, opflow->defaultglobalsection);
   CHKERRQ(ierr);
@@ -1346,7 +1346,7 @@ PetscErrorCode OPFLOWSetNumConstraints(OPFLOW opflow, PetscInt *branchnconeq,
   /* (i) */
   ierr = DMNetworkGetPlex(networkdm, &plexdm);
   CHKERRQ(ierr);
-  ierr = DMGetSection(plexdm, &varsection);
+  ierr = DMGetLocalSection(plexdm, &varsection);
   CHKERRQ(ierr);
   ierr = PetscObjectReference((PetscObject)varsection);
   CHKERRQ(ierr);
@@ -1356,7 +1356,7 @@ PetscErrorCode OPFLOWSetNumConstraints(OPFLOW opflow, PetscInt *branchnconeq,
   CHKERRQ(ierr);
 
   /*  (ii) */
-  ierr = DMSetSection(plexdm, buseqconsection);
+  ierr = DMSetLocalSection(plexdm, buseqconsection);
   CHKERRQ(ierr);
 
   /* (iii) */
@@ -1375,7 +1375,7 @@ PetscErrorCode OPFLOWSetNumConstraints(OPFLOW opflow, PetscInt *branchnconeq,
   }
 
   /* (v) */
-  ierr = DMSetSection(plexdm, varsection);
+  ierr = DMSetLocalSection(plexdm, varsection);
   CHKERRQ(ierr);
   ierr = DMSetGlobalSection(plexdm, varglobsection);
   CHKERRQ(ierr);
@@ -1464,7 +1464,7 @@ PetscErrorCode OPFLOWSetNumVariables(OPFLOW opflow, PetscInt *busnvararray,
 
   ierr = DMNetworkGetPlex(networkdm, &plexdm);
   CHKERRQ(ierr);
-  ierr = DMGetSection(plexdm, &oldvarsection);
+  ierr = DMGetLocalSection(plexdm, &oldvarsection);
   CHKERRQ(ierr);
   ierr = PetscSectionDestroy(&oldvarsection);
   CHKERRQ(ierr);
@@ -1478,7 +1478,7 @@ PetscErrorCode OPFLOWSetNumVariables(OPFLOW opflow, PetscInt *busnvararray,
   networkdmdata->DofSection = 0;
 
   /* Set the section with number of variables */
-  ierr = DMSetSection(plexdm, varsection);
+  ierr = DMSetLocalSection(plexdm, varsection);
   CHKERRQ(ierr);
   ierr = DMGetGlobalSection(plexdm, &globalvarsection);
   CHKERRQ(ierr);
@@ -3073,7 +3073,7 @@ PetscErrorCode OPFLOWSetLinesMonitored(OPFLOW opflow, PetscInt mon_mode,
   PetscFunctionBegin;
 
   if (mon_mode < 0 || mon_mode > 2) {
-    SETERRQ1(opflow->comm->type, PETSC_ERR_SUP,
+    SETERRQ(opflow->comm->type, PETSC_ERR_SUP,
              "mon_mode input for OPFLOWSetLinesMonitored should \
             be either 0 (list of given lines), 1 (list of KV levels), 2 (list from input file. Incorrect \
             mon_mode = %d given",

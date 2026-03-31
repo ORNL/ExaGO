@@ -120,7 +120,7 @@ PetscSectionDestroy(PetscSection section)
 
 1. Get the PetscSection associated with the DM
 ```
-DMGetSection(DM dm, PetscSection *section)
+DMGetLocalSection(DM dm, PetscSection *section)
 ```
 
 2. Get the global section for the DM
@@ -130,7 +130,7 @@ DMGetGlobalSection(DM dm, PetscSection *globalsection)
 
 3. Set a section on the DM
 ```
-DMSetSection(DM dm,PetscSection section)
+DMSetLocalSection(DM dm,PetscSection section)
 ```
 
 ## Solve stage

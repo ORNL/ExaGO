@@ -221,7 +221,7 @@ if(EXAGO_ENABLE_PETSC)
   set(ENV{PKG_CONFIG_PATH}
       ${PETSC_DIR}/lib/pkgconfig:${PETSC_DIR}/${PETSC_ARCH}/lib/pkgconfig
   )
-  pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
+  pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc>=3.24)
   set(EXAGO_HAVE_PETSC 1)
   set(ENV{PKG_CONFIG_PATH} ${PKG_CONFIG_PATH_save})
 endif()
