@@ -115,7 +115,7 @@ struct Generator {
 struct Branch {
   BusRef i;
   BusRef j;
-  std::string ckt;
+  std::string ckt{"1"};
   double r;
   double x;
   double b{0.0};
@@ -194,28 +194,28 @@ struct AreaInterchange {
   std::string arname{};
 };
 
-struct Converter {
-  BusRef ip;
-  std::size_t nb;
-  double anmx;
-  double anmn;
-  double rc;
-  double xc;
-  double ebas;
-  double tr{1.0};
-  double tap{1.0};
-  double tmx{1.5};
-  double tmn{0.51};
-  double stp{0.00625};
-  BusRef ic{0};
-  BusRef ifrom{0};
-  BusRef ito{0};
-  int id{1};
-  double xcap{0.0};
-  std::size_t nd{0};
-};
-
 struct TwoTerminalDCLine {
+  struct Converter {
+    BusRef ip;
+    std::size_t nb;
+    double anmx;
+    double anmn;
+    double rc;
+    double xc;
+    double ebas;
+    double tr{1.0};
+    double tap{1.0};
+    double tmx{1.5};
+    double tmn{0.51};
+    double stp{0.00625};
+    BusRef ic{0};
+    BusRef ifrom{0};
+    BusRef ito{0};
+    int id{1};
+    double xcap{0.0};
+    std::size_t nd{0};
+  };
+
   enum class Code { R, I };
 
   std::string name;
@@ -235,11 +235,87 @@ struct TwoTerminalDCLine {
   Converter inverter;
 };
 
-struct VSCDCLine {};
+struct VSCDCLine {
+  struct Converter {
+    BusRef ibus;
+    int type;
+    int mode{1};
+    double dcset;
+    double acset{1.0};
+    double aloss{0.0};
+    double bloss{0.0};
+    double minloss{0.0};
+    double smax{0.0};
+    double imax{0.0};
+    double pwf{1.0};
+    double maxq{9999.0};
+    double minq{-9999.0};
+    BusRef vsreg{};
+    double rmpct{100.0};
+    std::size_t nreg{0};
+  };
+
+  std::string name;
+  int mdc{1};
+  double rdc;
+  std::array<Ownership, 4> owners{Ownership{1}, {}, {}, {}};
+  std::array<Converter, 2> converters;
+};
 
 struct ImpedanceCorrection {};
 
-struct MultiTerminalDCLine {};
+struct MultiTerminalDCLine {
+  struct Converter {
+    BusRef ib;
+    std::size_t n;
+    double angmx;
+    double angmn;
+    double rc;
+    double xc;
+    double ebas;
+    double tr{1.0};
+    double tap{1.0};
+    double tpmx{1.5};
+    double tpmn{0.51};
+    double tstp{0.00625};
+    double setvl;
+    double dcpf{1.0};
+    double marg{0.0};
+    int cnvcod{1};
+  };
+
+  struct DCBus {
+    std::size_t idc;
+    BusRef ib{};
+    std::size_t area{1};
+    std::size_t zone{1};
+    std::string dcname{};
+    std::size_t idc2{0};
+    double rgrnd{0.0};
+    std::size_t owner{1};
+  };
+
+  struct DCLink {
+    std::size_t idc;
+    std::size_t jdc;
+    std::string ckt{"1"};
+    int met{1};
+    double rdc;
+    double ldc{1.0};
+  };
+
+  std::string name;
+  std::size_t nconv;
+  std::size_t ndcbs;
+  std::size_t ndcln;
+  int mdc{0};
+  BusRef vconv;
+  double vcmod{0.0};
+  BusRef vconvn{};
+  std::vector<Converter> converters;
+  std::vector<DCBus> dc_buses;
+  std::vector<DCLink> dc_links;
+};
 
 struct MultiSectionLineGroup {};
 
@@ -321,7 +397,8 @@ struct Network {
           std::vector<Load> &&, std::vector<FixedBusShunt> &&,
           std::vector<Generator> &&, std::vector<Branch> &&,
           std::vector<Transformer> &&, std::vector<AreaInterchange> &&,
-          std::vector<TwoTerminalDCLine> &&, std::vector<Zone> &&,
+          std::vector<TwoTerminalDCLine> &&, std::vector<VSCDCLine> &&,
+          std::vector<MultiTerminalDCLine> &&, std::vector<Zone> &&,
           std::vector<Owner> &&, std::vector<SwitchedShunt> &&);
 
   void ResolveBusIds();
@@ -339,9 +416,9 @@ struct Network {
   std::vector<Transformer> transformers;
   std::vector<AreaInterchange> area_interchanges;
   std::vector<TwoTerminalDCLine> two_terminal_dc_lines;
-  // std::vector<VSCDCLine> vsc_dc_lines;
+  std::vector<VSCDCLine> vsc_dc_lines;
   // std::vector<ImpedanceCorrection> impedance_corrections;
-  // std::vector<MultiTerminalDCLine> multi_terminal_dc_lines;
+  std::vector<MultiTerminalDCLine> multi_terminal_dc_lines;
   // std::vector<MultiSectionLineGroup> multi_section_line_groups;
   std::vector<Zone> zones;
   // std::vector<InterAreaTransfer> inter_area_transfers;

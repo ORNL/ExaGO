@@ -1154,9 +1154,112 @@ TEST_FUNCTION(check_network_ttdc, (const exago::psse::Network &nw)) {
 
 TEST_CASE(two_terminal_dc_line) {
   std::string filename{"two_terminal_hvdc_test.raw"};
-
   auto nw = exago::psse::ParseNetwork(filename);
   TEST(check_network_ttdc(nw));
+  TEST(check_bus_ids(nw));
+
+  TEST_CASE_RETURN;
+}
+
+TEST_FUNCTION(check_network_vscdc, (const exago::psse::Network &nw)) {
+  TEST_EQUAL(nw.case_id.ic, 0);
+  TEST_EQUAL(nw.case_id.sbase, 100.0);
+  TEST_EQUAL(nw.case_id.rev, 33);
+
+  const auto &buses = nw.buses;
+  TEST_EQUAL(buses[0].i, 1001);
+  TEST_EQUAL(buses[0].name, "FAV SPOT 01");
+  TEST_EQUAL(buses[0].baskv, 230.0);
+  TEST_EQUAL(buses[0].ide, 3);
+  TEST_EQUAL(buses[0].evlo, 0.9);
+  TEST_EQUAL(buses[1].i, 1002);
+  TEST_EQUAL(buses[1].name, "FAV SPOT 02");
+  TEST_EQUAL(buses[1].baskv, 87.0);
+  TEST_EQUAL(buses[1].ide, 1);
+  TEST_EQUAL(buses[1].evlo, 0.9);
+
+  const auto &vscdc = nw.vsc_dc_lines;
+  TEST_EQUAL(vscdc[0].name, "VSCDC Ln 1");
+  TEST_EQUAL(vscdc[0].mdc, 1);
+  TEST_EQUAL(vscdc[0].rdc, 0.0);
+  TEST_EQUAL(vscdc[0].owners[0].owner, 1);
+  TEST_EQUAL(vscdc[0].owners[3].owner, 0);
+  TEST_EQUAL(vscdc[0].converters[0].ibus, 1001);
+  TEST_EQUAL(vscdc[0].converters[0].type, 1);
+  TEST_EQUAL(vscdc[0].converters[0].dcset, 150.0);
+  TEST_EQUAL(vscdc[0].converters[0].acset, 1.05);
+  TEST_EQUAL(vscdc[0].converters[0].minq, -100.0);
+  TEST_EQUAL(vscdc[0].converters[0].vsreg, 1001);
+  TEST_EQUAL(vscdc[0].converters[1].ibus, 1002);
+  TEST_EQUAL(vscdc[0].converters[1].type, 2);
+  TEST_EQUAL(vscdc[0].converters[1].dcset, -20.0);
+  TEST_EQUAL(vscdc[0].converters[1].acset, 1.025);
+  TEST_EQUAL(vscdc[0].converters[1].minq, -100.0);
+  TEST_EQUAL(vscdc[0].converters[1].vsreg, 1002);
+
+  TEST_FUNCTION_RETURN;
+}
+
+TEST_CASE(vsc_dc_line) {
+  std::string filename{"vsc_hvdc_test.raw"};
+  auto nw = exago::psse::ParseNetwork(filename);
+  TEST(check_network_vscdc(nw));
+  TEST(check_bus_ids(nw));
+
+  TEST_CASE_RETURN;
+}
+
+TEST_FUNCTION(check_network_mtdc, (const exago::psse::Network &nw)) {
+  TEST_EQUAL(nw.case_id.ic, 0);
+  TEST_EQUAL(nw.case_id.sbase, 100.0);
+  TEST_EQUAL(nw.case_id.rev, 33);
+
+  const auto &buses = nw.buses;
+  TEST_EQUAL(buses[0].i, 1001);
+  TEST_EQUAL(buses[0].name, "FAV SPOT 01");
+  TEST_EQUAL(buses[0].baskv, 13.8);
+  TEST_EQUAL(buses[0].ide, 3);
+  TEST_EQUAL(buses[0].evlo, 0.9);
+  TEST_EQUAL(buses[8].i, 1009);
+  TEST_EQUAL(buses[8].name, "FAV PLACE 09");
+  TEST_EQUAL(buses[8].baskv, 87.0);
+  TEST_EQUAL(buses[8].ide, 3);
+  TEST_EQUAL(buses[8].evlo, 0.9);
+
+  const auto &mtdc = nw.multi_terminal_dc_lines;
+  TEST_EQUAL(mtdc[0].name, "MTDC Ln 1");
+  TEST_EQUAL(mtdc[0].nconv, 3);
+  TEST_EQUAL(mtdc[0].ndcbs, 3);
+  TEST_EQUAL(mtdc[0].ndcln, 3);
+  TEST_EQUAL(mtdc[0].converters.size(), 3);
+  TEST_EQUAL(mtdc[0].converters[0].ib, 1001);
+  TEST_EQUAL(mtdc[0].converters[0].ebas, 138.0);
+  TEST_EQUAL(mtdc[0].converters[2].ib, 1003);
+  TEST_EQUAL(mtdc[0].converters[2].ebas, 138.0);
+  TEST_EQUAL(mtdc[0].dc_buses.size(), 3);
+  TEST_EQUAL(mtdc[0].dc_buses[0].idc, 1);
+  TEST_EQUAL(mtdc[0].dc_buses[0].ib, 1001);
+  TEST_EQUAL(mtdc[0].dc_buses[0].rgrnd, 9999.0);
+  TEST_EQUAL(mtdc[0].dc_buses[0].owner, 301);
+  TEST_EQUAL(mtdc[0].dc_buses[2].idc, 3);
+  TEST_EQUAL(mtdc[0].dc_buses[2].ib, 1003);
+  TEST_EQUAL(mtdc[0].dc_buses[2].rgrnd, 9999.0);
+  TEST_EQUAL(mtdc[0].dc_buses[2].owner, 301);
+  TEST_EQUAL(mtdc[0].dc_links.size(), 3);
+  TEST_EQUAL(mtdc[0].dc_links[0].idc, 1);
+  TEST_EQUAL(mtdc[0].dc_links[0].jdc, 2);
+  TEST_EQUAL(mtdc[0].dc_links[0].rdc, 0.0007);
+  TEST_EQUAL(mtdc[0].dc_links[2].idc, 2);
+  TEST_EQUAL(mtdc[0].dc_links[2].jdc, 3);
+  TEST_EQUAL(mtdc[0].dc_links[2].rdc, 0.0005);
+
+  TEST_FUNCTION_RETURN;
+}
+
+TEST_CASE(mt_dc_line) {
+  std::string filename{"frankenstein_70.raw"};
+  auto nw = exago::psse::ParseNetwork(filename);
+  TEST(check_network_mtdc(nw));
   TEST(check_bus_ids(nw));
 
   TEST_CASE_RETURN;
@@ -1182,17 +1285,13 @@ TEST_CASE(choke_tests) {
                                       "parser_test_c.raw",
                                       "parser_test_d.raw",
                                       "parser_test_defaults.raw",
-                                      "parser_test_e.raw",
-                                      "parser_test_f.raw",
-                                      "parser_test_g.raw",
                                       "parser_test_h.raw",
                                       "parser_test_i.raw",
                                       "parser_test_k.raw",
                                       "three_winding_mag_test.raw",
                                       "three_winding_test.raw",
                                       "three_winding_test_2.raw",
-                                      "two_winding_mag_test.raw",
-                                      "vsc_hvdc_test.raw"};
+                                      "two_winding_mag_test.raw"};
   for (auto &&file : shouldPass) {
     try {
       auto nw = exago::psse::ParseNetwork(file);
@@ -1207,6 +1306,9 @@ TEST_CASE(choke_tests) {
   std::vector<std::string> shouldFail{
       "case0.raw",         // inconsistent delimiters; comments
       "parser_test_b.raw", // references to buses that don't exist
+      "parser_test_e.raw", // no converters on multi-terminal dc line
+      "parser_test_f.raw", // no converters on multi-terminal dc line
+      "parser_test_g.raw", // no converters on multi-terminal dc line
       "parser_test_j.raw", // garbage after bus name (three single quotes)
       "parser_test_l.raw", // references to buses that don't exist
   };
@@ -1217,15 +1319,6 @@ TEST_CASE(choke_tests) {
   TEST_CASE_RETURN;
 }
 
-// int RunAllTests() {
-//   int fail = 0;
-//   fail += ieee9bus_v33();
-//   fail += ieee9bus_v34_shunts();
-//   fail += two_terminal_dc_line();
-//   fail += choke_tests();
-//   return fail;
-// }
-
 TEST_SUITE_END
 
 int main(int argc, char *argv[]) {
@@ -1233,7 +1326,6 @@ int main(int argc, char *argv[]) {
   char help[] = "";
   ExaGOInitialize(MPI_COMM_WORLD, &argc, &argv, appname, help);
 
-  // auto result = TestPSSEParser().RunAllTests();
   auto result = RUN_TEST_SUITE(TestPSSEParser);
 
   ExaGOFinalize();
