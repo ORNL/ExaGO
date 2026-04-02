@@ -492,6 +492,7 @@ with tab_viz:
     mode = st.radio("Mode", ["Run OPFLOW & Visualize", "Use Existing JSON"], horizontal=True, key="viz_mode")
 
     if mode == "Run OPFLOW & Visualize":
+        use_existing_json = False
         st.subheader("Step 1: Select Files")
         col1, col2 = st.columns(2)
         with col1:
@@ -559,6 +560,7 @@ with tab_viz:
                     st.warning("No JSON output found. Run OPFLOW first.")
 
     else:
+        use_existing_json = True
         # Use existing JSON
         st.subheader("Select Existing JSON File")
         json_path = file_upload("JSON file", ["json"], key="viz_sel_json",
@@ -576,8 +578,12 @@ with tab_viz:
     with col_launch:
         if st.button("🚀 Launch Viz Server", key="viz_launch_btn"):
             try:
+                json_filename_param = ""
+                if use_existing_json and json_path:
+                    json_filename_param = Path(json_path).name
+                        
                 proc = subprocess.Popen(
-                    ["yarn", "start"],
+                    ["yarn", "start", json_filename_param],
                     cwd=viz_dir,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
