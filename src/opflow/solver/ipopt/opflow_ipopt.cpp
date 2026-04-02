@@ -3,6 +3,7 @@
 
 #include "opflow_ipopt.h"
 #include <private/opflowimpl.h>
+#include <iostream>
 
 /* IPOPT callback functions */
 Bool eval_opflow_f(PetscInt n, PetscScalar *x, Bool new_x,
@@ -447,12 +448,15 @@ PetscErrorCode OPFLOWSolverGetConvergenceStatus_IPOPT(OPFLOW opflow,
   OPFLOWSolver_IPOPT ipopt = (OPFLOWSolver_IPOPT)opflow->solver;
 
   PetscFunctionBegin;
-  if (ipopt->solve_status == 0 || ipopt->solve_status == 1)
+  if (ipopt->solve_status == Solve_Succeeded ||
+      ipopt->solve_status == Solved_To_Acceptable_Level)
     *status = PETSC_TRUE; /* See IpReturnCodes_inc.h in IPOPT. The first two
                              denote convergence */
-  else
+  else {
+    std::cerr << "IPOPT solve failed with return code: " << ipopt->solve_status
+              << std::endl;
     *status = PETSC_FALSE;
-
+  }
   PetscFunctionReturn(0);
 }
 
