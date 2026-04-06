@@ -23,7 +23,7 @@ computation.
 $ # Set this variable to one of newell, marianas, or ascent
 $ export MY_CLUSTER=newell
 
-$ git clone https://github.com/pnnl/ExaGO.git
+$ git clone https://github.com/ornl/ExaGO.git
 $ cd exago
 $ mkdir build install
 
@@ -214,7 +214,7 @@ the tests, you'll have to pass some additional options.
 ```console
 $ export MY_CLUSTER=ascent
 
-$ git clone https://github.com/pnnl/ExaGO.git
+$ git clone https://github.com/ornl/ExaGO.git
 $ mkdir build install
 $ cd exago
 

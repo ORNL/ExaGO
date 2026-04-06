@@ -24,10 +24,10 @@ The rest of this document assumes you want to install with CMake and you already
 ### Acquiring the Source Code
 
 ```console
-git clone https://github.com/pnnl/ExaGO.git
+git clone https://github.com/ornl/ExaGO.git
 
 # Or if you have SSH keys set up:
-git clone git@github.com:pnnl/ExaGO.git
+git clone git@github.com:ornl/ExaGO.git
 ```
 
 ### Dependencies
@@ -84,7 +84,7 @@ If you are using the HiOp solver, HiOp must be built with the same RAJA and Umpi
 ### CMake Workflow
 
 ```console
-git clone git@github.com:pnnl/ExaGO.git
+git clone git@github.com:ornl/ExaGO.git
 cd ExaGO
 git submodule update --init --recursive
 mkdir build

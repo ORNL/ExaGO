@@ -1,0 +1,56 @@
+name: "❓ Discussion"
+description: "A question or discussion about ExaGO code, design, or development process."
+#title: "Bug: "
+labels: [question]
+body:
+  # CHECKBOX:
+  - type: checkboxes
+    id: issue_relates_to
+    attributes:
+      label: "Issue applies to:"
+      description: You may select more than one.
+      options:
+        - label: PFLOW
+        - label: OPFLOW
+        - label: TCOPFLOW
+        - label: SCOPFLOW
+        - label: SOPFLOW
+        - label: CMake and build system
+        - label: Spack
+        - label: Visualization
+        - label: Documentation
+        - label: Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: "Summary"
+      description: "Please pose question or the description of the discussion topic."
+    validations:
+      required: true
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: "Objective"
+      description: "Please provide the objective of the discussion. What question do you want to answer? What do you want to achieve?"
+    validations:
+      required: true
+
+  - type: input
+    id: exago_version
+    attributes:
+      label: "ExaGO version"
+      description: |
+        Please include the relevant version of ExaGO™, if applicable.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_information
+    attributes:
+      label: "Additional information"
+      description: "Add references or examples relevant to the discussion."
+

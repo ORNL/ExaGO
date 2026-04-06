@@ -1,7 +1,7 @@
-name: "⚒️ Other"
-description: "An issue in ExaGO code that does not fit into other categories"
+name: "\U0001FAB2 Bug report"
+description: "Bug or test failure in ExaGO code"
 #title: "Bug: "
-#labels: [bug]
+labels: [bug]
 body:
   # CHECKBOX:
   - type: checkboxes
@@ -10,7 +10,7 @@ body:
       label: "Issue applies to:"
       description: You may select more than one.
       options:
-        - label: PFLOW
+        - label: pflow
         - label: OPFLOW
         - label: TCOPFLOW
         - label: SCOPFLOW
@@ -86,5 +86,5 @@ body:
   - type: textarea
     id: possible_fix
     attributes:
-      label: "Proposed solution"
-      description: "Describe your proposed solution, when applicable."
+      label: "Possible fix or workaround"
+      description: "Describe your proposed fix, when applicable."

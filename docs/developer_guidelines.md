@@ -16,7 +16,7 @@
 **If you don't have direct write access to the ExaGO repository:**
 
 1. Fork the repository on GitHub:
-   - Navigate to https://github.com/pnnl/ExaGO
+   - Navigate to https://github.com/ornl/ExaGO
    - Click the "Fork" button in the top right
    - This creates your fork at `https://github.com/yourusername/ExaGO`
 
@@ -29,7 +29,7 @@
 **If you have direct write access:**
 
 ```bash
-$ git clone https://github.com/pnnl/ExaGO.git
+$ git clone https://github.com/ornl/ExaGO.git
 $ cd ExaGO
 ```
 
@@ -38,7 +38,7 @@ $ cd ExaGO
 After cloning, configure the `upstream` remote to point to the original repository:
 
 ```bash
-$ git remote add upstream https://github.com/pnnl/ExaGO.git
+$ git remote add upstream https://github.com/ornl/ExaGO.git
 $ git fetch upstream
 ```
 
@@ -49,7 +49,7 @@ $ git remote -v
 ```
 
 You should see:
-- `upstream` pointing to `https://github.com/pnnl/ExaGO.git` (the original repository)
+- `upstream` pointing to `https://github.com/ornl/ExaGO.git` (the original repository)
 - `origin` pointing to your fork (if you forked) or the original repository (if you have direct access)
 
 #### P022: Branch Off Of `develop` Unless You Have a Good Reason Not To
@@ -85,18 +85,18 @@ $ git push --force-with-lease origin develop
 ```
 
 **Note on remotes:**
-- `upstream` refers to the original ExaGO repository (`https://github.com/pnnl/ExaGO.git`) - you **pull** from here to stay up to date
+- `upstream` refers to the original ExaGO repository (`https://github.com/ornl/ExaGO.git`) - you **pull** from here to stay up to date
 - `origin` refers to your fork (if you forked) or the original repository (if you have direct access) - you **push** to here
 
 **Submitting a Pull Request:**
 
 If working with a fork, after pushing your feature branch to `origin`, create a Pull Request on GitHub:
-1. Navigate to the original ExaGO repository at https://github.com/pnnl/ExaGO
+1. Navigate to the original ExaGO repository at https://github.com/ornl/ExaGO
 2. GitHub will typically show a banner to create a PR from your recently pushed branch
 3. **Ensure a corresponding feature branch exists on upstream**: Coordinate with maintainers to confirm that a feature branch (e.g., `my-cool-feature`) has been created on the upstream repository. This allows CI tests to run on the upstream feature branch before merging to `develop`
-4. Create a PR from `yourusername:my-cool-feature` → `pnnl:my-cool-feature`
+4. Create a PR from `yourusername:my-cool-feature` → `ornl:my-cool-feature`
 
-This will ensure you are rebased on the most recent development branch. If you see [open pull requests on ExaGO's repository](https://github.com/pnnl/ExaGO/pulls) that touch the same lines of code that you are working on, please coordinate with the developers of that merge request so your work doesn't conflict.
+This will ensure you are rebased on the most recent development branch. If you see [open pull requests on ExaGO's repository](https://github.com/ornl/ExaGO/pulls) that touch the same lines of code that you are working on, please coordinate with the developers of that merge request so your work doesn't conflict.
 
 #### P001: Don't Run Continuous Integration Pipelines If You Only Changed Documentation
 
@@ -272,7 +272,7 @@ You may also run `buildsystem/tools/cmake_format.pl -i`.
 
 1. [LLVM Flang's style guide](https://github.com/llvm/llvm-project/blob/main/flang/docs/C%2B%2Bstyle.md)
 1. [Google's style guide](https://google.github.io/styleguide/cppguide.html)
-1. [ExaGO's public repository](https://github.com/pnnl/ExaGO)
+1. [ExaGO's public repository](https://github.com/ornl/ExaGO)
 1. [Chris Beams's blog post on writing commit messages](https://chris.beams.io/posts/git-commit)
 1. [Pablo Ariasblog post on cmake best practices](https://pabloariasal.github.io/2018/02/19/its-time-to-do-cmake-right/)
 1. [Semantic Versioning](https://semver.org/spec/v2.0.0.html)

@@ -1,7 +1,7 @@
-name: "⚒️ Other"
-description: "An issue in ExaGO code that does not fit into other categories"
+name: "\U0001F38A Feature request"
+description: "Suggest adding a feature that is not yet in ExaGO."
 #title: "Bug: "
-#labels: [bug]
+labels: [enhancement]
 body:
   # CHECKBOX:
   - type: checkboxes
@@ -27,39 +27,24 @@ body:
     id: summary
     attributes:
       label: "Summary"
-      description: "Please provide detailed description of the issue."
+      description: "Please add a concise summary of your suggestion here."
     validations:
       required: true
 
   - type: textarea
     id: reproduce
     attributes:
-      label: "Description how to reproduce the issue"
-      description: "Please provide launch command and the output when you encounter the issue (if applicable)."
-      value: |
-        <!-- Include short error output here. -->
-        ```console
-        $ ./opflow
-        (...)
-        ```
-        <!-- If the error output is long, attach a file
-             or write it in a block that can be closed as below: -->
-        <details>
-        
-        ```
-        $ ./opflow
-        (...)
-        ```
-        </details>
+      label: "Rationale"
+      description: "Is your feature request related to a problem? Please describe it!."
     validations:
-      required: false
+      required: true
 
   - type: input
     id: exago_version
     attributes:
       label: "ExaGO version"
       description: |
-        Please include the version of ExaGO™ which demonstrates the problem.
+        Please include the relevantversion of ExaGO™.
         If building from source on a non-tagged version, please include the commit hash.
     validations:
       required: true
@@ -69,22 +54,23 @@ body:
     attributes:
       label: "System and environment details"
       description: |
-        Please include details about your system, such as:
+        Is your feature system specific? If so, please include relevant details, such as:
         - Operating system  
         - Compilers  
         - Hardware backends (CUDA, HIP)  
         - Dependencies and package versions  
     validations:
-      required: true
+      required: false
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: "Proposed solution"
+      description: "Describe your proposed feature and highlight implementation details, when applicable."
 
   - type: textarea
     id: additional_information
     attributes:
       label: "Additional information"
-      description: "Upload additional information such as debugging backtraces, logs and screenshots, when applicable."
+      description: "Add any relevant references or examples."
 
-  - type: textarea
-    id: possible_fix
-    attributes:
-      label: "Proposed solution"
-      description: "Describe your proposed solution, when applicable."
