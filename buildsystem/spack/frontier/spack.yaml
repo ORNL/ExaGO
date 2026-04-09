@@ -26,7 +26,7 @@ spack:
     exago:
       require: ~python+raja+hiop+rocm+ipopt amdgpu_target=gfx90a
     hiop:
-      require: +sparse+mpi+raja+rocm~ginkgo+kron
+      require: +sparse+mpi+raja+rocm~ginkgo+kron+deepchecking build_type=RelWithDebInfo
       version: [1.1.1]
     ipopt:
       require: '~metis+coinhsl~mumps'

@@ -66,8 +66,8 @@ module load coinhsl/2024.05.15-gcc-14.2.0-ke5biep
 # magma@=2.8.0~cuda+fortran~ipo+rocm+shared amdgpu_target:=gfx90a build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=zen3
 module load magma/2.8.0-gcc-14.2.0-ikok5nn
 ## excluded or missing from upstream: rocprim@=6.3.1~asan amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
-# raja@=2024.07.0~cuda~desul~examples~exercises~gpu-profiling~ipo~lowopttest~omptarget~omptask~openmp~plugins+rocm~run-all-tests~shared~sycl~tests~vectorization amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=4d7fcba55ebc7cb972b7cc9f6778b48e43792ea1 generator=make platform=linux os=sles15 target=zen3
-module load raja/2024.07.0-gcc-14.2.0-3e7fwpj
+# raja@=2025.03.0~cuda~desul~examples~exercises~gpu-profiling~ipo~lowopttest~omptarget~omptask~openmp~plugins+rocm~run-all-tests~shared~sycl~tests~vectorization amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=1d70abf171474d331f1409908bdf1b1c3fe19222 generator=make platform=linux os=sles15 target=zen3
+module load raja/2025.03.0-gcc-14.2.0-woblane
 # libsigsegv@=2.14 build_system=autotools platform=linux os=sles15 target=zen3
 module load libsigsegv/2.14-gcc-14.2.0-j5nwpxr
 # m4@=1.4.20+sigsegv build_system=autotools platform=linux os=sles15 target=zen3
@@ -102,10 +102,10 @@ module load texinfo/7.2-gcc-14.2.0-wtmf5g5
 module load mpfr/4.2.1-gcc-14.2.0-p4r33ds
 # suite-sparse@=7.8.3~cuda~graphblas~openmp+pic build_system=generic platform=linux os=sles15 target=zen3
 module load suite-sparse/7.8.3-gcc-14.2.0-3f2u2ru
-# umpire@=2024.07.0~asan~backtrace+c~cuda~dev_benchmarks~device_alloc~deviceconst~examples+fmt_header_only~fortran~ipc_shmem~ipo~mpi~mpi3_shmem~numa~omptarget~openmp+rocm~sanitizer_tests+shared~sqlite_experimental~tools~werror amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=abd729f40064175e999a83d11d6b073dac4c01d2 generator=make tests=none platform=linux os=sles15 target=zen3
-module load umpire/2024.07.0-gcc-14.2.0-tzf24hf
-# hiop@=1.1.1~axom~cuda~deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja+rocm~shared+sparse amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=d8762e05150b2040a27f69d8bf6603f22190a869 generator=make platform=linux os=sles15 target=zen3
-module load hiop/1.1.1-gcc-14.2.0-beu4x7r
+# umpire@=2025.03.0~asan~backtrace+c~cuda~dev_benchmarks~device_alloc~deviceconst~examples+fmt_header_only~fortran~ipc_shmem~ipo~mpi~mpi3_shmem~numa~omptarget~openmp+rocm~sanitizer_tests+shared~sqlite_experimental~tools~werror amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=1ed0669c57f041baa1f1070693991c3a7a43e7ee generator=make tests=none platform=linux os=sles15 target=zen3
+module load umpire/2025.03.0-gcc-14.2.0-bhfur45
+# hiop@=1.1.1~axom~cuda+deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja+rocm~shared+sparse amdgpu_target:=gfx90a build_system=cmake build_type=RelWithDebInfo commit=d8762e05150b2040a27f69d8bf6603f22190a869 generator=make platform=linux os=sles15 target=zen3
+module load hiop/1.1.1-gcc-14.2.0-sprnd6w
 # ipopt@=3.14.14+coinhsl~debug~java~metis~mumps build_system=autotools platform=linux os=sles15 target=zen3
 module load ipopt/3.14.14-gcc-14.2.0-gj4qlx4
 # parmetis@=4.0.3~gdb~int64~ipo+shared build_system=cmake build_type=Release generator=make patches:=4f89253,50ed208,704b84f platform=linux os=sles15 target=zen3
@@ -114,5 +114,5 @@ module load parmetis/4.0.3-gcc-14.2.0-xatjoum
 module load petsc/3.24.1-gcc-14.2.0-4izpiqe
 # spdlog@=1.15.0~ipo+shared build_system=cmake build_type=Release generator=make patches:=5ed92f4,fd4cbb1,fdc325d platform=linux os=sles15 target=zen3
 module load spdlog/1.15.0-gcc-14.2.0-56k2ubv
-# exago@=develop~cuda+hiop~ipo+ipopt+logging+mpi~python+raja+rocm amdgpu_target:=gfx90a build_system=cmake build_type=Release dev_path=/lustre/orion/scratch/nkouk/stf006/Tmp/ExaGO generator=make platform=linux os=sles15 target=zen3
-## module load exago/develop-gcc-14.2.0-lj7562k
+# exago@=develop~cuda+hiop~ipo+ipopt+logging+mpi~python+raja+rocm+testing amdgpu_target:=gfx90a build_system=cmake build_type=Debug dev_path=/lustre/orion/scratch/nkouk/stf006/Codes/ExaGO generator=make platform=linux os=sles15 target=zen3
+## module load exago/develop-gcc-14.2.0-hnf6n4i
