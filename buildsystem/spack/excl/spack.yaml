@@ -1,0 +1,57 @@
+spack:
+  specs:
+  - exago@develop
+  - hiop@1.1.1
+  view: false
+  concretizer:
+    unify: when_possible
+    reuse: false
+  packages:
+    all:
+      providers:
+        blas: [openblas]
+        mpi: [openmpi]
+      target: [zen3]
+    gcc:
+      buildable: false
+      externals:
+      - spec: gcc@12.2.0 languages:='c,c++,fortran'
+        prefix: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin/
+        extra_attributes:
+          compilers:
+            c: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin//gcc
+            cxx: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin//g++
+            fortran: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin/gfortran
+          flags: {}
+          environment: {}
+          extra_rpaths: []
+    cuda:
+      buildable: false
+      externals:
+      - spec: cuda@12.0.140
+        prefix: /usr
+    exago:
+      require: ~python+raja+hiop~rocm+cuda+ipopt cuda_arch=70
+    hiop:
+      require: +sparse+mpi+raja~rocm+cuda~ginkgo+kron cuda_arch=70
+    ipopt:
+      require: ~metis+coinhsl~mumps
+    # Pin OpenBlas version for consistent test results.
+    openblas:
+      require: '@0.3.20'
+    umpire:
+      require: ~examples
+    raja:
+      require: ~examples~exercises
+    coinhsl:
+      require: '@2024.05.15+metis'
+    magma:
+      require: '@2.8.0'
+    petsc:
+      require: ~hypre~superlu-dist~hdf5+metis
+    openmpi:
+      buildable: false
+      externals:
+      - spec: openmpi@5.0.1
+        modules:
+        - openmpi/5.0.1
