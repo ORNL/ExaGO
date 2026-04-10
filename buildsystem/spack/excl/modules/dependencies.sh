@@ -124,8 +124,8 @@ module load mpfr/4.2.1-gcc-12.2.0-kk2qthy
 module load suite-sparse/7.8.3-gcc-12.2.0-ulqsjxz
 # umpire@=2025.03.0~asan~backtrace+c+cuda~dev_benchmarks~device_alloc~deviceconst~examples+fmt_header_only~fortran~ipc_shmem~ipo~mpi~mpi3_shmem~numa~omptarget~openmp~rocm~sanitizer_tests~shared~sqlite_experimental~tools~werror build_system=cmake build_type=Release commit=1ed0669c57f041baa1f1070693991c3a7a43e7ee cuda_arch:=70 generator=make tests=none platform=linux os=ubuntu24.04 target=zen3
 module load umpire/2025.03.0-gcc-12.2.0-uluaqpx
-# hiop@=1.1.1~axom+cuda~cusolver_lu~deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja~rocm~shared+sparse build_system=cmake build_type=Release commit=d8762e05150b2040a27f69d8bf6603f22190a869 cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
-module load hiop/1.1.1-gcc-12.2.0-jkjfq67
+# hiop@=1.1.1~axom+cuda+cusolver_lu~deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja~rocm~shared+sparse build_system=cmake build_type=RelWithDebInfo commit=d8762e05150b2040a27f69d8bf6603f22190a869 cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
+module load hiop/1.1.1-gcc-12.2.0-2hox7q4
 # ipopt@=3.14.14+coinhsl~debug~java~metis~mumps build_system=autotools platform=linux os=ubuntu24.04 target=zen3
 module load ipopt/3.14.14-gcc-12.2.0-wkqcozn
 # parmetis@=4.0.3~gdb~int64~ipo+shared build_system=cmake build_type=Release generator=make patches:=4f89253,50ed208,704b84f platform=linux os=ubuntu24.04 target=zen3
@@ -134,5 +134,5 @@ module load parmetis/4.0.3-gcc-12.2.0-w3wzpzx
 module load petsc/3.24.1-gcc-12.2.0-suz6dyi
 # spdlog@=1.15.0~ipo+shared build_system=cmake build_type=Release generator=make patches:=5ed92f4,fd4cbb1,fdc325d platform=linux os=ubuntu24.04 target=zen3
 module load spdlog/1.15.0-gcc-12.2.0-buhc4zb
-# exago@=develop+cuda+hiop~ipo+ipopt+logging+mpi~python+raja~rocm+testing build_system=cmake build_type=Release cuda_arch:=70 dev_path=/home/97k/Codes/ExaGO generator=make platform=linux os=ubuntu24.04 target=zen3
-## module load exago/develop-gcc-12.2.0-52no2he
+# exago@=develop+cuda+hiop~ipo+ipopt+logging+mpi~python+raja~rocm+testing build_system=cmake build_type=MinSizeRel cuda_arch:=70 dev_path=/home/97k/Codes/ExaGO generator=make platform=linux os=ubuntu24.04 target=zen3
+## module load exago/develop-gcc-12.2.0-nzclj3v
