@@ -33,7 +33,7 @@ spack:
     exago:
       require: ~python+raja+hiop~rocm+cuda+ipopt cuda_arch=70
     hiop:
-      require: +sparse+mpi+raja~rocm+cuda~ginkgo+kron cuda_arch=70
+      require: +sparse+mpi+raja~rocm+cuda~ginkgo+kron+cusolver_lu build_type=RelWithDebInfo cuda_arch=70
     ipopt:
       require: ~metis+coinhsl~mumps
     # Pin OpenBlas version for consistent test results.
