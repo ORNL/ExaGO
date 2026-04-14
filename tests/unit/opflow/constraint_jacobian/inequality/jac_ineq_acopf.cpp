@@ -37,7 +37,8 @@ int main(int argc, char **argv) {
   MPI_Comm comm = MPI_COMM_WORLD;
   int num_copies = 0;
 
-  char help[] = "Unit tests for inequality constraint Jacobians running opflow\n";
+  char help[] =
+      "Unit tests for inequality constraint Jacobians running opflow\n";
 
   /** Use `ExaGOLogSetLoggingFileName("opflow-logfile");` to log the output. */
   ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);

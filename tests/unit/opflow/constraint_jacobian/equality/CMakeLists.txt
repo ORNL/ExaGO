@@ -3,11 +3,16 @@ if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
 endif()
 
 add_executable(
-  jac_eq_acopf jac_eq_acopf.cpp ${CMAKE_SOURCE_DIR}/tests/unit/utils/test_acopf_utils.cpp
+  jac_eq_acopf jac_eq_acopf.cpp
+               ${CMAKE_SOURCE_DIR}/tests/unit/utils/test_acopf_utils.cpp
 )
 target_link_libraries(jac_eq_acopf ExaGO::OPFLOW)
-target_include_directories(jac_eq_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/utils)
-target_include_directories(jac_eq_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow)
+target_include_directories(
+  jac_eq_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/utils
+)
+target_include_directories(
+  jac_eq_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow
+)
 
 # Network files to run on - doing 3 and 600 bus examples.
 set(prefix ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)
@@ -40,7 +45,9 @@ if(EXAGO_RUN_TESTS)
     # Iterate over networks, matching network file to num_copies
     foreach(network num IN ZIP_LISTS obj_network_files num_copies)
       get_filename_component(net ${network} NAME)
-      set(testname "UNIT_TESTS_EQUALITY_CONSTRAINT_JACOBIAN_${net}_${solver}_${model}")
+      set(testname
+          "UNIT_TESTS_EQUALITY_CONSTRAINT_JACOBIAN_${net}_${solver}_${model}"
+      )
       exago_add_test(
         NAME
         ${testname}
