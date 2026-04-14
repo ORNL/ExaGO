@@ -77,7 +77,7 @@ if(EXAGO_RUN_TESTS)
         -num_copies
         ${num}
         -validation
-        ${CMAKE_CURRENT_SOURCE_DIR}/of.csv
+        ${CMAKE_CURRENT_SOURCE_DIR}/cicj.csv
       )
       set_tests_properties(${testname} PROPERTIES SKIP_RETURN_CODE 2)
     endforeach()

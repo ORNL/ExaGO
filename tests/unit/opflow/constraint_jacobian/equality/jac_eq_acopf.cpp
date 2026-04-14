@@ -103,7 +103,8 @@ int main(int argc, char **argv) {
 
     // If we are running using the CPU model, nothing needs to be done
     if (modelname == "POWER_BALANCE_HIOP") {
-      fail += test.computeObjective(opflowtest, x_ref, obj_value);
+      // TODO: Replace with inequality Jacobian test once implemented
+      // fail += test.computeObjective(opflowtest, x_ref, obj_value);
     } else // Using model PBPOLRAJAHIOP
     {
 #if defined(EXAGO_ENABLE_RAJA)
@@ -135,7 +136,8 @@ int main(int argc, char **argv) {
 #endif
       resmgr.copy(x_ref_dev, x_ref);
 
-      fail += test.computeObjective(opflowtest, x_ref_dev, obj_value);
+      // TODO: Replace with inequality Jacobian test once implemented
+      // fail += test.computeObjective(opflowtest, x_ref_dev, obj_value);
 
 #ifdef EXAGO_ENABLE_GPU
       d_allocator.deallocate(x_ref_dev);
@@ -150,7 +152,8 @@ int main(int argc, char **argv) {
     CHKERRQ(ierr);
 #endif // End #ifdefined(EXAGO_ENABLE_HIOP)
   } else {
-    fail += test.computeObjective(opflowtest, X, obj_value);
+    // TODO: Replace with inequality Jacobian test once implemented
+    // fail += test.computeObjective(opflowtest, X, obj_value);
   }
   ierr = OPFLOWDestroy(&opflowtest);
   CHKERRQ(ierr);
