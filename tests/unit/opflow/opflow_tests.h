@@ -772,7 +772,7 @@ public:
     // Verify inequality constraints
     if (opflow->Nconineq) {
       // The equality and inequality constraint Jacobians are stacked one after
-      // the other Offset inequality constraint row indices by -nnz_eqjacsp
+      // the other. Offset inequality constraint row indices by -nnz_eqjacsp
       for (i = 0; i < opflow->nnz_ineqjacsp; i++) {
         iRow[i + opflow->nnz_eqjacsp] -= opflow->nnz_ineqjacsp
       }
