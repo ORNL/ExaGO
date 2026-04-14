@@ -22,13 +22,25 @@ set(num_copies 3 600)
 
 list(TRANSFORM obj_network_files PREPEND ${prefix})
 
-set(solvers IPOPT HIOP HIOPSPARSE)
-set(models POWER_BALANCE_POLAR POWER_BALANCE_HIOP POWER_BALANCE_POLAR)
-set(dependencies IPOPT HIOP HIOP_SPARSE)
+# Set up Ipopt solver tests if enabled
+if(EXAGO_ENABLE_IPOPT)
+  list(APPEND solvers IPOPT)
+  list(APPEND models POWER_BALANCE_POLAR)
+  list(APPEND dependencies IPOPT)
+endif()
+
+# Set up HIOP solver tests if enabled
+if(EXAGO_ENABLE_HIOP)
+  list(APPEND solvers HIOP HIOPSPARSE)
+  list(APPEND models POWER_BALANCE_HIOP POWER_BALANCE_POLAR)
+  list(APPEND dependencies HIOP HIOP_SPARSE)
+endif()
+
+# Set up RAJA support tests if enabled 
 if(EXAGO_ENABLE_RAJA)
-  set(solvers ${solvers} HIOP)
-  set(models ${models} PBPOLRAJAHIOP)
-  set(dependencies ${dependencies} HIOP)
+  list(APPEND solvers HIOP)
+  list(APPEND models PBPOLRAJAHIOP)
+  list(APPEND dependencies HIOP)
 endif()
 
 if(EXAGO_RUN_TESTS)
