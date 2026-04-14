@@ -771,7 +771,7 @@ public:
     // Checking for the presence of inequality constraints on the given problem
     // Verify inequality constraints
     if (opflow->Nconineq) {
-      //fail += verifyAnswer(
+      // fail += verifyAnswer(
       //    Jineqref_nat, opflow->nnz_ineqjacsp, iRow + opflow->nnz_eqjacsp,
       //    jCol + opflow->nnz_eqjacsp, values + opflow->nnz_eqjacsp);
     }
