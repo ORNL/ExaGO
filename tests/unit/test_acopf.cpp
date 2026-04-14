@@ -65,10 +65,19 @@ void spdensetonatural(const double *xin, double *xout, int *idxn2sd_map,
  *
  */
 int main(int argc, char **argv) {
-  bool testOpflowModelPBPOL = true;     // Always test PBPOL
-  bool testOpflowModelPBPOLHIOP = true; // Always test PBOLHIOP
+  bool testOpflowModelPBPOL = false;
+  bool testOpflowModelPBPOLHIOP = false;
   bool testOpflowModelPBPOLRAJAHIOP = false;
   bool testOpflowModelPBPOLRAJAHIOPSPARSE = false;
+
+#if defined(EXAGO_ENABLE_IPOPT)
+  testOpflowModelPBPOL = true;
+#endif
+
+#if defined(EXAGO_ENABLE_HIOP)
+  testOpflowModelPBPOLHIOP = true;
+#endif
+
 #if defined(EXAGO_ENABLE_RAJA)
 #if defined(EXAGO_ENABLE_HIOP_SPARSE)
   testOpflowModelPBPOLRAJAHIOPSPARSE = true;
