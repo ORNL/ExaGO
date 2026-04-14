@@ -170,10 +170,10 @@ PetscErrorCode OPFLOWSetConstraintBoundsArray_PBPOLHIOP(OPFLOW opflow,
   /* Inequality constraints */
   for (i = 0; i < lineparams->nlinelim; i++) {
     int j = lineparams->linelimidx[i];
-    gl[lineparams->gbineqidx[i]] = 0.0;
+    gl[lineparams->gbineqidx[i]] = PETSC_NINFINITY;
     gu[lineparams->gbineqidx[i]] = (lineparams->rateA[j] / ps->MVAbase) *
                                    (lineparams->rateA[j] / ps->MVAbase);
-    gl[lineparams->gbineqidx[i] + 1] = 0.0;
+    gl[lineparams->gbineqidx[i] + 1] = PETSC_NINFINITY;
     gu[lineparams->gbineqidx[i] + 1] = (lineparams->rateA[j] / ps->MVAbase) *
                                        (lineparams->rateA[j] / ps->MVAbase);
   }
