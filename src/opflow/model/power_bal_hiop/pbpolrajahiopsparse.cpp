@@ -131,60 +131,63 @@ PetscErrorCode OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     }
   }
 
-  for (i = 0; i < ps->nline; i++) {
-    line = &ps->line[i];
-    if (!line->status) {
-      line->mult_sf = line->mult_st = 0.0;
-      continue;
+  if (!opflow->ignore_lineflow_constraints) {
+    for (i = 0; i < ps->nline; i++) {
+      line = &ps->line[i];
+      if (!line->status) {
+        line->mult_sf = line->mult_st = 0.0;
+        continue;
+      }
+
+      Gff = line->yff[0];
+      Bff = line->yff[1];
+      Gft = line->yft[0];
+      Bft = line->yft[1];
+      Gtf = line->ytf[0];
+      Btf = line->ytf[1];
+      Gtt = line->ytt[0];
+      Btt = line->ytt[1];
+
+      ierr = PSLINEGetConnectedBuses(line, &connbuses);
+      CHKERRQ(ierr);
+      busf = connbuses[0];
+      bust = connbuses[1];
+
+      xlocf = busf->startxVloc;
+      xloct = bust->startxVloc;
+
+      thetaf = x[xlocf];
+      Vmf = x[xlocf + 1];
+      thetat = x[xloct];
+      Vmt = x[xloct + 1];
+      thetaft = thetaf - thetat;
+      thetatf = thetat - thetaf;
+
+      Pf =
+          Gff * Vmf * Vmf + Vmf * Vmt * (Gft * cos(thetaft) + Bft * sin(thetaft));
+      Qf = -Bff * Vmf * Vmf +
+           Vmf * Vmt * (-Bft * cos(thetaft) + Gft * sin(thetaft));
+
+      Pt =
+          Gtt * Vmt * Vmt + Vmt * Vmf * (Gtf * cos(thetatf) + Btf * sin(thetatf));
+      Qt = -Btt * Vmt * Vmt +
+           Vmt * Vmf * (-Btf * cos(thetatf) + Gtf * sin(thetatf));
+
+      line->pf = Pf;
+      line->qf = Qf;
+      line->pt = Pt;
+      line->qt = Qt;
+      line->sf = PetscSqrtScalar(Pf * Pf + Qf * Qf);
+      line->st = PetscSqrtScalar(Pt * Pt + Qt * Qt);
+
+      if (line->rateA > 1e5) {
+        line->mult_sf = line->mult_st = 0.0;
+      } else {
+        gloc = line->startineqloc;
+        line->mult_sf = lambdai[gloc];
+        line->mult_st = lambdai[gloc + 1];
+      }
     }
-
-    Gff = line->yff[0];
-    Bff = line->yff[1];
-    Gft = line->yft[0];
-    Bft = line->yft[1];
-    Gtf = line->ytf[0];
-    Btf = line->ytf[1];
-    Gtt = line->ytt[0];
-    Btt = line->ytt[1];
-
-    ierr = PSLINEGetConnectedBuses(line, &connbuses);
-    CHKERRQ(ierr);
-    busf = connbuses[0];
-    bust = connbuses[1];
-
-    xlocf = busf->startxVloc;
-    xloct = bust->startxVloc;
-
-    thetaf = x[xlocf];
-    Vmf = x[xlocf + 1];
-    thetat = x[xloct];
-    Vmt = x[xloct + 1];
-    thetaft = thetaf - thetat;
-    thetatf = thetat - thetaf;
-
-    Pf =
-        Gff * Vmf * Vmf + Vmf * Vmt * (Gft * cos(thetaft) + Bft * sin(thetaft));
-    Qf = -Bff * Vmf * Vmf +
-         Vmf * Vmt * (-Bft * cos(thetaft) + Gft * sin(thetaft));
-
-    Pt =
-        Gtt * Vmt * Vmt + Vmt * Vmf * (Gtf * cos(thetatf) + Btf * sin(thetatf));
-    Qt = -Btt * Vmt * Vmt +
-         Vmt * Vmf * (-Btf * cos(thetatf) + Gtf * sin(thetatf));
-
-    line->pf = Pf;
-    line->qf = Qf;
-    line->pt = Pt;
-    line->qt = Qt;
-    line->sf = PetscSqrtScalar(Pf * Pf + Qf * Qf);
-    line->st = PetscSqrtScalar(Pt * Pt + Qt * Qt);
-  }
-
-  for (i = 0; i < opflow->nlinesmon; i++) {
-    line = &ps->line[opflow->linesmon[i]];
-    gloc = line->startineqloc;
-    line->mult_sf = lambdai[gloc];
-    line->mult_st = lambdai[gloc + 1];
   }
 
   ierr = VecRestoreArrayRead(X, &x);
@@ -227,7 +230,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 
   PS ps = (PS)opflow->ps;
 
-  for (int ibus = 0, igen1 = 0, igen2 = 0, iload = 0; ibus < ps->nbus; ++ibus) {
+  for (int ibus = 0; ibus < ps->nbus; ++ibus) {
 
     PSBUS bus = &(ps->bus[ibus]);
 
@@ -235,9 +238,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 
     // no matter what, each bus uses 2 rows and 2 columns
     // row 1 = real, row2 = reactive
-    busparams->jacsp_idx[ibus] = nnz_eqjac;
     nnz_eqjac += 2;
-    busparams->jacsq_idx[ibus] = nnz_eqjac;
     nnz_eqjac += 2;
 
     if (bus->ide == ISOLATED_BUS) {
@@ -247,28 +248,6 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     if (opflow->include_powerimbalance_variables) {
       // 2 more entries on both real and reactive
       nnz_eqjac += 4;
-    }
-
-    for (int bgen = 0; bgen < bus->ngen; ++bgen) {
-      PSGEN gen;
-      ierr = PSBUSGetGen(bus, bgen, &gen);
-      CHKERRQ(ierr);
-      if (!gen->status)
-        continue;
-      // each active generator uses 1 real and reactive entry on each bus
-      genparams->eqjacspbus_idx[igen1] = nnz_eqjac++;
-      genparams->eqjacsqbus_idx[igen1] = nnz_eqjac++;
-      igen1++;
-    }
-
-    if (opflow->include_loadloss_variables) {
-      // each load adds one real and reactive entry on each bus row
-      // NOTE: iload is a system load counter
-      for (int bload = 0; bload < bus->nload; bload++, iload++) {
-        loadparams->jacsp_idx[iload] = nnz_eqjac;
-        nnz_eqjac += 2;
-        iload++;
-      }
     }
 
     if (opflow->has_gensetpoint) {
@@ -281,15 +260,12 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
           continue;
 
         // each generator uses 2 rows, 3 columns real, 1 column reactive
-        genparams->eqjacspbus_idx[igen2] = nnz_eqjac;
         nnz_eqjac += 4;
-        igen2++;
       }
     }
   }
 
   // Go through the lines
-
   for (int iline = 0; iline <= ps->nline; ++iline) {
     PSLINE line = &(ps->line[iline]);
 
@@ -299,9 +275,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     // each line adds 4 (off-diagonal) entries for the to bus and 4
     // entries for the from bus.  Each line also modifies 4 existing
     // to and from bus entries.
-    lineparams->jacf_idx[iline] = nnz_eqjac;
     nnz_eqjac += 4;
-    lineparams->jact_idx[iline] = nnz_eqjac;
     nnz_eqjac += 4;
   }
 
@@ -311,17 +285,17 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   }
 
   if (opflow->has_gensetpoint) {
-    for (int ibus = 0, igen = 0; ibus < ps->nbus; ++ibus) {
+    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
       PSBUS bus = &(ps->bus[ibus]);
       for (int bgen = 0; bgen < bus->ngen; ++bgen) {
         PSGEN gen;
         ierr = PSBUSGetGen(bus, bgen, &gen);
         CHKERRQ(ierr);
+
         if (!gen->status)
           continue;
-        genparams->ineqjacspgen_idx[igen] = nnz_eqjac + nnz_ineqjac;
+
         nnz_ineqjac += 6;
-        igen++;
       }
     }
   }
@@ -330,27 +304,18 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     for (int ibus = 0; ibus < ps->nbus; ++ibus) {
       PSBUS bus = &(ps->bus[ibus]);
       if (bus->ide == PV_BUS || bus->ide == REF_BUS) {
-        for (int bgen = 0; bgen < bus->ngen; ++bgen) {
-          PSGEN gen;
-          ierr = PSBUSGetGen(bus, bgen, &gen);
-          CHKERRQ(ierr);
-          if (!gen->status)
-            continue;
-        }
         nnz_ineqjac += 2;
       }
     }
   }
 
   for (int iline = 0; iline < opflow->nlinesmon; ++iline) {
-    lineparams->jac_ieq_idx[iline] = nnz_eqjac + nnz_ineqjac;
     nnz_ineqjac += 8;
   }
 
   for (int ibus = 0; ibus < ps->nbus; ++ibus) {
     // reserve 2 real and 2 reactive entries for each bus
     // 3 upper triangular
-    busparams->hesssp_idx[ibus] = nnz_hess;
     nnz_hess += 3;
 
     if (opflow->include_powerimbalance_variables) {
@@ -358,13 +323,12 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     }
   }
 
-  for (int i = 0, igen = 0; i < ps->ngen; ++i) {
+  for (int i = 0; i < ps->ngen; ++i) {
     PSGEN gen = &(ps->gen[i]);
 
     if (!gen->status)
       continue;
 
-    genparams->hesssp_idx[igen] = nnz_hess;
     nnz_hess += 2;
 
     if (opflow->has_gensetpoint) {
@@ -379,7 +343,6 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
       nnz_hess += 2;
     }
-    igen++;
   }
 
   for (int iline = 0; iline < ps->nline; ++iline) {
@@ -387,8 +350,6 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 
     if (!line->status)
       continue;
-
-    lineparams->hesssp_idx[iline] = nnz_hess;
 
     // 3 diagonal entries for on the from-bus rows (already defined)
     // 3 diagonal entries for on the to-bus rows (already defined)
@@ -398,7 +359,6 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 
   if (opflow->include_loadloss_variables) {
     for (int iload = 0; iload < ps->nload; ++iload) {
-      loadparams->hesssp_idx[iload] = nnz_hess;
       nnz_hess += 2;
     }
   }
