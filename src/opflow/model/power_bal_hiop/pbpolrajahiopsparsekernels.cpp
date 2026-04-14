@@ -507,7 +507,7 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       /* Inequality constraints start after equality constraints
          Hence the offset
       */
-      roffset = 0; //opflow->nconeq;
+      roffset = opflow->nconeq;
       coffset = 0;
 
       ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
