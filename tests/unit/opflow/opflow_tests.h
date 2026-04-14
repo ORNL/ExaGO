@@ -774,7 +774,7 @@ public:
       // The equality and inequality constraint Jacobians are stacked one after
       // the other. Offset inequality constraint row indices by -nnz_eqjacsp
       for (int i = 0; i < opflow->nnz_ineqjacsp; i++) {
-        iRow[i + opflow->nnz_eqjacsp] -= opflow->nnz_ineqjacsp;
+        iRow[i + opflow->nnz_eqjacsp] -= opflow->nnz_eqjacsp;
       }
 
       fail += verifyAnswer(

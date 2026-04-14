@@ -487,10 +487,10 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
   PetscFunctionBegin;
 
-  if (opflow->Nconineq) {
-    // Allocate
-    if (pbpolrajahiopsparse->val_jacineq == NULL) {
-      /* Set locations only */
+  if (MJacS_dev == NULL) {
+    /* Set locations only */
+
+    if (opflow->Nconineq) {
       // Create arrays on host to store i,j, and val arrays
       umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
@@ -540,48 +540,49 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
     }
-
-    // Compute, given prior allocation
-    ierr = PetscLogEventBegin(opflow->ineqconsjaclogger, 0, 0, 0, 0);
-    CHKERRQ(ierr);
-
-    ierr = VecGetArray(opflow->X, &x);
-    CHKERRQ(ierr);
-
-    // Copy from device to host
-    umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-    registerWith(x, opflow->nx, resmgr, h_allocator_);
-    resmgr.copy((double *)x, (double *)x_dev);
-
-    ierr = VecRestoreArray(opflow->X, &x);
-    CHKERRQ(ierr);
-
-    /* Compute inequality constraint jacobian */
-    ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
-        opflow, opflow->X, opflow->Jac_Gi);
-    CHKERRQ(ierr);
-
-    ierr = MatGetSize(opflow->Jac_Gi, &nrow, &ncol);
-    CHKERRQ(ierr);
-
-    values = pbpolrajahiopsparse->val_jacineq;
-    /* Copy over values */
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
+  } else {
+    if (opflow->Nconineq) {
+      ierr = PetscLogEventBegin(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
-      for (j = 0; j < nvals; j++) {
-        values[j] = vals[j];
+
+      ierr = VecGetArray(opflow->X, &x);
+      CHKERRQ(ierr);
+
+      // Copy from device to host
+      umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
+      registerWith(x, opflow->nx, resmgr, h_allocator_);
+      resmgr.copy((double *)x, (double *)x_dev);
+
+      ierr = VecRestoreArray(opflow->X, &x);
+      CHKERRQ(ierr);
+
+      /* Compute inequality constraint jacobian */
+      ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
+          opflow, opflow->X, opflow->Jac_Gi);
+      CHKERRQ(ierr);
+
+      ierr = MatGetSize(opflow->Jac_Gi, &nrow, &ncol);
+      CHKERRQ(ierr);
+
+      values = pbpolrajahiopsparse->val_jacineq;
+      /* Copy over values */
+      for (i = 0; i < nrow; i++) {
+        ierr = MatGetRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
+        CHKERRQ(ierr);
+        for (j = 0; j < nvals; j++) {
+          values[j] = vals[j];
+        }
+        values += nvals;
+        ierr = MatRestoreRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
+        CHKERRQ(ierr);
       }
-      values += nvals;
-      ierr = MatRestoreRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
+      // Copy over val_jacineq to device
+      resmgr.copy(MJacS_dev + opflow->nnz_eqjacsp,
+                  pbpolrajahiopsparse->val_jacineq);
+
+      ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
     }
-    // Copy over val_jacineq to device
-    resmgr.copy(MJacS_dev + opflow->nnz_eqjacsp,
-                pbpolrajahiopsparse->val_jacineq);
-
-    ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
-    CHKERRQ(ierr);
   }
 
   PetscFunctionReturn(0);
@@ -606,9 +607,9 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
   PetscFunctionBegin;
 
-  // Allocate
-  if (pbpolrajahiopsparse->val_jaceq == NULL) {
+  if (MJacS_dev == NULL) {
     /* Set locations only */
+
     roffset = 0;
     coffset = 0;
 
@@ -650,50 +651,49 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     // Copy over i_jaceq and j_jaceq arrays to device
     resmgr.copy(iJacS_dev, pbpolrajahiopsparse->i_jaceq);
     resmgr.copy(jJacS_dev, pbpolrajahiopsparse->j_jaceq);
-  }
-
-  // Compute, given prior allocation
-  ierr = PetscLogEventBegin(opflow->eqconsjaclogger, 0, 0, 0, 0);
-  CHKERRQ(ierr);
-
-  ierr = VecGetArray(opflow->X, &x);
-  CHKERRQ(ierr);
-
-  // Copy from device to host
-  umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-  registerWith(x, opflow->nx, resmgr, h_allocator_);
-  resmgr.copy((double *)x, (double *)x_dev);
-
-  ierr = VecRestoreArray(opflow->X, &x);
-  CHKERRQ(ierr);
-
-  /* Compute equality constraint jacobian */
-  ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
-      opflow, opflow->X, opflow->Jac_Ge);
-  CHKERRQ(ierr);
-
-  ierr = MatGetSize(opflow->Jac_Ge, &nrow, &ncol);
-  CHKERRQ(ierr);
-
-  values = pbpolrajahiopsparse->val_jaceq;
-
-  /* Copy over values */
-  for (i = 0; i < nrow; i++) {
-    ierr = MatGetRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
+  } else {
+    ierr = PetscLogEventBegin(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
-    for (j = 0; j < nvals; j++) {
-      values[j] = vals[j];
+
+    ierr = VecGetArray(opflow->X, &x);
+    CHKERRQ(ierr);
+
+    // Copy from device to host
+    umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
+    registerWith(x, opflow->nx, resmgr, h_allocator_);
+    resmgr.copy((double *)x, (double *)x_dev);
+
+    ierr = VecRestoreArray(opflow->X, &x);
+    CHKERRQ(ierr);
+
+    /* Compute equality constraint jacobian */
+    ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
+        opflow, opflow->X, opflow->Jac_Ge);
+    CHKERRQ(ierr);
+
+    ierr = MatGetSize(opflow->Jac_Ge, &nrow, &ncol);
+    CHKERRQ(ierr);
+
+    values = pbpolrajahiopsparse->val_jaceq;
+
+    /* Copy over values */
+    for (i = 0; i < nrow; i++) {
+      ierr = MatGetRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
+      CHKERRQ(ierr);
+      for (j = 0; j < nvals; j++) {
+        values[j] = vals[j];
+      }
+      values += nvals;
+      ierr = MatRestoreRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
+      CHKERRQ(ierr);
     }
-    values += nvals;
-    ierr = MatRestoreRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
+
+    // Copy over val_jaceq to device
+    resmgr.copy(MJacS_dev, pbpolrajahiopsparse->val_jaceq);
+
+    ierr = PetscLogEventEnd(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
   }
-
-  // Copy over val_jaceq to device
-  resmgr.copy(MJacS_dev, pbpolrajahiopsparse->val_jaceq);
-
-  ierr = PetscLogEventEnd(opflow->eqconsjaclogger, 0, 0, 0, 0);
-  CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
 }
