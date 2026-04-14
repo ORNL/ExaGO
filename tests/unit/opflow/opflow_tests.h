@@ -771,9 +771,17 @@ public:
     // Checking for the presence of inequality constraints on the given problem
     // Verify inequality constraints
     if (opflow->Nconineq) {
-      // fail += verifyAnswer(
-      //    Jineqref_nat, opflow->nnz_ineqjacsp, iRow + opflow->nnz_eqjacsp,
-      //    jCol + opflow->nnz_eqjacsp, values + opflow->nnz_eqjacsp);
+      // The equality and inequality constraint Jacobians are stacked one after
+      // the other. Offset row and nnz
+      int nnz_offset = opflow->nnz_eqjacsp;
+      int row_offset = opflow->nconeq;
+      for (int i = 0; i < opflow->nnz_ineqjacsp; i++) {
+        iRow[i + nnz_offset] -= row_offset;
+      }
+
+      fail +=
+          verifyAnswer(Jineqref_nat, opflow->nnz_ineqjacsp, iRow + nnz_offset,
+                       jCol + nnz_offset, values + nnz_offset);
     }
 
     // Cleanup
