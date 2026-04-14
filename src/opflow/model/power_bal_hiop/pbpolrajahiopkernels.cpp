@@ -75,9 +75,9 @@ PetscErrorCode OPFLOWSetConstraintBoundsArray_PBPOLRAJAHIOP(OPFLOW opflow,
         RAJA::RangeSegment(0, lineparams->nlinelim),
         RAJA_LAMBDA(RAJA::Index_type i) {
           int j = linelimidx[i];
-          gl_dev[gbineqidx[i]] = 0.0;
+          gl_dev[gbineqidx[i]] = PETSC_NINFINITY;
           gu_dev[gbineqidx[i]] = (rateA[j] / MVAbase) * (rateA[j] / MVAbase);
-          gl_dev[gbineqidx[i] + 1] = 0.0;
+          gl_dev[gbineqidx[i] + 1] = PETSC_NINFINITY;
           gu_dev[gbineqidx[i] + 1] =
               (rateA[j] / MVAbase) * (rateA[j] / MVAbase);
         });
