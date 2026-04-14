@@ -65,7 +65,7 @@ void spdensetonatural(const double *xin, double *xout, int *idxn2sd_map,
  *
  */
 int main(int argc, char **argv) {
-  bool testOpflowModelPBPOL = true; // Always test PBPOL
+  bool testOpflowModelPBPOL = true;     // Always test PBPOL
   bool testOpflowModelPBPOLHIOP = true; // Always test PBOLHIOP
   bool testOpflowModelPBPOLRAJAHIOP = false;
   bool testOpflowModelPBPOLRAJAHIOPSPARSE = false;

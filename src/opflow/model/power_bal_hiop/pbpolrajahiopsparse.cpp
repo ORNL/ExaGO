@@ -163,13 +163,13 @@ PetscErrorCode OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
       thetaft = thetaf - thetat;
       thetatf = thetat - thetaf;
 
-      Pf =
-          Gff * Vmf * Vmf + Vmf * Vmt * (Gft * cos(thetaft) + Bft * sin(thetaft));
+      Pf = Gff * Vmf * Vmf +
+           Vmf * Vmt * (Gft * cos(thetaft) + Bft * sin(thetaft));
       Qf = -Bff * Vmf * Vmf +
            Vmf * Vmt * (-Bft * cos(thetaft) + Gft * sin(thetaft));
 
-      Pt =
-          Gtt * Vmt * Vmt + Vmt * Vmf * (Gtf * cos(thetatf) + Btf * sin(thetatf));
+      Pt = Gtt * Vmt * Vmt +
+           Vmt * Vmf * (Gtf * cos(thetatf) + Btf * sin(thetatf));
       Qt = -Btt * Vmt * Vmt +
            Vmt * Vmf * (-Btf * cos(thetatf) + Gtf * sin(thetatf));
 
