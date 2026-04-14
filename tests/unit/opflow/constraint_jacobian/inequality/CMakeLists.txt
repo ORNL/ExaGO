@@ -36,7 +36,7 @@ if(EXAGO_ENABLE_HIOP)
   list(APPEND dependencies HIOP HIOP_SPARSE)
 endif()
 
-# Set up RAJA support tests if enabled 
+# Set up RAJA support tests if enabled
 if(EXAGO_ENABLE_RAJA)
   list(APPEND solvers HIOP)
   list(APPEND models PBPOLRAJAHIOP)
