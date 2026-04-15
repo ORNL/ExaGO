@@ -11,7 +11,7 @@ target_include_directories(objective_acopf PRIVATE ../)
 
 # Network files to run on - doing 3 and 600 bus examples.
 set(prefix ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)
-set(obj_network_files OF_unittestx3.m OF_unittestx600.m)
+set(obj_network_files testx3.m testx600.m)
 # Map num_copies to a specific netfile
 set(num_copies 3 600)
 
@@ -40,7 +40,7 @@ if(EXAGO_RUN_TESTS)
     # Iterate over networks, matching network file to num_copies
     foreach(network num IN ZIP_LISTS obj_network_files num_copies)
       get_filename_component(net ${network} NAME)
-      set(testname "UNIT_TESTS_OBJECTIVE_SIZE_${net}_${solver}_${model}")
+      set(testname "UNIT_TESTS_OBJECTIVE_${net}_${solver}_${model}")
       exago_add_test(
         NAME
         ${testname}
