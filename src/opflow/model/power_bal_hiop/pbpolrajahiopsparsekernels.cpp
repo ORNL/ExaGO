@@ -487,7 +487,7 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
   PetscFunctionBegin;
 
-  if (MJacS_dev == NULL) {
+  if (iJacS_dev != NULL && jJacS_dev != NULL) {
     /* Set locations only */
 
     if (opflow->Nconineq) {
@@ -540,7 +540,9 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
     }
-  } else {
+  }
+
+  if (MJacS_dev != NULL) {
     if (opflow->Nconineq) {
       ierr = PetscLogEventBegin(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
@@ -607,7 +609,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
   PetscFunctionBegin;
 
-  if (MJacS_dev == NULL) {
+  if (iJacS_dev != NULL && jJacS_dev != NULL) {
     /* Set locations only */
 
     roffset = 0;
@@ -651,7 +653,9 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     // Copy over i_jaceq and j_jaceq arrays to device
     resmgr.copy(iJacS_dev, pbpolrajahiopsparse->i_jaceq);
     resmgr.copy(jJacS_dev, pbpolrajahiopsparse->j_jaceq);
-  } else {
+  }
+
+  if (MJacS_dev != NULL) {
     ierr = PetscLogEventBegin(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
 
@@ -688,7 +692,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       CHKERRQ(ierr);
     }
 
-    // Copy over val_ineq to device
+    // Copy over val_jaceq to device
     resmgr.copy(MJacS_dev, pbpolrajahiopsparse->val_jaceq);
 
     ierr = PetscLogEventEnd(opflow->eqconsjaclogger, 0, 0, 0, 0);

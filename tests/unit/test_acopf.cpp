@@ -65,12 +65,25 @@ void spdensetonatural(const double *xin, double *xout, int *idxn2sd_map,
  *
  */
 int main(int argc, char **argv) {
-  const bool isTestOpflowModelPBPOL = false;
+  bool testOpflowModelPBPOL = false;
+  bool testOpflowModelPBPOLHIOP = false;
+  bool testOpflowModelPBPOLRAJAHIOP = false;
+  bool testOpflowModelPBPOLRAJAHIOPSPARSE = false;
+
+#if defined(EXAGO_ENABLE_IPOPT)
+  testOpflowModelPBPOL = true;
+#endif
+
+#if defined(EXAGO_ENABLE_HIOP)
+  testOpflowModelPBPOLHIOP = true;
+#endif
+
 #if defined(EXAGO_ENABLE_RAJA)
-  const bool isTestOpflowModelPBPOLRAJAHIOP = true;
-  const bool isTestOpflowModelPBPOLHIOP = false;
+#if defined(EXAGO_ENABLE_HIOP_SPARSE)
+  testOpflowModelPBPOLRAJAHIOPSPARSE = true;
 #else
-  const bool isTestOpflowModelPBPOLHIOP = true;
+  testOpflowModelPBPOLRAJAHIOP = true;
+#endif
 #endif
   PetscErrorCode ierr;
   PetscBool flg, gen_test_data, write_test_data;
@@ -245,13 +258,13 @@ int main(int argc, char **argv) {
   ierr = PetscLogStagePush(stages[1]);
   CHKERRQ(ierr);
 
-  if (isTestOpflowModelPBPOLHIOP) {
+  if (testOpflowModelPBPOLHIOP) {
     OPFLOW opflowtest;
     exago::tests::TestOpflow test;
 
     std::cout
         << "\nTesting custom power balance model in polar coordinates for HIOP"
-        << "(componentwise assembly) ... \n";
+        << " (componentwise assembly) ... \n";
 
     // Create optimal power flow model
     ierr = OPFLOWCreate(PETSC_COMM_WORLD, &opflowtest);
@@ -372,13 +385,17 @@ int main(int argc, char **argv) {
   }
 
 #if defined(EXAGO_ENABLE_RAJA)
-  if (isTestOpflowModelPBPOLRAJAHIOP) {
+  if (testOpflowModelPBPOLRAJAHIOP || testOpflowModelPBPOLRAJAHIOPSPARSE) {
     OPFLOW opflowtest;
     exago::tests::TestOpflow test;
 
     std::cout << "\nTesting custom power balance model in polar coordinates "
                  "for HIOP using RAJA"
-              << "(PBPOLHIOPRAJA) ... \n";
+#if defined(EXAGO_ENABLE_HIOP_SPARSE)
+              << " (PBPOLRAJAHIOPSPARSE) ... \n";
+#else
+              << " (PBPOLRAJAHIOP) ... \n";
+#endif
 
     // Create optimal power flow model
     ierr = OPFLOWCreate(PETSC_COMM_WORLD, &opflowtest);
@@ -389,11 +406,19 @@ int main(int argc, char **argv) {
     CHKERRQ(ierr);
 
     /* Set opflow model type to custom model for hiop using RAJA */
+#if defined(EXAGO_ENABLE_HIOP_SPARSE)
+    ierr = OPFLOWSetModel(opflowtest, OPFLOWMODEL_PBPOLRAJAHIOPSPARSE);
+#else
     ierr = OPFLOWSetModel(opflowtest, OPFLOWMODEL_PBPOLRAJAHIOP);
+#endif
     CHKERRQ(ierr);
 
     /* Set solver to HIOP */
+#if defined(EXAGO_ENABLE_HIOP_SPARSE)
+    ierr = OPFLOWSetSolver(opflowtest, OPFLOWSOLVER_HIOPSPARSEGPU);
+#else
     ierr = OPFLOWSetSolver(opflowtest, OPFLOWSOLVER_HIOP);
+#endif
     CHKERRQ(ierr);
 
     /* Set up */
@@ -505,6 +530,7 @@ int main(int argc, char **argv) {
     fail += test.computeConstraintJacobian(opflowtest, x_ref_dev, Jeq, Jineq,
                                            resmgr);
 
+#ifndef EXAGO_ENABLE_HIOP_SPARSE // skip hessian test for now with HIOP_SPARSE
     int nxdense = 2 * opflowtest->ps->nbus;
     double *hess_dense, *hess_dense_dev;
 
@@ -527,6 +553,7 @@ int main(int argc, char **argv) {
     d_allocator.deallocate(x_ref_dev);
     d_allocator.deallocate(lambda_ref_dev);
     d_allocator.deallocate(hess_dense_dev);
+#endif
 #endif
 
     ierr = PetscFree(x_ref);
@@ -563,7 +590,7 @@ int main(int argc, char **argv) {
   }
 #endif
 
-  if (isTestOpflowModelPBPOL) {
+  if (testOpflowModelPBPOL) {
     OPFLOW opflowtest;
     exago::tests::TestOpflow test;
 
