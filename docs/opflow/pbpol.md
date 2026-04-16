@@ -289,7 +289,7 @@ $$
 \frac{\partial^2 \Delta Q_f}{\partial \theta_{f}\partial \theta_{t}} = \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))
 $$
 ## Inequality constraint Hessian
-### Second Derivatives of \( S_f^2 \)
+### Second Derivatives of $S_f^2$
 
 $$
 \frac{\partial^2 (S^2_f)}{\partial V_{f}^2} = 4P_fG_{ff} - 4Q_fB_{ff}
@@ -335,7 +335,7 @@ $$
 
 ---
 
-### Second Derivatives of \( S_t^2 \)
+### Second Derivatives of $S_t^2$
 
 $$
 \frac{\partial^2 (S^2_t)}{\partial V_{f}^2}
