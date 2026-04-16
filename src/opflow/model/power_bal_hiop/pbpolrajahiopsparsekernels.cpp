@@ -835,10 +835,11 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 /**
  * @brief Compute the Hessian of the Lagrangian for the PBPOLRAJAHIOPSPARSE
  * model.
- * 
+ *
  * @param[inout] opflow The OPFLOW object.
  * @param[in]  x_dev The device array with the current solution iterate.
- * @param[out] lambda_dev The device array with the current Lagrange multipliers.
+ * @param[out] lambda_dev The device array with the current Lagrange
+ * multipliers.
  * @param[out] iHSS_dev The device array for the row indices of the Hessian.
  * @param[out] jHSS_dev The device array for the column indices of the Hessian.
  * @param[out] MHSS_dev The device array for the values of the Hessian.

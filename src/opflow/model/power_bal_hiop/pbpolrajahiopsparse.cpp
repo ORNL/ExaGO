@@ -408,7 +408,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   PetscFunctionReturn(0);
 }
 
-/** 
+/**
  * @brief Destructor for the PBPOLRAJAHIOPSPARSE model.
  *
  */
@@ -440,7 +440,7 @@ extern PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
     OPFLOW, const double *, const double *, const double *, const double *,
     const double *, double);
 
-/** 
+/**
  * @brief Constructor for the PBPOLRAJAHIOPSPARSE model.
  *
  * This function creates a new PBPOLRAJAHIOPSPARSE model and sets pointers
