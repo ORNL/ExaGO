@@ -20,6 +20,7 @@ if(EXAGO_ENABLE_RAJA)
     set(OPFLOW_FORM_SRC
         ${OPFLOW_FORM_SRC} model/power_bal_hiop/pbpolrajahiopsparse.cpp
         model/power_bal_hiop/pbpolrajahiopsparsekernels.cpp
+        model/power_bal_hiop/pbpolrajahiopsparse_gpu.cpp
     )
   endif()
 endif()
@@ -39,8 +40,9 @@ set_source_files_properties(${OPFLOW_SRC} PROPERTIES LANGUAGE CXX)
 if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
   set_source_files_properties(
     model/power_bal_hiop/pbpolrajahiopkernels.cpp
-    model/power_bal_hiop/pbpolrajahiopsparsekernels.cpp PROPERTIES LANGUAGE
-                                                                   CUDA
+    model/power_bal_hiop/pbpolrajahiopsparsekernels.cpp
+    model/power_bal_hiop/pbpolrajahiopsparse_gpu.cpp PROPERTIES LANGUAGE
+                                                                CUDA
   )
 endif()
 
