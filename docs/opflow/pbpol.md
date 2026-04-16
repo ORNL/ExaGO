@@ -140,7 +140,7 @@ where the maximum flow,$`S^+_{ft}`$ is either the RATE_A (normal), RATE_B (short
 
 ## Inequality constraint Jacobian
 
-$$
+$```math
 \begin{aligned}
 \frac{\partial(S^2_f)}{\partial V_{f}} &= 2P_f(2G_{ff}V_{f} + G_{ft}V_{t}\cos(\theta_{f}-\theta_t) + V_{t}B_{ft}\sin(\theta_{f}-\theta_t)) + 2Q_f(-2B_{ff}V_{f} + G_{ft}V_{t}\sin(\theta_{f}-\theta_t) - V_{t}B_{ft}\cos(\theta_{f}-\theta_t)) \\
 \frac{\partial(S^2_f)}{\partial V_{t}} &= 2P_f(V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))) + 2Q_f(V_{f}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))) \\
@@ -151,7 +151,7 @@ $$
 \frac{\partial(S^2_t)}{\partial \theta_f} &= 2P_t(V_{t}V_{f}G_{tf}\sin(\theta_{t}-\theta_f) - V_tV_{f}B_{tf}\cos(\theta_{t}-\theta_f)) + 2Q_t(-V_{t}G_{tf}V_{f}\cos(\theta_{t}-\theta_f) - V_tV_{f}B_{tf}\sin(\theta_{t}-\theta_f)) \\
 \frac{\partial(S^2_t)}{\partial \theta_t} &= 2P_t(-V_{t}G_{tf}V_{f}\sin(\theta_{t}-\theta_f) + V_tV_{f}B_{tf}\cos(\theta_{t}-\theta_f)) + 2Q_t(V_{t}G_{tf}V_{f}\cos(\theta_{t}-\theta_f) + V_tV_{f}B_{tf}\sin(\theta_{t}-\theta_f))
 \end{aligned}
-$$
+```$
 
 ## Objective Hessian
 
