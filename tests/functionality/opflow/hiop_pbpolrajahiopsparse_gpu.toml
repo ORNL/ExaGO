@@ -43,5 +43,5 @@ is_loadloss_active =	false
 is_powerimb_active =	false
 initialization_type = "DCOPF"
 num_iters = 38
-iter_range = 15
+iter_range = 21
 obj_value = 2.7552967e+04
