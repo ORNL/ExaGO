@@ -802,8 +802,8 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
 
       xidx[geni] = opflow->idxn2sd_map[loc];
       xpdevidx[geni] = (opflow->has_gensetpoint && !gen->isrenewable)
-                            ? opflow->idxn2sd_map[gen->startxpdevloc]
-                            : -1;
+                           ? opflow->idxn2sd_map[gen->startxpdevloc]
+                           : -1;
       gidxbus[geni] = gloc;
       if (opflow->has_gensetpoint) {
         geqidxgen[geni] = gen->starteqloc;

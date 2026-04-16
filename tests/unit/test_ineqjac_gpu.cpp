@@ -30,8 +30,8 @@ static int compare_arrays(const double *ref, const double *gpu, int n,
   for (int i = 0; i < n; i++) {
     if (std::abs(ref[i] - gpu[i]) / (1.0 + std::abs(ref[i])) > TOL) {
       std::cout << "  MISMATCH " << label << "[" << i << "]: PETSc=" << ref[i]
-                << "  GPU=" << gpu[i]
-                << "  diff=" << std::abs(ref[i] - gpu[i]) << std::endl;
+                << "  GPU=" << gpu[i] << "  diff=" << std::abs(ref[i] - gpu[i])
+                << std::endl;
       fail++;
     }
   }
@@ -70,7 +70,8 @@ int main(int argc, char **argv) {
   else
     file.assign(file_c_str);
 
-  std::cout << "=== Test 8: GPU Inequality Jacobian Validation ===" << std::endl;
+  std::cout << "=== Test 8: GPU Inequality Jacobian Validation ==="
+            << std::endl;
   std::cout << "Network file: " << file << std::endl;
 
   /* ------------------------------------------------------------------
@@ -121,8 +122,7 @@ int main(int argc, char **argv) {
   ierr = OPFLOWGetSizes(opflow, &nx, &nconeq, &nconineq);
   CHKERRQ(ierr);
 
-  std::cout << "nx=" << nx << " nconeq=" << nconeq
-            << " nconineq=" << nconineq
+  std::cout << "nx=" << nx << " nconeq=" << nconeq << " nconineq=" << nconineq
             << " nnz_ineqjacsp=" << opflow->nnz_ineqjacsp << std::endl;
 
   if (!nconineq) {
