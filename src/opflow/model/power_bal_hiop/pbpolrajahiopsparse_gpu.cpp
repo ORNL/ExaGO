@@ -10,8 +10,8 @@
 #include "pbpolrajahiopsparse_gpu.hpp"
 
 void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                                  const double *x_dev,
-                                                  double *jacd_dev) {
+                                                 const double *x_dev,
+                                                 double *jacd_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
   GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
@@ -181,51 +181,45 @@ void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
           double sin_ft = sin(thetaft), cos_ft = cos(thetaft);
           double sin_tf = sin(thetatf), cos_tf = cos(thetatf);
 
-          double Pf = Gff * Vmf * Vmf +
-                      Vmf * Vmt * (Gft * cos_ft + Bft * sin_ft);
-          double Qf = -Bff * Vmf * Vmf +
-                       Vmf * Vmt * (-Bft * cos_ft + Gft * sin_ft);
-          double Pt = Gtt * Vmt * Vmt +
-                      Vmt * Vmf * (Gtf * cos_tf + Btf * sin_tf);
-          double Qt = -Btt * Vmt * Vmt +
-                       Vmt * Vmf * (-Btf * cos_tf + Gtf * sin_tf);
+          double Pf =
+              Gff * Vmf * Vmf + Vmf * Vmt * (Gft * cos_ft + Bft * sin_ft);
+          double Qf =
+              -Bff * Vmf * Vmf + Vmf * Vmt * (-Bft * cos_ft + Gft * sin_ft);
+          double Pt =
+              Gtt * Vmt * Vmt + Vmt * Vmf * (Gtf * cos_tf + Btf * sin_tf);
+          double Qt =
+              -Btt * Vmt * Vmt + Vmt * Vmf * (-Btf * cos_tf + Gtf * sin_tf);
 
           double dSf2_dPf = 2 * Pf, dSf2_dQf = 2 * Qf;
           double dSt2_dPt = 2 * Pt, dSt2_dQt = 2 * Qt;
 
           double dPf_dthetaf = Vmf * Vmt * (-Gft * sin_ft + Bft * cos_ft);
-          double dPf_dVmf = 2 * Gff * Vmf +
-                            Vmt * (Gft * cos_ft + Bft * sin_ft);
+          double dPf_dVmf = 2 * Gff * Vmf + Vmt * (Gft * cos_ft + Bft * sin_ft);
           double dPf_dthetat = Vmf * Vmt * (Gft * sin_ft - Bft * cos_ft);
           double dPf_dVmt = Vmf * (Gft * cos_ft + Bft * sin_ft);
 
           double dQf_dthetaf = Vmf * Vmt * (Bft * sin_ft + Gft * cos_ft);
-          double dQf_dVmf = -2 * Bff * Vmf +
-                             Vmt * (-Bft * cos_ft + Gft * sin_ft);
+          double dQf_dVmf =
+              -2 * Bff * Vmf + Vmt * (-Bft * cos_ft + Gft * sin_ft);
           double dQf_dthetat = Vmf * Vmt * (-Bft * sin_ft - Gft * cos_ft);
           double dQf_dVmt = Vmf * (-Bft * cos_ft + Gft * sin_ft);
 
           double dPt_dthetat = Vmt * Vmf * (-Gtf * sin_tf + Btf * cos_tf);
-          double dPt_dVmt = 2 * Gtt * Vmt +
-                            Vmf * (Gtf * cos_tf + Btf * sin_tf);
+          double dPt_dVmt = 2 * Gtt * Vmt + Vmf * (Gtf * cos_tf + Btf * sin_tf);
           double dPt_dthetaf = Vmt * Vmf * (Gtf * sin_tf - Btf * cos_tf);
           double dPt_dVmf = Vmt * (Gtf * cos_tf + Btf * sin_tf);
 
           double dQt_dthetat = Vmt * Vmf * (Btf * sin_tf + Gtf * cos_tf);
-          double dQt_dVmt = -2 * Btt * Vmt +
-                             Vmf * (-Btf * cos_tf + Gtf * sin_tf);
+          double dQt_dVmt =
+              -2 * Btt * Vmt + Vmf * (-Btf * cos_tf + Gtf * sin_tf);
           double dQt_dthetaf = Vmt * Vmf * (-Btf * sin_tf - Gtf * cos_tf);
           double dQt_dVmf = Vmt * (-Btf * cos_tf + Gtf * sin_tf);
 
           /* Row 0 (Sf2): derivatives w.r.t. thetaf, Vmf, thetat, Vmt */
-          jacd_dev[base + 0] =
-              dSf2_dPf * dPf_dthetaf + dSf2_dQf * dQf_dthetaf;
-          jacd_dev[base + 1] =
-              dSf2_dPf * dPf_dVmf + dSf2_dQf * dQf_dVmf;
-          jacd_dev[base + 2] =
-              dSf2_dPf * dPf_dthetat + dSf2_dQf * dQf_dthetat;
-          jacd_dev[base + 3] =
-              dSf2_dPf * dPf_dVmt + dSf2_dQf * dQf_dVmt;
+          jacd_dev[base + 0] = dSf2_dPf * dPf_dthetaf + dSf2_dQf * dQf_dthetaf;
+          jacd_dev[base + 1] = dSf2_dPf * dPf_dVmf + dSf2_dQf * dQf_dVmf;
+          jacd_dev[base + 2] = dSf2_dPf * dPf_dthetat + dSf2_dQf * dQf_dthetat;
+          jacd_dev[base + 3] = dSf2_dPf * dPf_dVmt + dSf2_dQf * dQf_dVmt;
 
           /* Row 1 (St2): derivatives w.r.t. thetaf, Vmf, thetat, Vmt */
           jacd_dev[base + row_stride + 0] =

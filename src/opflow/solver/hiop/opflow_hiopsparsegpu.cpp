@@ -70,7 +70,8 @@ bool OPFLOWHIOPSPARSEGPUInterface::get_sparse_blocks_info(
   nnz_sparse_Jaceq = opflow->nnz_eqjacsp = info_eq.nz_used;
 
   /* KS: Use pre-computed nnz_ineqjacsp from model setup (avoids PETSc Mat
-     assembly just for counting non-zeros -- not sure if faster or if it scales but hey no PETSc!). */
+     assembly just for counting non-zeros -- not sure if faster or if it scales
+     but hey no PETSc!). */
   nnz_sparse_Jacineq = opflow->nnz_ineqjacsp;
 
   /* Compute non-zeros for Hessian */

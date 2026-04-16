@@ -23,8 +23,8 @@
  *                    i.e. MJacS_dev + nnz_eqjacsp)
  */
 void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                                  const double *x_dev,
-                                                  double *jacd_dev);
+                                                 const double *x_dev,
+                                                 double *jacd_dev);
 
 #endif // EXAGO_ENABLE_HIOP_SPARSE
 #endif // EXAGO_ENABLE_RAJA
