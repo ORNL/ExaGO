@@ -93,11 +93,11 @@ where the maximum flow,$`S^+_{ft}`$ is either the RATE_A (normal), RATE_B (short
 
 ```math
 \begin{aligned}
-\dfrac{\partial{C}}{\partial{P_{Gk}}} &= 2\alpha_kP_{Gk} + \beta_k \\
-\dfrac{\partial{C}}{\partial{\delta{P_{Dj}}}} &= 1 \\
-\dfrac{\partial{C}}{\partial{\delta{Q_{Dj}}}} &= 1 \\
-\dfrac{\partial{C}}{\partial{\delta{P_{i}}}} &= 2c_{\delta{S_i}}\delta{P_{i}} \\
-\dfrac{\partial{C}}{\partial{\delta{Q_{i}}}} &= 2c_{\delta{S_i}}\delta{Q_{i}}
+\frac{\partial{C}}{\partial{P_{Gk}}} &= 2\alpha_kP_{Gk} + \beta_k \\
+\frac{\partial{C}}{\partial{\delta{P_{Dj}}}} &= 1 \\
+\frac{\partial{C}}{\partial{\delta{Q_{Dj}}}} &= 1 \\
+\frac{\partial{C}}{\partial{\delta{P_{i}}}} &= 2c_{\delta{S_i}}\delta{P_{i}} \\
+\frac{\partial{C}}{\partial{\delta{Q_{i}}}} &= 2c_{\delta{S_i}}\delta{Q_{i}}
 \end{aligned}
 ```
 
@@ -109,18 +109,18 @@ where the maximum flow,$`S^+_{ft}`$ is either the RATE_A (normal), RATE_B (short
 
 ```math
 \begin{aligned}
-\dfrac{\partial{\Delta{P_f}}}{\partial{V_{f}}} &= \sum_{A_{br}(f,t) = 1} 2G_{ff}V_{f} + G_{ft}V_{t}\cos(\theta_{f}-\theta_t) + V_{t}B_{ft}\sin(\theta_{f}-\theta_t)\\
-\dfrac{\partial{\Delta{P_f}}}{\partial{V_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))\\
-\dfrac{\partial{\Delta{P_f}}}{\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} (-V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t))\\
-\dfrac{\partial{\Delta{P_f}}}{\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} (V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t))
+\frac{\partial{\Delta{P_f}}}{\partial{V_{f}}} &= \sum_{A_{br}(f,t) = 1} 2G_{ff}V_{f} + G_{ft}V_{t}\cos(\theta_{f}-\theta_t) + V_{t}B_{ft}\sin(\theta_{f}-\theta_t)\\
+\frac{\partial{\Delta{P_f}}}{\partial{V_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))\\
+\frac{\partial{\Delta{P_f}}}{\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} (-V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t))\\
+\frac{\partial{\Delta{P_f}}}{\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} (V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t))
 \end{aligned}
 ```
 ```math
 \begin{aligned}
-\dfrac{\partial{\Delta{Q_f}}}{\partial{V_{f}}} &= \sum_{A_{br}(f,t) = 1} -2B_{ff}V_{f} + G_{ft}V_{t}\sin(\theta_{f}-\theta_t) - V_{t}B_{ft}\cos(\theta_{f}-\theta_t)\\
-\dfrac{\partial{\Delta{Q_f}}}{\partial{V_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))\\
-\dfrac{\partial{\Delta{Q_f}}}{\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} ( V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t))\\
-\dfrac{\partial{\Delta{Q_f}}}{\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} ( -V_{f}G_{ft}V_{t}\cos(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t))
+\frac{\partial{\Delta{Q_f}}}{\partial{V_{f}}} &= \sum_{A_{br}(f,t) = 1} -2B_{ff}V_{f} + G_{ft}V_{t}\sin(\theta_{f}-\theta_t) - V_{t}B_{ft}\cos(\theta_{f}-\theta_t)\\
+\frac{\partial{\Delta{Q_f}}}{\partial{V_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))\\
+\frac{\partial{\Delta{Q_f}}}{\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} ( V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t))\\
+\frac{\partial{\Delta{Q_f}}}{\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} ( -V_{f}G_{ft}V_{t}\cos(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t))
 
 \end{aligned}
 ```
@@ -128,12 +128,12 @@ where the maximum flow,$`S^+_{ft}`$ is either the RATE_A (normal), RATE_B (short
 
 ```math
 \begin{aligned}
-\dfrac{\partial{\Delta{P_f}}}{\partial{P_{Gk}}} &= -1 \\
-\dfrac{\partial{\Delta{Q_f}}}{\partial{Q_{Gk}}} &= -1 \\
-\dfrac{\partial{\Delta{P_f}}}{\partial{\delta{P_{Dj}}}} &= -1 \\
-\dfrac{\partial{\Delta{Q_f}}}{\partial{\delta{Q_{Dj}}}} &= -1 \\
-\dfrac{\partial{\Delta{P_f}}}{\partial{\delta{P_{i}}}} &= 1 \\
-\dfrac{\partial{\Delta{Q_f}}}{\partial{\delta{Q_{i}}}} &= 1
+\frac{\partial{\Delta{P_f}}}{\partial{P_{Gk}}} &= -1 \\
+\frac{\partial{\Delta{Q_f}}}{\partial{Q_{Gk}}} &= -1 \\
+\frac{\partial{\Delta{P_f}}}{\partial{\delta{P_{Dj}}}} &= -1 \\
+\frac{\partial{\Delta{Q_f}}}{\partial{\delta{Q_{Dj}}}} &= -1 \\
+\frac{\partial{\Delta{P_f}}}{\partial{\delta{P_{i}}}} &= 1 \\
+\frac{\partial{\Delta{Q_f}}}{\partial{\delta{Q_{i}}}} &= 1
 \end{aligned}
 ```
 
@@ -192,11 +192,11 @@ where the maximum flow,$`S^+_{ft}`$ is either the RATE_A (normal), RATE_B (short
 
 ```math
 \begin{aligned}
-\dfrac{\partial{C}}{\partial{P_{Gk}}} &= 2\alpha_k\\
-\dfrac{\partial{C}}{\partial{\delta{P_{Dj}}}} &= 0 \\
-\dfrac{\partial{C}}{\partial{\delta{Q_{Dj}}}} &= 0 \\
-\dfrac{\partial{C}}{\partial{\delta{P_{i}}}} &= 2c_{\delta{S_i}}\\
-\dfrac{\partial{C}}{\partial{\delta{Q_{i}}}} &= 2c_{\delta{S_i}}
+\frac{\partial{C}}{\partial{P_{Gk}}} &= 2\alpha_k\\
+\frac{\partial{C}}{\partial{\delta{P_{Dj}}}} &= 0 \\
+\frac{\partial{C}}{\partial{\delta{Q_{Dj}}}} &= 0 \\
+\frac{\partial{C}}{\partial{\delta{P_{i}}}} &= 2c_{\delta{S_i}}\\
+\frac{\partial{C}}{\partial{\delta{Q_{i}}}} &= 2c_{\delta{S_i}}
 \end{aligned}
 ```
 
@@ -205,32 +205,83 @@ All mixed second derivatives are 0. This means this part of the Hessian is diago
 ## Equality constraint Hessian
 
 ```math
-\begin{aligned}
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{V_{f}^2}} &= \sum_{A_{br}(f,t) = 1} 2G_{ff}\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{V_{t}^2}} &= 0\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{\theta_{f}^2}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(-G_{ft}\cos(\theta_{f}-\theta_t) - B_{ft}\sin(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{\theta_{t}^2}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(-G_{ft}\cos(\theta_{f}-\theta_t) - B_{ft}\sin(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{V_{f}}\partial{V_{t}}} &= \sum_{A_{br}(f,t) = 1} G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t)\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{V_{f}}\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} V_{t}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{V_{f}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{t}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{V_{t}}\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{V_{t}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{P_f}}}{\partial{\theta_{f}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))
-\end{aligned}
+\frac{\partial^2{\Delta{P_f}}}{\partial{V_{f}^2}} &= \sum_{A_{br}(f,t) = 1} 2G_{ff}
 ```
+
 ```math
-\begin{aligned}
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{V_{f}^2}} &= \sum_{A_{br}(f,t) = 1} -2B_{ff}\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{V_{t}^2}} &= 0\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{\theta_{f}^2}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{\theta_{t}^2}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{V_{f}}\partial{V_{t}}} &= \sum_{A_{br}(f,t) = 1} G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t)\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{V_{f}}\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} V_{t}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{V_{f}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} -V_{t}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{V_{t}}\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{V_{t}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} -V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))\\
-\dfrac{\partial^2{\Delta{Q_f}}}{\partial{\theta_{f}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))
-\end{aligned}
+\frac{\partial^2{\Delta{P_f}}}{\partial{V_{t}^2}} &= 0
+```
+
+```math
+\frac{\partial^2{\Delta{P_f}}}{\partial{\theta_{f}^2}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(-G_{ft}\cos(\theta_{f}-\theta_t) - B_{ft}\sin(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{P_f}}}{\partial{\theta_{t}^2}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(-G_{ft}\cos(\theta_{f}-\theta_t) - B_{ft}\sin(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{P_f}}}{\partial{V_{f}}\partial{V_{t}}} &= \sum_{A_{br}(f,t) = 1} G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t)
+```
+
+```math
+\frac{\partial^2{\Delta{P_f}}}{\partial{V_{f}}\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} V_{t}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{P_f}}}{\partial{V_{f}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{t}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{P_f}}}{\partial{V_{t}}\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{P_f}}}{\partial{V_{t}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{P_f}}}{\partial{\theta_{f}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{V_{f}^2}} &= \sum_{A_{br}(f,t) = 1} -2B_{ff}
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{V_{t}^2}} &= 0
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{\theta_{f}^2}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{\theta_{t}^2}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{V_{f}}\partial{V_{t}}} &= \sum_{A_{br}(f,t) = 1} G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t)
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{V_{f}}\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} V_{t}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{V_{f}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} -V_{t}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{V_{t}}\partial{\theta_{f}}} &= \sum_{A_{br}(f,t) = 1} V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{V_{t}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} -V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))
+```
+
+```math
+\frac{\partial^2{\Delta{Q_f}}}{\partial{\theta_{f}}\partial{\theta_{t}}} &= \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))
 ```
 
 ## Inequality constraint Hessian
