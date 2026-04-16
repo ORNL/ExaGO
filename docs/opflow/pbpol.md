@@ -204,9 +204,9 @@ All mixed second derivatives are 0. This means this part of the Hessian is diago
 
 ## Equality constraint Hessian
 
-```math
+$$
 \frac{\partial^2{\Delta{P_f}}}{\partial{V_{f}^2}} &= \sum_{A_{br}(f,t) = 1} 2G_{ff}
-```
+$$
 
 ```math
 \frac{\partial^2{\Delta{P_f}}}{\partial{V_{t}^2}} &= 0
