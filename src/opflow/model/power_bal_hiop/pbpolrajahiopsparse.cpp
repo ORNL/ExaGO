@@ -221,9 +221,85 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
   LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
-  /* Need to compute the number of nonzeros in equality, inequality constraint
-   * Jacobians and Hessian */
+  PS ps = opflow->ps;
+  PSBUS bus;
+  PSGEN gen;
+  PSLINE line;
+  PetscInt i, k;
+
+  /* KS: Store the AGC variable index (scalar) */
+  if (opflow->use_agc) {
+    pbpolrajahiopsparse->agc_xidx = opflow->idxn2sd_map[ps->startxloc];
+  } else {
+    pbpolrajahiopsparse->agc_xidx = -1;
+  }
+
+  /* KS: Compute the number of nonzeros in equality, inequality constraint
+   * Jacobians and Hessian. Equality and Hessian counts are still obtained
+   * from PETSc via get_sparse_blocks_info; inequality count is computed
+   * axplicitly so we can skip PETSc */
   int nnz_eqjacsp = 0, nnz_ineqjacsp = 0, nnz_hesssp = 0;
+
+  /*
+   * KS: Count inequality Jacobian non-zeros. The traversal order must match
+   * the startineqloc assignment in OPFLOWModelSetUp_PBPOL: for each bus
+   * (bus ineq, then gen ineq), then for each line.
+   */
+  int geni = 0, gi;
+  for (i = 0; i < ps->nbus; i++) {
+    bus = &ps->bus[i];
+
+    /* Bus voltage-Q-bounds constraints (FIXED_WITHIN_QBOUNDS) */
+    if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+      if (bus->ide == PV_BUS || bus->ide == REF_BUS) {
+        busparams->ineqjacsp_idx[i] = nnz_ineqjacsp;
+        /* 2 rows, each with ngenON + 1 entries (one per gen Qg + one for V) */
+        nnz_ineqjacsp += 2 * (bus->ngenON + 1);
+      }/
+    }
+
+    /* KS: Generator set-point constraints */
+    gi = 0;
+    if (opflow->has_gensetpoint) {
+      for (k = 0; k < bus->ngen; k++) {
+        ierr = PSBUSGetGen(bus, k, &gen);
+        CHKERRQ(ierr);
+        if (!gen->status)
+          continue;
+        if (!gen->isrenewable) {
+          genparams->ineqjacspgen_idx[geni + gi] = nnz_ineqjacsp;
+          if (opflow->use_agc) {
+            nnz_ineqjacsp += 6; /* 2 rows x 3 entries (Pg, delPg, delP) */
+          }
+        }
+        gi++;
+      }
+    }
+
+    geni += bus->ngenON;
+  }
+
+  /* Line flow constraints */
+  int linej = 0;
+  for (i = 0; i < ps->nline; i++) {
+    line = &ps->line[i];
+    if (!line->status)
+      continue;
+    if (line->isdcline)
+      continue;
+
+    if (linej < opflow->nlinesmon && opflow->linesmon[linej] == i) {
+      lineparams->ineqjacsp_idx[linej] = nnz_ineqjacsp;
+      /* 2 rows x 4 entries (thetaf, Vmf, thetat, Vmt) */
+      int entries_per_line = 8;
+      if (opflow->allow_lineflow_violation) {
+        entries_per_line += 2; /* 1 slack entry per row */
+      }
+      nnz_ineqjacsp += entries_per_line;
+      linej++;
+    }
+  }
+
   opflow->nnz_eqjacsp = nnz_eqjacsp;
   opflow->nnz_ineqjacsp = nnz_ineqjacsp;
   opflow->nnz_hesssp = nnz_hesssp;
