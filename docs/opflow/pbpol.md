@@ -289,42 +289,30 @@ $$
 \frac{\partial^2 \Delta Q_f}{\partial \theta_{f}\partial \theta_{t}} = \sum_{A_{br}(f,t) = 1} V_{f}V_{t}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))
 $$
 ## Inequality constraint Hessian
-$$ \frac{\partial^2 (S^2_f)}{\partial V_f^2} = 2\left(2G_{ff}V_f + V_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t))\right)^2 + 4P_fG_{ff} + 2\left(-2B_{ff}V_f + V_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t))\right)^2 - 4Q_fB_{ff} $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial V_f \partial V_t} = 2(2G_{ff}V_f + V_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)))(V_f(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t))) + 2P_f(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)) + 2(-2B_{ff}V_f + V_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t)))(V_f(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t))) + 2Q_f(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t)) $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial V_f \partial \theta_f} = 2(2G_{ff}V_f + V_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)))(V_fV_t(-G_{ft}\sin(\theta_f-\theta_t) + B_{ft}\cos(\theta_f-\theta_t))) + 2P_f(V_t(-G_{ft}\sin(\theta_f-\theta_t) + B_{ft}\cos(\theta_f-\theta_t))) + 2(-2B_{ff}V_f + V_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t)))(V_fV_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t))) + 2Q_f(V_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t))) $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial V_f \partial \theta_t} = 2(2G_{ff}V_f + V_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)))(V_fV_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t))) + 2P_f(V_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t))) + 2(-2B_{ff}V_f + V_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t)))(V_fV_t(-G_{ft}\cos(\theta_f-\theta_t) - B_{ft}\sin(\theta_f-\theta_t))) + 2Q_f(V_t(-G_{ft}\cos(\theta_f-\theta_t) - B_{ft}\sin(\theta_f-\theta_t))) $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial V_t^2} = 2(V_f(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)))^2 + 2(V_f(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t)))^2 $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial V_t \partial \theta_f} = 2(V_f(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)))(V_fV_t(-G_{ft}\sin(\theta_f-\theta_t) + B_{ft}\cos(\theta_f-\theta_t))) + 2P_f(V_f(-G_{ft}\sin(\theta_f-\theta_t) + B_{ft}\cos(\theta_f-\theta_t))) + 2(V_f(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t)))(V_fV_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t))) + 2Q_f(V_f(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t))) $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial V_t \partial \theta_t} = 2(V_f(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)))(V_fV_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t))) + 2P_f(V_f(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t))) + 2(V_f(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t)))(V_fV_t(-G_{ft}\cos(\theta_f-\theta_t) - B_{ft}\sin(\theta_f-\theta_t))) + 2Q_f(V_f(-G_{ft}\cos(\theta_f-\theta_t) - B_{ft}\sin(\theta_f-\theta_t))) $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial \theta_f^2} = 2(V_fV_t(-G_{ft}\sin(\theta_f-\theta_t) + B_{ft}\cos(\theta_f-\theta_t)))^2 + 2P_f(V_fV_t(-G_{ft}\cos(\theta_f-\theta_t) - B_{ft}\sin(\theta_f-\theta_t))) + 2(V_fV_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)))^2 + 2Q_f(V_fV_t(-G_{ft}\sin(\theta_f-\theta_t) + B_{ft}\cos(\theta_f-\theta_t))) $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial \theta_f \partial \theta_t} = 2(V_fV_t(-G_{ft}\sin(\theta_f-\theta_t) + B_{ft}\cos(\theta_f-\theta_t)))(V_fV_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t))) + 2P_f(V_fV_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t))) + 2(V_fV_t(G_{ft}\cos(\theta_f-\theta_t) + B_{ft}\sin(\theta_f-\theta_t)))(V_fV_t(-G_{ft}\cos(\theta_f-\theta_t) - B_{ft}\sin(\theta_f-\theta_t))) + 2Q_f(V_fV_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t))) $$
-
-$$ \frac{\partial^2 (S^2_f)}{\partial \theta_t^2} = 2(V_fV_t(G_{ft}\sin(\theta_f-\theta_t) - B_{ft}\cos(\theta_f-\theta_t)))^2 + 2P_f(V_fV_t(-G_{ft}\cos(\theta_f-\theta_t) - B_{ft}\sin(\theta_f-\theta_t))) + 2(V_fV_t(-G_{ft}\cos(\theta_f-\theta_t) - B_{ft}\sin(\theta_f-\theta_t)))^2 + 2Q_f(V_fV_t(-G_{ft}\sin(\theta_f-\theta_t) + B_{ft}\cos(\theta_f-\theta_t))) $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial V_t^2} = 2\left(2G_{tt}V_t + V_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f))\right)^2 + 4P_tG_{tt} + 2\left(-2B_{tt}V_t + V_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f))\right)^2 - 4Q_tB_{tt} $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial V_t \partial V_f} = 2(2G_{tt}V_t + V_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)))(V_t(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f))) + 2P_t(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)) + 2(-2B_{tt}V_t + V_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f)))(V_t(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f))) + 2Q_t(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f)) $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial V_t \partial \theta_t} = 2(2G_{tt}V_t + V_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)))(V_tV_f(-G_{tf}\sin(\theta_t-\theta_f) + B_{tf}\cos(\theta_t-\theta_f))) + 2P_t(V_f(-G_{tf}\sin(\theta_t-\theta_f) + B_{tf}\cos(\theta_t-\theta_f))) + 2(-2B_{tt}V_t + V_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f)))(V_tV_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f))) + 2Q_t(V_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f))) $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial V_t \partial \theta_f} = 2(2G_{tt}V_t + V_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)))(V_tV_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f))) + 2P_t(V_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f))) + 2(-2B_{tt}V_t + V_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f)))(V_tV_f(-G_{tf}\cos(\theta_t-\theta_f) - B_{tf}\sin(\theta_t-\theta_f))) + 2Q_t(V_f(-G_{tf}\cos(\theta_t-\theta_f) - B_{tf}\sin(\theta_t-\theta_f))) $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial V_f^2} = 2(V_t(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)))^2 + 2(V_t(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f)))^2 $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial V_f \partial \theta_t} = 2(V_t(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)))(V_tV_f(-G_{tf}\sin(\theta_t-\theta_f) + B_{tf}\cos(\theta_t-\theta_f))) + 2P_t(V_t(-G_{tf}\sin(\theta_t-\theta_f) + B_{tf}\cos(\theta_t-\theta_f))) + 2(V_t(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f)))(V_tV_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f))) + 2Q_t(V_t(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f))) $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial V_f \partial \theta_f} = 2(V_t(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)))(V_tV_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f))) + 2P_t(V_t(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f))) + 2(V_t(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f)))(V_tV_f(-G_{tf}\cos(\theta_t-\theta_f) - B_{tf}\sin(\theta_t-\theta_f))) + 2Q_t(V_t(-G_{tf}\cos(\theta_t-\theta_f) - B_{tf}\sin(\theta_t-\theta_f))) $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial \theta_t^2} = 2(V_tV_f(-G_{tf}\sin(\theta_t-\theta_f) + B_{tf}\cos(\theta_t-\theta_f)))^2 + 2P_t(V_tV_f(-G_{tf}\cos(\theta_t-\theta_f) - B_{tf}\sin(\theta_t-\theta_f))) + 2(V_tV_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)))^2 + 2Q_t(V_tV_f(-G_{tf}\sin(\theta_t-\theta_f) + B_{tf}\cos(\theta_t-\theta_f))) $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial \theta_t \partial \theta_f} = 2(V_tV_f(-G_{tf}\sin(\theta_t-\theta_f) + B_{tf}\cos(\theta_t-\theta_f)))(V_tV_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f))) + 2P_t(V_tV_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f))) + 2(V_tV_f(G_{tf}\cos(\theta_t-\theta_f) + B_{tf}\sin(\theta_t-\theta_f)))(V_tV_f(-G_{tf}\cos(\theta_t-\theta_f) - B_{tf}\sin(\theta_t-\theta_f))) + 2Q_t(V_tV_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f))) $$
-
-$$ \frac{\partial^2 (S^2_t)}{\partial \theta_f^2} = 2(V_tV_f(G_{tf}\sin(\theta_t-\theta_f) - B_{tf}\cos(\theta_t-\theta_f)))^2 + 2P_t(V_tV_f(-G_{tf}\cos(\theta_t-\theta_f) - B_{tf}\sin(\theta_t-\theta_f))) + 2(V_tV_f(-G_{tf}\cos(\theta_t-\theta_f) - B_{tf}\sin(\theta_t-\theta_f)))^2 + 2Q_t(V_tV_f(-G_{tf}\sin(\theta_t-\theta_f) + B_{tf}\cos(\theta_t-\theta_f))) $$
+$$
+\begin{aligned}
+\text{\textbf{Second Derivatives of }} S^2_f: \\
+\frac{\partial^2 (S^2_f)}{\partial V_{f}^2} &= 4P_fG_{ff} - 4Q_fB_{ff} \\
+\frac{\partial^2 (S^2_f)}{\partial V_{f} \partial V_{t}} &= 2P_f(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t)) + 2Q_f(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t)) \\
+\frac{\partial^2 (S^2_f)}{\partial V_{f} \partial \theta_{f}} &= 2P_f(-V_{t}G_{ft}\sin(\theta_{f}-\theta_t) + V_{t}B_{ft}\cos(\theta_{f}-\theta_t)) + 2Q_f(V_{t}G_{ft}\cos(\theta_{f}-\theta_t) + V_{t}B_{ft}\sin(\theta_{f}-\theta_t)) \\
+\frac{\partial^2 (S^2_f)}{\partial V_{f} \partial \theta_{t}} &= 2P_f(V_{t}G_{ft}\sin(\theta_{f}-\theta_t) - V_{t}B_{ft}\cos(\theta_{f}-\theta_t)) + 2Q_f(-V_{t}G_{ft}\cos(\theta_{f}-\theta_t) - V_{t}B_{ft}\sin(\theta_{f}-\theta_t)) \\
+\frac{\partial^2 (S^2_f)}{\partial V_{t}^2} &= 0 \\
+\frac{\partial^2 (S^2_f)}{\partial V_{t} \partial \theta_{f}} &= 2P_fV_{f}(-G_{ft}\sin(\theta_{f}-\theta_t) + B_{ft}\cos(\theta_{f}-\theta_t)) + 2Q_fV_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t)) \\
+\frac{\partial^2 (S^2_f)}{\partial V_{t} \partial \theta_{t}} &= 2P_fV_{f}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t)) + 2Q_fV_{f}(-G_{ft}\cos(\theta_{f}-\theta_t) - B_{ft}\sin(\theta_{f}-\theta_t)) \\
+\frac{\partial^2 (S^2_f)}{\partial \theta_{f}^2} &= 2P_f(-V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t)) + 2Q_f(-V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t)) \\
+\frac{\partial^2 (S^2_f)}{\partial \theta_{f} \partial \theta_{t}} &= 2P_f(V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t)) + 2Q_f(V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t)) \\
+\frac{\partial^2 (S^2_f)}{\partial \theta_{t}^2} &= 2P_f(-V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t)) + 2Q_f(-V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t)) \\
+\\
+\text{\textbf{Second Derivatives of }} S^2_t: \\
+\frac{\partial^2 (S^2_t)}{\partial V_{f}^2} &= 0 \\
+\frac{\partial^2 (S^2_t)}{\partial V_{f} \partial V_{t}} &= 2P_t(G_{tf}\cos(\theta_{t}-\theta_f) + B_{tf}\sin(\theta_{t}-\theta_f)) + 2Q_t(G_{tf}\sin(\theta_{t}-\theta_f) - B_{tf}\cos(\theta_{t}-\theta_f)) \\
+\frac{\partial^2 (S^2_t)}{\partial V_{f} \partial \theta_{f}} &= 2P_tV_{t}(G_{tf}\sin(\theta_{t}-\theta_f) - B_{tf}\cos(\theta_{t}-\theta_f)) + 2Q_tV_{t}(-G_{tf}\cos(\theta_{t}-\theta_f) - B_{tf}\sin(\theta_{t}-\theta_f)) \\
+\frac{\partial^2 (S^2_t)}{\partial V_{f} \partial \theta_{t}} &= 2P_tV_{t}(-G_{tf}\sin(\theta_{t}-\theta_f) + B_{tf}\cos(\theta_{t}-\theta_f)) + 2Q_tV_{t}(G_{tf}\cos(\theta_{t}-\theta_f) + B_{tf}\sin(\theta_{t}-\theta_f)) \\
+\frac{\partial^2 (S^2_t)}{\partial V_{t}^2} &= 4P_tG_{tt} - 4Q_tB_{tt} \\
+\frac{\partial^2 (S^2_t)}{\partial V_{t} \partial \theta_{f}} &= 2P_tV_{f}(G_{tf}\sin(\theta_{t}-\theta_f) - B_{tf}\cos(\theta_{t}-\theta_f)) + 2Q_tV_{f}(-G_{tf}\cos(\theta_{t}-\theta_f) - B_{tf}\sin(\theta_{t}-\theta_f)) \\
+\frac{\partial^2 (S^2_t)}{\partial V_{t} \partial \theta_{t}} &= 2P_tV_{f}(-G_{tf}\sin(\theta_{t}-\theta_f) + B_{tf}\cos(\theta_{t}-\theta_f)) + 2Q_tV_{f}(G_{tf}\cos(\theta_{t}-\theta_f) + B_{tf}\sin(\theta_{t}-\theta_f)) \\
+\frac{\partial^2 (S^2_t)}{\partial \theta_{f}^2} &= 2P_t(-V_{t}V_{f}G_{tf}\cos(\theta_{t}-\theta_f) - V_{t}V_{f}B_{tf}\sin(\theta_{t}-\theta_f)) + 2Q_t(-V_{t}V_{f}G_{tf}\sin(\theta_{t}-\theta_f) + V_{t}V_{f}B_{tf}\cos(\theta_{t}-\theta_f)) \\
+\frac{\partial^2 (S^2_t)}{\partial \theta_{f} \partial \theta_{t}} &= 2P_t(V_{t}V_{f}G_{tf}\cos(\theta_{t}-\theta_f) + V_{t}V_{f}B_{tf}\sin(\theta_{t}-\theta_f)) + 2Q_t(V_{t}V_{f}G_{tf}\sin(\theta_{t}-\theta_f) - V_{t}V_{f}B_{tf}\cos(\theta_{t}-\theta_f)) \\
+\frac{\partial^2 (S^2_t)}{\partial \theta_{t}^2} &= 2P_t(-V_{t}V_{f}G_{tf}\cos(\theta_{t}-\theta_f) - V_{t}V_{f}B_{tf}\sin(\theta_{t}-\theta_f)) + 2Q_t(-V_{t}V_{f}G_{tf}\sin(\theta_{t}-\theta_f) + V_{t}V_{f}B_{tf}\cos(\theta_{t}-\theta_f))
+\end{aligned}
+$$
