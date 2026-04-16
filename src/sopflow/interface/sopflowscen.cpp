@@ -82,7 +82,7 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
   out = fgets(line, MAXLINE, fp);
   /* Parse wind generator numbers */
 
-  printf("Done Parsing Header. nw = %d\n", nw);
+  // printf("Done Parsing Header. nw = %d\n", nw);
 
   // Body Example
   // 1,0.1,8_Load_1_185.0_10,6_Load_1_105.5_20
@@ -96,7 +96,7 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
     scen_num -= 1; /* Scenario numbers start with 1 in the file, convert to
                       zero-based start */
 
-    printf("Parsing scenario number %d\n", scen_num);
+    // printf("Parsing scenario number %d\n", scen_num);
 
     // tok2 = strsep(&tok, sep2_dash); // Bus Number
 
@@ -122,7 +122,7 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
     tok = strtok(NULL, sep_comma);
     sscanf(tok, "%lf", &weight);
 
-    printf("Scenario weight = %lf\n", weight);
+    // printf("Scenario weight = %lf\n", weight);
 
     tok = strtok(NULL, sep_comma);
     while (tok != NULL) {
@@ -134,31 +134,31 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
       /* Parse generator info */
       tok2 = strsep(&tok, sep2_dash); // Bus Number
       sscanf(tok2, "%d", &gd.busnum);
-      printf("Bus number = %d\n", gd.busnum);
+      // printf("Bus number = %d\n", gd.busnum);
       tok3 = strsep(&tok, sep2_dash); // Type (Load or Gen)
       tok4 = strsep(&tok, sep2_dash); // CKT
       sscanf(tok4, "%d", &genid);
       snprintf(gd.id, 3, "%-2d", genid);
-      printf("Gen ID = %s\n", gd.id);
+      // printf("Gen ID = %s\n", gd.id);
       tok5 = strsep(&tok, sep2_dash); // Value1
       sscanf(tok5, "%lf", &gd.value1);
-      printf("Value1 = %lf\n", gd.value1);
+      // printf("Value1 = %lf\n", gd.value1);
       tok6 = strsep(&tok, sep2_dash); // Value2
       sscanf(tok6, "%lf", &gd.value2);
-      printf("Value2 = %lf\n", gd.value2);
+      // printf("Value2 = %lf\n", gd.value2);
 
       gendata.push_back(gd);
 
-      printf("## gd = %d, %s, %lf, %lf\n", gd.busnum, gd.id, gd.value1,
-             gd.value2);
+      // printf("## gd = %d, %s, %lf, %lf\n", gd.busnum, gd.id, gd.value1,
+      //        gd.value2);
 
       // printf("!Token = %s\n", gendata.back());
       tok = strtok(NULL, sep_comma);
 
-      printf("## tok = %s\n", tok);
+      // printf("## tok = %s\n", tok);
     }
 
-    printf("Done Parsing 1 line of Tokens\n");
+    // printf("Done Parsing 1 line of Tokens\n");
     scenario = &scenlist->scen[scen_num];
     forecast = &scenario->forecastlist[scenario->nforecast];
     forecast->num = scen_num;
