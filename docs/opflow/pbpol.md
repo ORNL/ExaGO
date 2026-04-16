@@ -141,24 +141,51 @@ where the maximum flow,$`S^+_{ft}`$ is either the RATE_A (normal), RATE_B (short
 ## Inequality constraint Jacobian
 
 $$
-\begin{array}{l}
-\frac{\partial (S^2_f)}{\partial V_{f}} &= 2P_f(2G_{ff}V_{f} + G_{ft}V_{t}\cos(\theta_{f}-\theta_t) + V_{t}B_{ft}\sin(\theta_{f}-\theta_t)) \\
-&\quad + 2Q_f(-2B_{ff}V_{f} + G_{ft}V_{t}\sin(\theta_{f}-\theta_t) - V_{t}B_{ft}\cos(\theta_{f}-\theta_t))\\
-\frac{\partial (S^2_f)}{\partial V_{t}} &= 2P_f\big(V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))\big) \\
-&\quad + 2Q_f\big(V_{f}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))\big)\\
-\frac{\partial (S^2_t)}{\partial V_f} &= 2P_t\big(V_{t}(G_{tf}\cos(\theta_{t}-\theta_f) + B_{tf}\sin(\theta_{t}-\theta_f))\big) \\
-&\quad + 2Q_t\big(V_{t}(G_{tf}\sin(\theta_{t}-\theta_f) - B_{tf}\cos(\theta_{t}-\theta_f))\big)\\
-\frac{\partial (S^2_t)}{\partial V_t} &= 2P_t(2G_{tt}V_{t} + G_{tf}V_{f}\cos(\theta_{t}-\theta_f) + V_{f}B_{tf}\sin(\theta_{t}-\theta_f)) \\
-&\quad + 2Q_t(-2B_{tt}V_{t} + G_{tf}V_{f}\sin(\theta_{t}-\theta_f) - V_{f}B_{tf}\cos(\theta_{t}-\theta_f))\\
-\frac{\partial (S^2_f)}{\partial \theta_{f}} &= 2P_f(-V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t)) \\
-&\quad + 2Q_f(V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t))\\
-\frac{\partial (S^2_f)}{\partial \theta_t} &= 2P_f(V_fV_tG_{ft}\sin(\theta_{f}-\theta_t) - V_fV_{t}B_{ft}\cos(\theta_{f}-\theta_t))\\
-&\quad + 2Q_f(-V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t))\\
-\frac{\partial (S^2_t)}{\partial \theta_f} &= 2P_t(V_{t}V_{f}G_{tf}\sin(\theta_{t}-\theta_f) - V_tV_{f}B_{tf}\cos(\theta_{t}-\theta_f))\\
-&\quad + 2Q_t(-V_{t}V_{f}G_{tf}\cos(\theta_{t}-\theta_f) - V_tV_{f}B_{tf}\sin(\theta_{t}-\theta_f))\\
-\frac{\partial (S^2_t)}{\partial \theta_t} &= 2P_t(-V_{t}V_{f}G_{tf}\sin(\theta_{t}-\theta_f) + V_tV_{f}B_{tf}\cos(\theta_{t}-\theta_f))\\
-&\quad + 2Q_t(V_{t}V_{f}G_{tf}\cos(\theta_{t}-\theta_f) + V_tV_{f}B_{tf}\sin(\theta_{t}-\theta_f))
-\end{array}
+\frac{\partial (S^2_f)}{\partial V_{f}} =
+2P_f(2G_{ff}V_{f} + G_{ft}V_{t}\cos(\theta_{f}-\theta_t) + V_{t}B_{ft}\sin(\theta_{f}-\theta_t))
++ 2Q_f(-2B_{ff}V_{f} + G_{ft}V_{t}\sin(\theta_{f}-\theta_t) - V_{t}B_{ft}\cos(\theta_{f}-\theta_t))
+$$
+
+$$
+\frac{\partial (S^2_f)}{\partial V_{t}} =
+2P_f\big(V_{f}(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))\big)
++ 2Q_f\big(V_{f}(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))\big)
+$$
+
+$$
+\frac{\partial (S^2_t)}{\partial V_f} =
+2P_t\big(V_{t}(G_{tf}\cos(\theta_{t}-\theta_f) + B_{tf}\sin(\theta_{t}-\theta_f))\big)
++ 2Q_t\big(V_{t}(G_{tf}\sin(\theta_{t}-\theta_f) - B_{tf}\cos(\theta_{t}-\theta_f))\big)
+$$
+
+$$
+\frac{\partial (S^2_t)}{\partial V_t} =
+2P_t(2G_{tt}V_{t} + G_{tf}V_{f}\cos(\theta_{t}-\theta_f) + V_{f}B_{tf}\sin(\theta_{t}-\theta_f))
++ 2Q_t(-2B_{tt}V_{t} + G_{tf}V_{f}\sin(\theta_{t}-\theta_f) - V_{f}B_{tf}\cos(\theta_{t}-\theta_f))
+$$
+
+$$
+\frac{\partial (S^2_f)}{\partial \theta_{f}} =
+2P_f(-V_{f}V_{t}G_{ft}\sin(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\cos(\theta_{f}-\theta_t))
++ 2Q_f(V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) + V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t))
+$$
+
+$$
+\frac{\partial (S^2_f)}{\partial \theta_t} =
+2P_f(V_fV_tG_{ft}\sin(\theta_{f}-\theta_t) - V_fV_{t}B_{ft}\cos(\theta_{f}-\theta_t))
++ 2Q_f(-V_{f}V_{t}G_{ft}\cos(\theta_{f}-\theta_t) - V_{f}V_{t}B_{ft}\sin(\theta_{f}-\theta_t))
+$$
+
+$$
+\frac{\partial (S^2_t)}{\partial \theta_f} =
+2P_t(V_{t}V_{f}G_{tf}\sin(\theta_{t}-\theta_f) - V_tV_{f}B_{tf}\cos(\theta_{t}-\theta_f))
++ 2Q_t(-V_{t}V_{f}G_{tf}\cos(\theta_{t}-\theta_f) - V_tV_{f}B_{tf}\sin(\theta_{t}-\theta_f))
+$$
+
+$$
+\frac{\partial (S^2_t)}{\partial \theta_t} =
+2P_t(-V_{t}V_{f}G_{tf}\sin(\theta_{t}-\theta_f) + V_tV_{f}B_{tf}\cos(\theta_{t}-\theta_f))
++ 2Q_t(V_{t}V_{f}G_{tf}\cos(\theta_{t}-\theta_f) + V_tV_{f}B_{tf}\sin(\theta_{t}-\theta_f))
 $$
 
 ## Objective Hessian
