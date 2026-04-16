@@ -292,14 +292,11 @@ $$
 ### Second Derivatives of \( S_f^2 \)
 
 $$
-\frac{\partial^2 (S^2_f)}{\partial V_{f}^2}
-= 4P_fG_{ff} - 4Q_fB_{ff}
+\frac{\partial^2 (S^2_f)}{\partial V_{f}^2} = 4P_fG_{ff} - 4Q_fB_{ff}
 $$
 
 $$
-\frac{\partial^2 (S^2_f)}{\partial V_{f} \partial V_{t}}
-= 2P_f(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t))
-+ 2Q_f(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))
+\frac{\partial^2 (S^2_f)}{\partial V_{f} \partial V_{t}} = 2P_f(G_{ft}\cos(\theta_{f}-\theta_t) + B_{ft}\sin(\theta_{f}-\theta_t)) + 2Q_f(G_{ft}\sin(\theta_{f}-\theta_t) - B_{ft}\cos(\theta_{f}-\theta_t))
 $$
 
 $$
