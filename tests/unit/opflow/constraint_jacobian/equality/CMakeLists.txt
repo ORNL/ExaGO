@@ -21,18 +21,17 @@ target_include_directories(
 
 # Network files to run on - doing 3 and 600 bus examples.
 set(prefix ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)
-set(obj_network_files testx1.m testx3.m testx600.m)
 # Map num_copies to a specific netfile
 set(num_copies 1 3 600)
 
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cecj.csv
+    ${CMAKE_CURRENT_BINARY_DIR}/cecj.csv COPYONLY)
 foreach(n IN LISTS num_copies)
   execute_process(
     COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gen_network.py ${n}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 endforeach()
-
-list(TRANSFORM obj_network_files PREPEND ${prefix})
 
 set(solvers "")
 set(models "")

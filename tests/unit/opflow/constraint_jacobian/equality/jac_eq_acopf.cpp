@@ -1,6 +1,8 @@
+#include <fstream>
 #include <iostream>
 #include <cstdio>
 #include <numeric>
+#include <sstream>
 #include <string>
 
 #include <private/opflowimpl.h>
@@ -10,6 +12,8 @@
 
 // #include "opflow_tests.h"
 #include "test_acopf_utils.h"
+
+inline constexpr double PI = 3.14159265358979323846;
 
 PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies);
 PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies);
@@ -30,15 +34,14 @@ PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies);
  *
  */
 int main(int argc, char **argv) {
-  PetscErrorCode ierr;
   PetscBool flg;
-  MPI_Comm comm = MPI_COMM_WORLD;
 
   char appname[] = "opflow";
   char help[] = "Unit tests for equality constraint Jacobians running opflow\n";
 
   /** Use `ExaGOLogSetLoggingFileName("opflow-logfile");` to log the output. */
-  ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);
+  PetscErrorCode ierr = ExaGOInitialize(MPI_COMM_WORLD,
+    &argc, &argv, appname, help);
   if (ierr) {
     fprintf(stderr, "Could not initialize ExaGO application %s.\n", appname);
     return ierr;
@@ -48,8 +51,8 @@ int main(int argc, char **argv) {
   int num_copies = 1;
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-num_copies", &num_copies, &flg));
 
-  // std::string netfile = "CECJ_unittestx" + std::to_string(num_copies) + ".m";
-  std::string netfile = "CECJ_unittest1.m";
+  std::string netfile = "CECJ_unittestx" + std::to_string(num_copies) + ".m";
+  // std::string netfile = "CECJ_unittest1.m";
 
   Mat J_eq_ref;
   ConstructReferenceJacobian(&J_eq_ref, num_copies);
@@ -71,8 +74,8 @@ int main(int argc, char **argv) {
   // The string lengths must be 65
   std::string modelname;
   std::string solvername;
-  ierr = OPFLOWGetModel(opflowtest, &modelname);
-  ierr = OPFLOWGetSolver(opflowtest, &solvername);
+  PetscCall(OPFLOWGetModel(opflowtest, &modelname));
+  PetscCall(OPFLOWGetSolver(opflowtest, &solvername));
 
   int fail = 0;
   // if (solvername == "IPOPT") {
@@ -106,6 +109,7 @@ int main(int argc, char **argv) {
   // else {
   //     throw ExaGOError("Unsupported solver name: " + solvername);
   // }
+
   PetscCall(OPFLOWDestroy(&opflowtest));
 
   PetscCall(VecDestroy(&X));
@@ -119,13 +123,14 @@ int main(int argc, char **argv) {
 
 PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies) {
   PetscFunctionBeginUser;
-  std::vector<double> x_base = {0, 2, 0, 2, 30, 2, 1.6, -2.2, 0, 2, 0, 2};
+
+  std::vector<PetscReal> x_base = {0, 2, 0, 2, 30*PI/180.0, 2, 1.6, -2.2, 0, 2, 0, 2};
   int nvals_base = 12;
   int nvals = (nvals_base - 2) * num_copies + 2;
-  std::vector<double> x;
+  std::vector<PetscReal> x;
   x.reserve(nvals);
   x.assign(begin(x_base), end(x_base));
-  std::vector<int> is(nvals);
+  std::vector<PetscInt> is(nvals);
   std::iota(begin(is), end(is), 0);
 
   for (int n = 1; n < num_copies; ++n) {
@@ -144,34 +149,56 @@ PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies) {
 
 PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies) {
   PetscFunctionBeginUser;
-  std::vector<int> i_base = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2,
-                             2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4,
-                             4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7,
-                             7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9};
-  std::vector<int> j_base = {0, 1, 2,  3,  0, 1, 2,  3,  0, 1, 2,  3,  4, 5,
-                             8, 9, 0,  1,  2, 3, 4,  5,  8, 9, 2,  3,  4, 5,
-                             6, 2, 3,  4,  5, 7, 2,  3,  8, 9, 10, 11, 2, 3,
-                             8, 9, 10, 11, 8, 9, 10, 11, 8, 9, 10, 11};
-  std::vector<double> v_base = {
-      0.8,  0.8,  -0.8, -0.8, -1.6, -2.0, 1.6,  -0.4, -0.8, -0.8, 0.8,
-      2.8,  0.8,  -0.2, -0.8, -0.8, 1.6,  -0.4, -3.6, -3.8, 0.4,  0.4,
-      1.6,  -0.4, -0.8, 0.2,  0.8,  1.8,  -1.0, -0.4, -0.4, 0.4,  -2.0,
-      -1.0, -0.8, -0.8, 1.6,  1.6,  -0.8, -0.8, 1.6,  -0.4, -3.2, -4.0,
-      1.6,  -0.4, -0.8, -0.8, 0.8,  0.8,  1.6,  -0.4, -1.6, -2.0};
 
-  int nrows_base = 10;
-  int ncols_base = 12;
+  // Read base Jacobian from file
+  std::ifstream ifs("cecj.csv");
+  if (!ifs) {
+    throw ExaGOError("Unable to open file: cecj.csv");
+  }
+  std::string line;
+  int nrows_base, ncols_base;
+  std::vector<PetscInt> i_base;
+  std::vector<PetscInt> j_base;
+  std::vector<PetscReal> v_base;
+  // Read matrix dimensions
+  std::getline(ifs, line);
+  std::istringstream iss(line);
+  std::string dimstr;
+  std::getline(iss, dimstr, ',');
+  std::istringstream(dimstr) >> nrows_base;
+  std::getline(iss, dimstr, ',');
+  std::istringstream(dimstr) >> ncols_base;
+  // Read triples
+  std::string estr;
+  while (std::getline(ifs, line)) {
+    PetscInt i, j;
+    PetscReal v;
+    iss = std::istringstream(line);
+    std::getline(iss, estr, ',');
+    std::istringstream(estr) >> i;
+    std::getline(iss, estr, ',');
+    std::istringstream(estr) >> j;
+    std::getline(iss, estr, ',');
+    std::istringstream(estr) >> v;
+    i_base.push_back(i - 1);
+    j_base.push_back(j - 1);
+    v_base.push_back(v);
+  }
+
   int nrows = (nrows_base - 2) * num_copies + 2;
   int ncols = (ncols_base - 2) * num_copies + 2;
 
   std::vector<int> i_coo;
-  i_coo.reserve(i_base.size() * num_copies);
-  i_coo.assign(begin(i_base), end(i_base));
   std::vector<int> j_coo;
-  j_coo.reserve(j_base.size() * num_copies);
-  j_coo.assign(begin(j_base), end(j_base));
   std::vector<double> v_coo;
-  v_coo.reserve(v_base.size() * num_copies);
+
+  std::size_t ncoo = i_base.size() * num_copies;
+  i_coo.reserve(ncoo);
+  j_coo.reserve(ncoo);
+  v_coo.reserve(ncoo);
+
+  i_coo.assign(begin(i_base), end(i_base));
+  j_coo.assign(begin(j_base), end(j_base));
   v_coo.assign(begin(v_base), end(v_base));
 
   for (int n = 1; n < num_copies; ++n) {
