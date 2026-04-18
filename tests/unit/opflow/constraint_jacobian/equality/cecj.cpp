@@ -9,45 +9,22 @@
 #include "opflow_tests.h"
 #include "test_acopf_utils.h"
 
-PetscErrorCode ConstructReferenceJacobian(Mat* J, int num_copies)
-{
+PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies) {
   PetscFunctionBeginUser;
-  std::vector<int> i_base = {
-      0, 0, 0, 0,
-      1, 1, 1, 1,
-      2, 2, 2, 2, 2, 2, 2, 2,
-      3, 3, 3, 3, 3, 3, 3, 3,
-      4, 4, 4, 4, 4,
-      5, 5, 5, 5, 5,
-      6, 6, 6, 6, 6, 6,
-      7, 7, 7, 7, 7, 7,
-      8, 8, 8, 8,
-      9, 9, 9, 9
-  };
-  std::vector<int> j_base = {
-      0, 1, 2, 3,
-      0, 1, 2, 3,
-      0, 1, 2, 3, 4, 5, 8, 9,
-      0, 1, 2, 3, 4, 5, 8, 9,
-      2, 3, 4, 5, 6,
-      2, 3, 4, 5, 7,
-      2, 3, 8, 9, 10, 11,
-      2, 3, 8, 9, 10, 11,
-      8, 9, 10, 11,
-      8, 9, 10, 11
-  };
+  std::vector<int> i_base = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2,
+                             2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4,
+                             4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7,
+                             7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9};
+  std::vector<int> j_base = {0, 1, 2,  3,  0, 1, 2,  3,  0, 1, 2,  3,  4, 5,
+                             8, 9, 0,  1,  2, 3, 4,  5,  8, 9, 2,  3,  4, 5,
+                             6, 2, 3,  4,  5, 7, 2,  3,  8, 9, 10, 11, 2, 3,
+                             8, 9, 10, 11, 8, 9, 10, 11, 8, 9, 10, 11};
   std::vector<double> v_base = {
-      0.8, 0.8, -0.8, -0.8,
-      -1.6, -2.0, 1.6, -0.4,
-      -0.8, -0.8, 0.8, 2.8, 0.8, -0.2, -0.8, -0.8,
-      1.6, -0.4, -3.6, -3.8, 0.4, 0.4, 1.6, -0.4,
-      -0.8, 0.2, 0.8, 1.8, -1.0,
-      -0.4, -0.4, 0.4, -2.0, -1.0,
-      -0.8, -0.8, 1.6, 1.6, -0.8, -0.8,
-      1.6, -0.4, -3.2, -4.0, 1.6, -0.4,
-      -0.8, -0.8, 0.8, 0.8,
-      1.6, -0.4, -1.6, -2.0
-  };
+      0.8,  0.8,  -0.8, -0.8, -1.6, -2.0, 1.6,  -0.4, -0.8, -0.8, 0.8,
+      2.8,  0.8,  -0.2, -0.8, -0.8, 1.6,  -0.4, -3.6, -3.8, 0.4,  0.4,
+      1.6,  -0.4, -0.8, 0.2,  0.8,  1.8,  -1.0, -0.4, -0.4, 0.4,  -2.0,
+      -1.0, -0.8, -0.8, 1.6,  1.6,  -0.8, -0.8, 1.6,  -0.4, -3.2, -4.0,
+      1.6,  -0.4, -0.8, -0.8, 0.8,  0.8,  1.6,  -0.4, -1.6, -2.0};
 
   int nrows_base = 10;
   int ncols_base = 12;
@@ -71,7 +48,8 @@ PetscErrorCode ConstructReferenceJacobian(Mat* J, int num_copies)
   PetscCall(MatCreate(PETSC_COMM_WORLD, J));
   PetscCall(MatSetSizes(*J, nrows, ncols, PETSC_DECIDE, PETSC_DECIDE));
   PetscCall(MatSetType(*J, MATSEQAIJ));
-  PetscCall(MatSetPreallocationCOO(*J, v_coo.size(), i_coo.data(), j_coo.data()));
+  PetscCall(
+      MatSetPreallocationCOO(*J, v_coo.size(), i_coo.data(), j_coo.data()));
   PetscCall(MatSetValuesCOO(*J, v_coo.data(), ADD_VALUES));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -93,7 +71,8 @@ int main(int argc, char **argv) {
   MPI_Comm comm = MPI_COMM_WORLD;
   int num_copies = 0;
 
-  char help[] = "Unit tests for comparing GPU- and CPU-computed equality constraint jacobians\n";
+  char help[] = "Unit tests for comparing GPU- and CPU-computed equality "
+                "constraint jacobians\n";
 
   /** Use `ExaGOLogSetLoggingFileName("opflow-logfile");` to log the output. */
   ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);

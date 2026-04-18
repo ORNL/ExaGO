@@ -107,7 +107,7 @@ In general, solution vector has following elements per bus:
 3. Generator MW (if generator bus)
 4. Generator MVar (if generator bus)
 
-For the 5-bus system **CEC-unittestx1.m**, solution vector is:
+For the 5-bus system **CICJ-unittestx1.m**, solution vector is:
 <table>
 <tr>
 <td>0</td> <td>2</td> <td>0</td> <td>2</td> <td>30*PI/180.0</td> <td>2</td> <td>1.6</td> <td>-2.2</td> <td>0</td> <td>2</td> <td>0</td> <td>2</td> 
@@ -190,7 +190,7 @@ With the parameters of the example network the matrix is:
 <td>Sf45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>15.36</td> <td>19.2</td> <td>-15.36</td> <td>3.84</td>
 </tr>
 <tr>
-<td>St45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-15.36</td> <td>3.94</td> <td>15.36</td> <td>19.2</td>
+<td>St45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-15.36</td> <td>3.84</td> <td>15.36</td> <td>19.2</td>
 </tr>
 </table>
 

@@ -40,8 +40,8 @@ int main(int argc, char **argv) {
   char help[] = "Unit tests for equality constraint Jacobians running opflow\n";
 
   /** Use `ExaGOLogSetLoggingFileName("opflow-logfile");` to log the output. */
-  PetscErrorCode ierr = ExaGOInitialize(MPI_COMM_WORLD,
-    &argc, &argv, appname, help);
+  PetscErrorCode ierr =
+      ExaGOInitialize(MPI_COMM_WORLD, &argc, &argv, appname, help);
   if (ierr) {
     fprintf(stderr, "Could not initialize ExaGO application %s.\n", appname);
     return ierr;
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
   // if (solvername == "IPOPT") {
   Mat J_eq;
   Mat J_ineq = nullptr;
-  PetscCall(MatDuplicate(J_eq_ref, MAT_SHARE_NONZERO_PATTERN, &J_eq));
+  PetscCall(OPFLOWGetConstraintJacobian(opflowtest, &J_eq, &J_ineq));
   PetscCall(OPFLOWComputeConstraintJacobian(opflowtest, X, J_eq, J_ineq));
 
   PetscViewerPushFormat(PETSC_VIEWER_STDOUT_SELF, PETSC_VIEWER_ASCII_DENSE);
@@ -114,8 +114,6 @@ int main(int argc, char **argv) {
 
   PetscCall(VecDestroy(&X));
   PetscCall(MatDestroy(&J_eq_ref));
-  PetscCall(MatDestroy(&J_eq));
-  // PetscCall(MatDestroy(&J_ineq));
 
   ExaGOFinalize();
   return fail;
@@ -124,7 +122,8 @@ int main(int argc, char **argv) {
 PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies) {
   PetscFunctionBeginUser;
 
-  std::vector<PetscReal> x_base = {0, 2, 0, 2, 30*PI/180.0, 2, 1.6, -2.2, 0, 2, 0, 2};
+  std::vector<PetscReal> x_base = {0, 2, 0, 2, 30 * PI / 180.0, 2, 1.6, -2.2,
+                                   0, 2, 0, 2};
   int nvals_base = 12;
   int nvals = (nvals_base - 2) * num_copies + 2;
   std::vector<PetscReal> x;
