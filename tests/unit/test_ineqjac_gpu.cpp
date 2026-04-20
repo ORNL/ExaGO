@@ -15,10 +15,6 @@
 #include <umpire/ResourceManager.hpp>
 #endif
 
-#ifdef EXAGO_ENABLE_GPU
-#include <hip/hip_runtime.h>
-#endif
-
 #include "model/power_bal_hiop/paramsrajahiop.h"
 #include "model/power_bal_hiop/pbpolrajahiopsparse_gpu.hpp"
 
