@@ -702,12 +702,12 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   // This only needs to be done once since the sparsity pattern of the Jacobian
   // does not change during the optimization.
   if (iJacS_dev != NULL && jJacS_dev != NULL) {
-    /* Set locations only */
+    /* Compute sparsity pattern on host, matching the flat-array layout
+       defined during setup in OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE. */
 
     roffset = 0;
     coffset = 0;
 
-    // Create arrays on the host to store i, j, and val arrays
     umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
     pbpolrajahiopsparse->i_jaceq =
@@ -717,35 +717,176 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     pbpolrajahiopsparse->val_jaceq =
         (double *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(double)));
 
-    iRowstart = pbpolrajahiopsparse->i_jaceq;
-    jColstart = pbpolrajahiopsparse->j_jaceq;
+    int *iRow = pbpolrajahiopsparse->i_jaceq;
+    int *jCol = pbpolrajahiopsparse->j_jaceq;
 
-    // Function pointer computeequalityconstraintjacobian points to
-    // OPFLOWComputeEqualityConstraintJacobian_PBPOL function.
-    // Use function from PBPOL model to create the sparsity pattern.
-    ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
-        opflow, opflow->X, opflow->Jac_Ge);
-    CHKERRQ(ierr);
+    PS ps = opflow->ps;
+    BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
+    GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
+    LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
+    LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
-    ierr = MatGetSize(opflow->Jac_Ge, &nrow, &ncol);
-    CHKERRQ(ierr);
+    int geni = 0, loadi = 0;
+    for (int ibus = 0; ibus < ps->nbus; ibus++) {
+      PSBUS bus = &ps->bus[ibus];
+      int P_row = roffset + busparams->gidx[ibus];
+      int Q_row = P_row + 1;
+      int theta_col = coffset + busparams->xidx[ibus];
+      int Vm_col = theta_col + 1;
+      int base;
 
-    /* Copy over locations to triplet format */
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      for (j = 0; j < nvals; j++) {
-        iRowstart[j] = roffset + i;
-        jColstart[j] = coffset + cols[j];
+      /* P-row self-admittance */
+      base = busparams->eqjacsp_selfidx[2 * ibus];
+      iRow[base] = P_row;
+      jCol[base] = theta_col;
+      iRow[base + 1] = P_row;
+      jCol[base + 1] = Vm_col;
+
+      if (bus->ide == ISOLATED_BUS) {
+        /* Q-row self-admittance for isolated bus */
+        base = busparams->eqjacsp_selfidx[2 * ibus + 1];
+        iRow[base] = Q_row;
+        jCol[base] = theta_col;
+        iRow[base + 1] = Q_row;
+        jCol[base + 1] = Vm_col;
+        continue;
       }
-      /* Increment iRow,jCol pointers */
-      iRowstart += nvals;
-      jColstart += nvals;
-      ierr = MatRestoreRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
+
+      /* P-row power imbalance */
+      if (opflow->include_powerimbalance_variables) {
+        base = busparams->jacsp_idx[ibus];
+        int pimb_col = coffset + busparams->xidxpimb[ibus];
+        iRow[base] = P_row;
+        jCol[base] = pimb_col;
+        iRow[base + 1] = P_row;
+        jCol[base + 1] = pimb_col + 1;
+      }
+
+      /* P-row gen Pg */
+      int gi = 0;
+      for (int k = 0; k < bus->ngen; k++) {
+        PSGEN gen;
+        PSBUSGetGen(bus, k, &gen);
+        if (!gen->status)
+          continue;
+        base = genparams->eqjacspbus_idx[geni + gi];
+        iRow[base] = P_row;
+        jCol[base] = coffset + genparams->xidx[geni + gi];
+        gi++;
+      }
+
+      /* P-row load loss */
+      if (opflow->include_loadloss_variables) {
+        for (int k = 0; k < bus->nload; k++) {
+          base = loadparams->jacsp_idx[loadi + k];
+          iRow[base] = P_row;
+          jCol[base] = coffset + loadparams->xidx[loadi + k];
+        }
+      }
+
+      /* Q-row self-admittance */
+      base = busparams->eqjacsp_selfidx[2 * ibus + 1];
+      iRow[base] = Q_row;
+      jCol[base] = theta_col;
+      iRow[base + 1] = Q_row;
+      jCol[base + 1] = Vm_col;
+
+      /* Q-row power imbalance */
+      if (opflow->include_powerimbalance_variables) {
+        base = busparams->jacsq_idx[ibus];
+        int pimb_col = coffset + busparams->xidxpimb[ibus];
+        iRow[base] = Q_row;
+        jCol[base] = pimb_col + 2;
+        iRow[base + 1] = Q_row;
+        jCol[base + 1] = pimb_col + 3;
+      }
+
+      /* Q-row gen Qg */
+      gi = 0;
+      for (int k = 0; k < bus->ngen; k++) {
+        PSGEN gen;
+        PSBUSGetGen(bus, k, &gen);
+        if (!gen->status)
+          continue;
+        base = genparams->eqjacsqbus_idx[geni + gi];
+        iRow[base] = Q_row;
+        jCol[base] = coffset + genparams->xidx[geni + gi] + 1;
+        gi++;
+      }
+
+      /* Q-row load loss */
+      if (opflow->include_loadloss_variables) {
+        for (int k = 0; k < bus->nload; k++) {
+          base = loadparams->jacsq_idx[loadi + k];
+          iRow[base] = Q_row;
+          jCol[base] = coffset + loadparams->xidx[loadi + k] + 1;
+        }
+      }
+
+      geni += bus->ngenON;
+      loadi += bus->nload;
     }
 
-    // Copy over i_jaceq and j_jaceq arrays to device
+    /* Line off-diagonal entries */
+    for (int l = 0; l < lineparams->nlineON; l++) {
+      if (lineparams->isdcline[l])
+        continue;
+
+      int base = lineparams->eqjacsp_idx[l];
+      int Pf_row = roffset + lineparams->geqidxf[l];
+      int Qf_row = Pf_row + 1;
+      int Pt_row = roffset + lineparams->geqidxt[l];
+      int Qt_row = Pt_row + 1;
+      int thetat_col = coffset + lineparams->xidxt[l];
+      int Vmt_col = thetat_col + 1;
+      int thetaf_col = coffset + lineparams->xidxf[l];
+      int Vmf_col = thetaf_col + 1;
+
+      /* From-bus off-diagonal: Pf w.r.t. thetat, Vmt */
+      iRow[base + 0] = Pf_row;
+      jCol[base + 0] = thetat_col;
+      iRow[base + 1] = Pf_row;
+      jCol[base + 1] = Vmt_col;
+      /* Qf w.r.t. thetat, Vmt */
+      iRow[base + 2] = Qf_row;
+      jCol[base + 2] = thetat_col;
+      iRow[base + 3] = Qf_row;
+      jCol[base + 3] = Vmt_col;
+      /* To-bus off-diagonal: Pt w.r.t. thetaf, Vmf */
+      iRow[base + 4] = Pt_row;
+      jCol[base + 4] = thetaf_col;
+      iRow[base + 5] = Pt_row;
+      jCol[base + 5] = Vmf_col;
+      /* Qt w.r.t. thetaf, Vmf */
+      iRow[base + 6] = Qt_row;
+      jCol[base + 6] = thetaf_col;
+      iRow[base + 7] = Qt_row;
+      jCol[base + 7] = Vmf_col;
+    }
+
+    /* Generator set-point equality constraint entries */
+    if (opflow->has_gensetpoint) {
+      for (int g = 0; g < genparams->ngenON; g++) {
+        if (genparams->isrenewable[g])
+          continue;
+        int base = genparams->eqjacspgen_idx[g];
+        int row0 = roffset + genparams->geqidxgen[g];
+        int row1 = row0 + 1;
+        int Pg_col = coffset + genparams->xidx[g];
+        int delPg_col = coffset + genparams->xpdevidx[g];
+        int Pset_col = coffset + genparams->xpsetidx[g];
+
+        iRow[base + 0] = row0;
+        jCol[base + 0] = Pg_col;
+        iRow[base + 1] = row0;
+        jCol[base + 1] = delPg_col;
+        iRow[base + 2] = row0;
+        jCol[base + 2] = Pset_col;
+        iRow[base + 3] = row1;
+        jCol[base + 3] = Pset_col;
+      }
+    }
+
     resmgr.copy(iJacS_dev, pbpolrajahiopsparse->i_jaceq);
     resmgr.copy(jJacS_dev, pbpolrajahiopsparse->j_jaceq);
   }
@@ -754,45 +895,10 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     ierr = PetscLogEventBegin(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
 
-    ierr = VecGetArray(opflow->X, &x);
-    CHKERRQ(ierr);
-
-    // Copy from device to host
-    umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-    registerWith(x, opflow->nx, resmgr, h_allocator_);
-    resmgr.copy((double *)x, (double *)x_dev);
-
-    ierr = VecRestoreArray(opflow->X, &x);
-    CHKERRQ(ierr);
-
-    // Compute equality constraint jacobian on the host
-    // Function pointer computeequalityconstraintjacobian points to the
-    // implementation OPFLOWComputeEqualityConstraintJacobian_PBPOL in the
-    // PBPOL model.
-    ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
-        opflow, opflow->X, opflow->Jac_Ge);
-    CHKERRQ(ierr);
-
-    ierr = MatGetSize(opflow->Jac_Ge, &nrow, &ncol);
-    CHKERRQ(ierr);
-
-    values = pbpolrajahiopsparse->val_jaceq;
-
-    // Unpack PETSc matrix and copy values to the host array in the
-    // PbpolModelRajaHiop struct.
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      for (j = 0; j < nvals; j++) {
-        values[j] = vals[j];
-      }
-      values += nvals;
-      ierr = MatRestoreRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-    }
-
-    // Copy over val_jaceq to device
-    resmgr.copy(MJacS_dev, pbpolrajahiopsparse->val_jaceq);
+    /* KS: Compute equality constraint Jacobian directly on device.
+       No H2D, D2H copies: x_dev is already on device, output goes
+       straight into MJacS_dev. */
+    ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, MJacS_dev);
 
     ierr = PetscLogEventEnd(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);

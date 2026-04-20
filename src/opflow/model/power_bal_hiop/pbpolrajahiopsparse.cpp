@@ -3,6 +3,8 @@
 #if defined(EXAGO_ENABLE_RAJA)
 #if defined(EXAGO_ENABLE_HIOP_SPARSE)
 
+#include <map>
+
 #include <private/opflowimpl.h>
 #include "pbpolrajahiopsparsekernels.hpp"
 
@@ -272,6 +274,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
    * from PETSc via get_sparse_blocks_info; inequality count is computed
    * axplicitly so we can skip PETSc */
   int nnz_eqjacsp = 0, nnz_ineqjacsp = 0, nnz_hesssp = 0;
+  int nnz_ineqjac = 0, nnz_hess = 0;
 
   /*
    * KS: Count inequality Jacobian non-zeros. The traversal order must match
@@ -333,6 +336,237 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     }
   }
 
+  /* Compute the number of nonzeros in equality constraint Jacobian
+   * and populate flat-array indices for the GPU kernel. */
+  geni = 0;
+  int loadi = 0;
+
+  for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+    PSBUS bus = &(ps->bus[ibus]);
+
+    /* P-row: bus self-admittance (theta, Vm) */
+    busparams->eqjacsp_selfidx[2 * ibus] = nnz_eqjacsp;
+    nnz_eqjacsp += 2;
+
+    if (bus->ide == ISOLATED_BUS) {
+      /* Q-row: bus self-admittance for isolated bus */
+      busparams->eqjacsp_selfidx[2 * ibus + 1] = nnz_eqjacsp;
+      nnz_eqjacsp += 2;
+      continue;
+    }
+
+    /* P-row: power imbalance variables */
+    if (opflow->include_powerimbalance_variables) {
+      busparams->jacsp_idx[ibus] = nnz_eqjacsp;
+      nnz_eqjacsp += 2;
+    }
+
+    /* P-row: generator Pg entries (-1 per active gen) */
+    int gi = 0;
+    for (int k = 0; k < bus->ngen; k++) {
+      PSGEN gen;
+      ierr = PSBUSGetGen(bus, k, &gen);
+      CHKERRQ(ierr);
+      if (!gen->status)
+        continue;
+      genparams->eqjacspbus_idx[geni + gi] = nnz_eqjacsp;
+      nnz_eqjacsp += 1;
+      gi++;
+    }
+
+    /* P-row: load loss entries (-1 per load) */
+    if (opflow->include_loadloss_variables) {
+      for (int k = 0; k < bus->nload; k++) {
+        PSLOAD load;
+        ierr = PSBUSGetLoad(bus, k, &load);
+        CHKERRQ(ierr);
+        loadparams->jacsp_idx[loadi + k] = nnz_eqjacsp;
+        nnz_eqjacsp += 1;
+      }
+    }
+
+    /* Q-row: bus self-admittance (theta, Vm) */
+    busparams->eqjacsp_selfidx[2 * ibus + 1] = nnz_eqjacsp;
+    nnz_eqjacsp += 2;
+
+    /* Q-row: power imbalance variables */
+    if (opflow->include_powerimbalance_variables) {
+      busparams->jacsq_idx[ibus] = nnz_eqjacsp;
+      nnz_eqjacsp += 2;
+    }
+
+    /* Q-row: generator Qg entries (-1 per active gen) */
+    gi = 0;
+    for (int k = 0; k < bus->ngen; k++) {
+      PSGEN gen;
+      ierr = PSBUSGetGen(bus, k, &gen);
+      CHKERRQ(ierr);
+      if (!gen->status)
+        continue;
+      genparams->eqjacsqbus_idx[geni + gi] = nnz_eqjacsp;
+      nnz_eqjacsp += 1;
+      gi++;
+    }
+
+    /* Q-row: load loss entries (-1 per load) */
+    if (opflow->include_loadloss_variables) {
+      for (int k = 0; k < bus->nload; k++) {
+        PSLOAD load;
+        ierr = PSBUSGetLoad(bus, k, &load);
+        CHKERRQ(ierr);
+        loadparams->jacsq_idx[loadi + k] = nnz_eqjacsp;
+        nnz_eqjacsp += 1;
+      }
+    }
+
+    geni += bus->ngenON;
+    loadi += bus->nload;
+  }
+
+  /* Line off-diagonal entries: 8 per unique (from_bus, to_bus) pair.
+     Parallel lines (same bus pair) share the same off-diagonal positions
+     and accumulate via atomicAdd in the GPU kernel. */
+  int linei = 0;
+  std::map<std::pair<int, int>, int> buspair_to_offdiag;
+  for (int iline = 0; iline < ps->nline; ++iline) {
+    PSLINE line = &(ps->line[iline]);
+    if (!line->status)
+      continue;
+
+    if (!line->isdcline) {
+      const PSBUS *connbuses;
+      ierr = PSLINEGetConnectedBuses(line, &connbuses);
+      CHKERRQ(ierr);
+      PSBUS busf = connbuses[0];
+      PSBUS bust = connbuses[1];
+      int busidxf = (int)(busf - ps->bus);
+      int busidxt = (int)(bust - ps->bus);
+
+      lineparams->eqjacsp_diag_idx[4 * linei + 0] =
+          busparams->eqjacsp_selfidx[2 * busidxf];
+      lineparams->eqjacsp_diag_idx[4 * linei + 1] =
+          busparams->eqjacsp_selfidx[2 * busidxf + 1];
+      lineparams->eqjacsp_diag_idx[4 * linei + 2] =
+          busparams->eqjacsp_selfidx[2 * busidxt];
+      lineparams->eqjacsp_diag_idx[4 * linei + 3] =
+          busparams->eqjacsp_selfidx[2 * busidxt + 1];
+
+      auto key = std::make_pair(std::min(busidxf, busidxt),
+                                std::max(busidxf, busidxt));
+      auto it = buspair_to_offdiag.find(key);
+      if (it != buspair_to_offdiag.end()) {
+        lineparams->eqjacsp_idx[linei] = it->second;
+      } else {
+        lineparams->eqjacsp_idx[linei] = nnz_eqjacsp;
+        buspair_to_offdiag[key] = nnz_eqjacsp;
+        nnz_eqjacsp += 8;
+      }
+    }
+
+    linei++;
+  }
+
+  /* Generator set-point equality constraint entries */
+  if (opflow->has_gensetpoint) {
+    geni = 0;
+    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+      PSBUS bus = &(ps->bus[ibus]);
+      int gi = 0;
+      for (int k = 0; k < bus->ngen; k++) {
+        PSGEN gen;
+        ierr = PSBUSGetGen(bus, k, &gen);
+        CHKERRQ(ierr);
+        if (!gen->status)
+          continue;
+        if (!gen->isrenewable) {
+          genparams->eqjacspgen_idx[geni + gi] = nnz_eqjacsp;
+          nnz_eqjacsp += 4;
+        }
+        gi++;
+      }
+      geni += bus->ngenON;
+    }
+  }
+
+  if (opflow->has_gensetpoint) {
+    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+      PSBUS bus = &(ps->bus[ibus]);
+      for (int bgen = 0; bgen < bus->ngen; ++bgen) {
+        PSGEN gen;
+        ierr = PSBUSGetGen(bus, bgen, &gen);
+        CHKERRQ(ierr);
+
+        if (!gen->status)
+          continue;
+
+        nnz_ineqjac += 6;
+      }
+    }
+  }
+
+  if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+      PSBUS bus = &(ps->bus[ibus]);
+      if (bus->ide == PV_BUS || bus->ide == REF_BUS) {
+        nnz_ineqjac += 2;
+      }
+    }
+  }
+
+  for (int iline = 0; iline < opflow->nlinesmon; ++iline) {
+    nnz_ineqjac += 8;
+  }
+
+  for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+    // reserve 2 real and 2 reactive entries for each bus
+    // 3 upper triangular
+    nnz_hess += 3;
+
+    if (opflow->include_powerimbalance_variables) {
+      nnz_hess += 2;
+    }
+  }
+
+  for (int i = 0; i < ps->ngen; ++i) {
+    PSGEN gen = &(ps->gen[i]);
+
+    if (!gen->status)
+      continue;
+
+    nnz_hess += 2;
+
+    if (opflow->has_gensetpoint) {
+      if (gen->isrenewable)
+        continue;
+
+      // later ...
+      // if (opflow->use_agc) {
+      //   nnz_hess += 5;
+      // }
+    }
+    if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+      nnz_hess += 2;
+    }
+  }
+
+  for (int iline = 0; iline < ps->nline; ++iline) {
+    PSLINE line = &(ps->line[iline]);
+
+    if (!line->status)
+      continue;
+
+    // 3 diagonal entries for on the from-bus rows (already defined)
+    // 3 diagonal entries for on the to-bus rows (already defined)
+    // 4 off-diagonal entries in upper part
+    nnz_hess += 4;
+  }
+
+  if (opflow->include_loadloss_variables) {
+    for (int iload = 0; iload < ps->nload; ++iload) {
+      nnz_hess += 2;
+    }
+  }
+
   opflow->nnz_eqjacsp = nnz_eqjacsp;
   opflow->nnz_ineqjacsp = nnz_ineqjacsp;
   opflow->nnz_hesssp = nnz_hesssp;
@@ -376,6 +610,20 @@ extern PetscErrorCode OPFLOWComputeHessian_PBPOL(OPFLOW, Vec, Vec, Vec, Mat);
 extern PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
     OPFLOW, const double *, const double *, const double *, const double *,
     const double *, double);
+
+/**
+ * Empty stub for the equality constraint Jacobian in the RAJA sparse model.
+ * Will be replaced with a full RAJA kernel implementation.
+ */
+PetscErrorCode
+OPFLOWComputeEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
+                                                            Vec X, Mat Je) {
+  (void)opflow;
+  (void)X;
+  (void)Je;
+  PetscFunctionBegin;
+  PetscFunctionReturn(0);
+}
 
 /**
  * @brief Constructor for the PBPOLRAJAHIOPSPARSE model.
@@ -430,7 +678,7 @@ PetscErrorCode OPFLOWModelCreate_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   opflow->modelops.solutiontops = OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.setup = OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.computeequalityconstraintjacobian =
-      OPFLOWComputeEqualityConstraintJacobian_PBPOL;
+      OPFLOWComputeEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.computesparseequalityconstraintjacobianhiop =
       OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.computeinequalityconstraintjacobian =

@@ -34,6 +34,8 @@ struct BUSParamsRajaHiop {
   int *ineqjacsp_idx; /* KS: index in flat sparse ineq Jacobian array */
   int *genoffset;     /* KS: Offset into flattened gen array for this bus */
   int *ngenONbus;     /* KS: Number of ON generators on this bus */
+  int *eqjacsp_selfidx; /* Flat-array position for bus self-admittance in eq
+                           Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
 
   // Device data
   int *isref_dev_;      /* isref[i] = 1 if bus is reference bus */
@@ -59,6 +61,7 @@ struct BUSParamsRajaHiop {
   int *ineqjacsp_idx_dev_; /* KS: device counterpart of ineqjacsp_idx_ */
   int *genoffset_dev_;     /* KS: dev counterpart of genoffset */
   int *ngenONbus_dev_;     /* KS: dev counterpart of ngenONbus */
+  int *eqjacsp_selfidx_dev_;
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
@@ -84,6 +87,7 @@ public:
   double *pgs;        /* real power output setpoint */
   double *apf;        /* generator AGC participation factor */
   double *vs;         /* voltage setpoint */
+  int *xpsetidx; /* Starting locations in X vector for set-point variables */
   int *isrenewable;   /* Is renewable generator? */
 
   int *xidx;     /* starting locations in X vector */
@@ -119,6 +123,7 @@ public:
   double *pgs_dev_;        /* real power output setpoint */
   double *apf_dev_;        /* KS: device counterpart of apf */
   double *vs_dev_;         /* KS: device counterpart of vs */
+  int *xpsetidx_dev_;
   int *isrenewable_dev_;   /* Is renewable generator? */
 
   int *xidx_dev_;        /* starting locations in X vector */
@@ -213,6 +218,11 @@ struct LINEParamsRajaHiop {
   int *linelimidx;    /* Indices for subset of lines that have finite limits */
   int *ineqjacsp_idx; /* KS: Position in flat sparse ineq Jacobian array */
   int *xslackidx;     /* Starting location of slack variables in X vector */
+  int *eqjacsp_idx;      /* Flat-array offset for off-diagonal eq Jacobian entries */
+  int *eqjacsp_diag_idx; /* Flat-array positions for diagonal entries per line
+                            [4*l+0]=from P-row, [4*l+1]=from Q-row,
+                            [4*l+2]=to P-row, [4*l+3]=to Q-row */
+  int *isdcline;         /* isdcline[i] = 1 if line is a DC line */
 
   // Device data
   double *Gff_dev_;    /* From side self conductance */
@@ -238,6 +248,9 @@ struct LINEParamsRajaHiop {
       linelimidx_dev_; /* Indices for subset of lines that have finite limits */
   int *ineqjacsp_idx_dev_; /* KS: Position in flat sparse ineq Jacobian array */
   int *xslackidx_dev_; /* Starting location of slack variables in X vector */
+  int *eqjacsp_idx_dev_;
+  int *eqjacsp_diag_idx_dev_;
+  int *isdcline_dev_;
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
