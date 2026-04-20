@@ -333,7 +333,7 @@ int main(int argc, char **argv) {
     }
 
     /* --- PETSc path: CPU compute only --- */
-    { 
+    {
       auto t0 = std::chrono::high_resolution_clock::now();
 
       for (int iter = 0; iter < niters; iter++) {
