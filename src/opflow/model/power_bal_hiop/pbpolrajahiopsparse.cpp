@@ -254,151 +254,88 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
   LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
-  /* Need to compute the number of nonzeros in equality, inequality constraint
-   * Jacobians and Hessian */
-  int nnz_eqjac = 0, nnz_ineqjac = 0, nnz_hess = 0;
+  PS ps = opflow->ps;
+  PSBUS bus;
+  PSGEN gen;
+  PSLINE line;
+  PetscInt i, k;
 
-  // Find nonzero entries in equality constraint Jacobian by row. Using
-  // OPFLOWComputeEqualityConstraintJacobian_PBPOL() as a guide.
+  /* KS: Store the AGC variable index (scalar) */
+  if (opflow->use_agc) {
+    pbpolrajahiopsparse->agc_xidx = opflow->idxn2sd_map[ps->startxloc];
+  } else {
+    pbpolrajahiopsparse->agc_xidx = -1;
+  }
 
-  PS ps = (PS)opflow->ps;
+  /* KS: Compute the number of nonzeros in equality, inequality constraint
+   * Jacobians and Hessian. Equality and Hessian counts are still obtained
+   * from PETSc via get_sparse_blocks_info; inequality count is computed
+   * axplicitly so we can skip PETSc */
+  int nnz_eqjacsp = 0, nnz_ineqjacsp = 0, nnz_hesssp = 0;
 
-  for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+  /*
+   * KS: Count inequality Jacobian non-zeros. The traversal order must match
+   * the startineqloc assignment in OPFLOWModelSetUp_PBPOL: for each bus
+   * (bus ineq, then gen ineq), then for each line.
+   */
+  int geni = 0, gi;
+  for (i = 0; i < ps->nbus; i++) {
+    bus = &ps->bus[i];
 
-    PSBUS bus = &(ps->bus[ibus]);
-
-    // Nonzero entries used by each *bus* starts here
-
-    // no matter what, each bus uses 2 rows and 2 columns
-    // row 1 = real, row2 = reactive
-    nnz_eqjac += 2;
-    nnz_eqjac += 2;
-
-    if (bus->ide == ISOLATED_BUS) {
-      continue;
-    }
-
-    if (opflow->include_powerimbalance_variables) {
-      // 2 more entries on both real and reactive
-      nnz_eqjac += 4;
-    }
-
-    if (opflow->has_gensetpoint) {
-      for (int bgen = 0; bgen < bus->ngen; ++bgen) {
-        PSGEN gen;
-        ierr = PSBUSGetGen(bus, bgen, &gen);
-        CHKERRQ(ierr);
-
-        if (!gen->status || gen->isrenewable)
-          continue;
-
-        // each generator uses 2 rows, 3 columns real, 1 column reactive
-        nnz_eqjac += 4;
+    /* Bus voltage-Q-bounds constraints (FIXED_WITHIN_QBOUNDS) */
+    if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+      if (bus->ide == PV_BUS || bus->ide == REF_BUS) {
+        busparams->ineqjacsp_idx[i] = nnz_ineqjacsp;
+        /* 2 rows, each with ngenON + 1 entries (one per gen Qg + one for V) */
+        nnz_ineqjacsp += 2 * (bus->ngenON + 1);
       }
     }
-  }
 
-  // Go through the lines
-  for (int iline = 0; iline <= ps->nline; ++iline) {
-    PSLINE line = &(ps->line[iline]);
-
-    if (!line->status)
-      continue;
-
-    // each line adds 4 (off-diagonal) entries for the "to" bus and 4
-    // entries for the "from" bus.  Each line also modifies 4 existing
-    // "to" and "from" bus entries.
-    nnz_eqjac += 4;
-    nnz_eqjac += 4;
-  }
-
-  // if there are lines, non-zeros were over counted
-  if (ps->nline > 0) {
-    nnz_eqjac -= 8;
-  }
-
-  if (opflow->has_gensetpoint) {
-    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-      PSBUS bus = &(ps->bus[ibus]);
-      for (int bgen = 0; bgen < bus->ngen; ++bgen) {
-        PSGEN gen;
-        ierr = PSBUSGetGen(bus, bgen, &gen);
+    /* KS: Generator set-point constraints */
+    gi = 0;
+    if (opflow->has_gensetpoint) {
+      for (k = 0; k < bus->ngen; k++) {
+        ierr = PSBUSGetGen(bus, k, &gen);
         CHKERRQ(ierr);
-
         if (!gen->status)
           continue;
-
-        nnz_ineqjac += 6;
+        if (!gen->isrenewable) {
+          genparams->ineqjacspgen_idx[geni + gi] = nnz_ineqjacsp;
+          if (opflow->use_agc) {
+            nnz_ineqjacsp += 6; /* 2 rows x 3 entries (Pg, delPg, delP) */
+          }
+        }
+        gi++;
       }
     }
+
+    geni += bus->ngenON;
   }
 
-  if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
-    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-      PSBUS bus = &(ps->bus[ibus]);
-      if (bus->ide == PV_BUS || bus->ide == REF_BUS) {
-        nnz_ineqjac += 2;
-      }
-    }
-  }
-
-  for (int iline = 0; iline < opflow->nlinesmon; ++iline) {
-    nnz_ineqjac += 8;
-  }
-
-  for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-    // reserve 2 real and 2 reactive entries for each bus
-    // 3 upper triangular
-    nnz_hess += 3;
-
-    if (opflow->include_powerimbalance_variables) {
-      nnz_hess += 2;
-    }
-  }
-
-  for (int i = 0; i < ps->ngen; ++i) {
-    PSGEN gen = &(ps->gen[i]);
-
-    if (!gen->status)
-      continue;
-
-    nnz_hess += 2;
-
-    if (opflow->has_gensetpoint) {
-      if (gen->isrenewable)
-        continue;
-
-      // later ...
-      // if (opflow->use_agc) {
-      //   nnz_hess += 5;
-      // }
-    }
-    if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
-      nnz_hess += 2;
-    }
-  }
-
-  for (int iline = 0; iline < ps->nline; ++iline) {
-    PSLINE line = &(ps->line[iline]);
-
+  /* Line flow constraints */
+  int linej = 0;
+  for (i = 0; i < ps->nline; i++) {
+    line = &ps->line[i];
     if (!line->status)
       continue;
+    if (line->isdcline)
+      continue;
 
-    // 3 diagonal entries for on the from-bus rows (already defined)
-    // 3 diagonal entries for on the to-bus rows (already defined)
-    // 4 off-diagonal entries in upper part
-    nnz_hess += 4;
-  }
-
-  if (opflow->include_loadloss_variables) {
-    for (int iload = 0; iload < ps->nload; ++iload) {
-      nnz_hess += 2;
+    if (linej < opflow->nlinesmon && opflow->linesmon[linej] == i) {
+      lineparams->ineqjacsp_idx[linej] = nnz_ineqjacsp;
+      /* 2 rows x 4 entries (thetaf, Vmf, thetat, Vmt) */
+      int entries_per_line = 8;
+      if (opflow->allow_lineflow_violation) {
+        entries_per_line += 2; /* 1 slack entry per row */
+      }
+      nnz_ineqjacsp += entries_per_line;
+      linej++;
     }
   }
 
-  opflow->nnz_eqjacsp = nnz_eqjac;
-  opflow->nnz_ineqjacsp = nnz_ineqjac;
-  opflow->nnz_hesssp = nnz_hess;
+  opflow->nnz_eqjacsp = nnz_eqjacsp;
+  opflow->nnz_ineqjacsp = nnz_ineqjacsp;
+  opflow->nnz_hesssp = nnz_hesssp;
 
   ierr = busparams->copy(opflow);
   ierr = genparams->copy(opflow);

@@ -14,6 +14,7 @@
 #include <private/opflowimpl.h>
 #include "pbpolrajahiopsparsekernels.hpp"
 #include "pbpolrajahiopsparse.hpp"
+#include "pbpolrajahiopsparse_gpu.hpp"
 
 /**
  * @brief Set the initial guess array for the PBPOLRAJAHIOPSPARSE model.
@@ -647,43 +648,11 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       ierr = PetscLogEventBegin(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
 
-      ierr = VecGetArray(opflow->X, &x);
-      CHKERRQ(ierr);
-
-      // Copy from device to host
-      umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-      registerWith(x, opflow->nx, resmgr, h_allocator_);
-      resmgr.copy((double *)x, (double *)x_dev);
-
-      ierr = VecRestoreArray(opflow->X, &x);
-      CHKERRQ(ierr);
-
-      // Compute inequality constraint jacobian on the host
-      // The function pointer computeinequalityconstraintjacobian points to
-      // OPFLOWComputeInequalityConstraintJacobian_PBPOL
-      ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
-          opflow, opflow->X, opflow->Jac_Gi);
-      CHKERRQ(ierr);
-
-      ierr = MatGetSize(opflow->Jac_Gi, &nrow, &ncol);
-      CHKERRQ(ierr);
-
-      values = pbpolrajahiopsparse->val_jacineq;
-      // Unpack PETSc matrix and copy values to the array `values` in
-      // PbpolModelRajaHiop struct.
-      for (i = 0; i < nrow; i++) {
-        ierr = MatGetRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
-        CHKERRQ(ierr);
-        for (j = 0; j < nvals; j++) {
-          values[j] = vals[j];
-        }
-        values += nvals;
-        ierr = MatRestoreRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
-        CHKERRQ(ierr);
-      }
-      // Copy over val_jacineq to device
-      resmgr.copy(MJacS_dev + opflow->nnz_eqjacsp,
-                  pbpolrajahiopsparse->val_jacineq);
+      /* KS: Compute inequality constraint Jacobian directly on device.
+         No H2D, D2H copies: x_dev is already on device, output goes
+         straight into the ineq portion of MJacS_dev. */
+      ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(
+          opflow, x_dev, MJacS_dev + opflow->nnz_eqjacsp);
 
       ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);

@@ -13,6 +13,17 @@ add_executable(test_pflow test_pflow.cpp utils/test_acopf_utils.cpp)
 target_link_libraries(test_pflow ExaGO::PFLOW)
 target_include_directories(test_pflow PRIVATE ./utils)
 
+if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_HIOP_SPARSE)
+  if(EXAGO_ENABLE_CUDA)
+    set_source_files_properties(test_ineqjac_gpu.cpp PROPERTIES LANGUAGE CUDA)
+  endif()
+  add_executable(test_ineqjac_gpu test_ineqjac_gpu.cpp)
+  target_link_libraries(test_ineqjac_gpu ExaGO::OPFLOW)
+  target_include_directories(
+    test_ineqjac_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src/opflow
+  )
+endif()
+
 add_executable(test_error_handler test_error_handler.cpp)
 target_link_libraries(test_error_handler ExaGO::UTILS)
 
@@ -48,6 +59,22 @@ if(EXAGO_RUN_TESTS)
     NETFILES
     ${network_files}
   )
+
+  if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_HIOP_SPARSE)
+    exago_add_test(
+      NAME
+      "UNIT_TEST_INEQJAC_GPU"
+      DEPENDS
+      HIOP
+      COMMAND
+      ${RUNCMD}
+      $<TARGET_FILE:test_ineqjac_gpu>
+      -opflow_genbusvoltage
+      VARIABLE_WITHIN_BOUNDS
+      NETFILES
+      ${network_files}
+    )
+  endif()
 
   exago_add_test(
     NAME UNIT_TESTS_UTILS COMMAND $<TARGET_FILE:test_error_handler>
