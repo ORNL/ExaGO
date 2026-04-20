@@ -332,6 +332,23 @@ int main(int argc, char **argv) {
 #endif
     }
 
+    /* --- PETSc path: CPU compute only --- */
+    { 
+      auto t0 = std::chrono::high_resolution_clock::now();
+
+      for (int iter = 0; iter < niters; iter++) {
+        ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
+            opflow, opflow->X, opflow->Jac_Gi);
+      }
+
+      auto t1 = std::chrono::high_resolution_clock::now();
+
+      double petsc_us =
+          std::chrono::duration<double, std::micro>(t1 - t0).count() / niters;
+      std::cout << "  PETSc path (compute only):               " << petsc_us
+                << " us/iter" << std::endl;
+    }
+
     /* --- GPU path: RAJA kernels, no copies --- */
     {
       double *bench_dev;
