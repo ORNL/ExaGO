@@ -29,6 +29,8 @@ struct BUSParamsRajaHiop {
   int *jacsp_idx;  /* Location number in the sparse Jacobian for Pimb */
   int *jacsq_idx;  /* Location number in the sparse Jacobian for Qimb */
   int *hesssp_idx; /* Location number in the Hessian */
+  int *eqjacsp_selfidx; /* Flat-array position for bus self-admittance in eq
+                           Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
 
   // Device data
   int *isref_dev_;      /* isref[i] = 1 if bus is reference bus */
@@ -49,6 +51,7 @@ struct BUSParamsRajaHiop {
   int *jacsp_idx_dev_;  /* Location number in the sparse Jacobian for Pimb */
   int *jacsq_idx_dev_;  /* Location number in the sparse Jacobian for Qimb */
   int *hesssp_idx_dev_; /* Location number in the Hessian */
+  int *eqjacsp_selfidx_dev_;
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
@@ -72,6 +75,8 @@ public:
   double *qt;         /* min. reactive power gen. limits */
   double *qb;         /* max. reactive power gen. limits */
   double *pgs;        /* real power output setpoint */
+  int *xpdevidx; /* Starting locations in X vector for deviation variables */
+  int *xpsetidx; /* Starting locations in X vector for set-point variables */
   int *isrenewable;   /* Is renewable generator? */
 
   int *xidx; /* starting locations in X vector */
@@ -104,6 +109,8 @@ public:
   double *qt_dev_;         /* min. reactive power gen. limits */
   double *qb_dev_;         /* max. reactive power gen. limits */
   double *pgs_dev_;        /* real power output setpoint */
+  int *xpdevidx_dev_;
+  int *xpsetidx_dev_;
   int *isrenewable_dev_;   /* Is renewable generator? */
 
   int *xidx_dev_;        /* starting locations in X vector */
@@ -195,6 +202,11 @@ struct LINEParamsRajaHiop {
   int *gbineqidx;  /* Starting location to insert contribution to inequality
                       constraint bound */
   int *linelimidx; /* Indices for subset of lines that have finite limits */
+  int *eqjacsp_idx;      /* Flat-array offset for off-diagonal eq Jacobian entries */
+  int *eqjacsp_diag_idx; /* Flat-array positions for diagonal entries per line
+                            [4*l+0]=from P-row, [4*l+1]=from Q-row,
+                            [4*l+2]=to P-row, [4*l+3]=to Q-row */
+  int *isdcline;         /* isdcline[i] = 1 if line is a DC line */
 
   // Device data
   double *Gff_dev_;    /* From side self conductance */
@@ -218,6 +230,9 @@ struct LINEParamsRajaHiop {
                           constraint bound */
   int *
       linelimidx_dev_; /* Indices for subset of lines that have finite limits */
+  int *eqjacsp_idx_dev_;
+  int *eqjacsp_diag_idx_dev_;
+  int *isdcline_dev_;
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);

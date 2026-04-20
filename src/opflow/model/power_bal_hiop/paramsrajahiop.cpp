@@ -21,6 +21,7 @@ int BUSParamsRajaHiop::destroy(OPFLOW opflow) {
   h_allocator_.deallocate(bl);
   h_allocator_.deallocate(xidx);
   h_allocator_.deallocate(gidx);
+  h_allocator_.deallocate(eqjacsp_selfidx);
   if (opflow->include_powerimbalance_variables) {
     h_allocator_.deallocate(xidxpimb);
     h_allocator_.deallocate(powerimbalance_penalty);
@@ -40,6 +41,7 @@ int BUSParamsRajaHiop::destroy(OPFLOW opflow) {
   d_allocator_.deallocate(bl_dev_);
   d_allocator_.deallocate(xidx_dev_);
   d_allocator_.deallocate(gidx_dev_);
+  d_allocator_.deallocate(eqjacsp_selfidx_dev_);
   if (opflow->include_powerimbalance_variables) {
     d_allocator_.deallocate(xidxpimb_dev_);
     d_allocator_.deallocate(powerimbalance_penalty_dev_);
@@ -74,6 +76,7 @@ int BUSParamsRajaHiop::copy(OPFLOW opflow) {
 
   resmgr.copy(xidx_dev_, xidx);
   resmgr.copy(gidx_dev_, gidx);
+  resmgr.copy(eqjacsp_selfidx_dev_, eqjacsp_selfidx);
   if (opflow->include_powerimbalance_variables) {
     resmgr.copy(xidxpimb_dev_, xidxpimb);
     resmgr.copy(jacsp_idx_dev_, jacsp_idx);
@@ -93,6 +96,7 @@ int BUSParamsRajaHiop::copy(OPFLOW opflow) {
   xidx_dev_ = xidx;
   xidxpimb_dev_ = xidxpimb;
   gidx_dev_ = gidx;
+  eqjacsp_selfidx_dev_ = eqjacsp_selfidx;
   jacsp_idx_dev_ = jacsp_idx;
   jacsq_idx_dev_ = jacsq_idx;
   powerimbalance_penalty_dev_ = powerimbalance_penalty;
@@ -125,6 +129,7 @@ int BUSParamsRajaHiop::allocate(OPFLOW opflow) {
 
   xidx = paramAlloc<int>(h_allocator_, nbus);
   gidx = paramAlloc<int>(h_allocator_, nbus);
+  eqjacsp_selfidx = paramAlloc<int>(h_allocator_, 2 * nbus);
 
   if (opflow->include_powerimbalance_variables) {
     xidxpimb = paramAlloc<int>(h_allocator_, nbus);
@@ -193,6 +198,7 @@ int BUSParamsRajaHiop::allocate(OPFLOW opflow) {
 
   xidx_dev_ = paramAlloc<int>(d_allocator_, nbus);
   gidx_dev_ = paramAlloc<int>(d_allocator_, nbus);
+  eqjacsp_selfidx_dev_ = paramAlloc<int>(d_allocator_, 2 * nbus);
 
   if (opflow->include_powerimbalance_variables) {
     xidxpimb_dev_ = paramAlloc<int>(d_allocator_, nbus);
@@ -232,6 +238,9 @@ int LINEParamsRajaHiop::copy(OPFLOW opflow) {
     resmgr.copy(gbineqidx_dev_, gbineqidx);
     resmgr.copy(linelimidx_dev_, linelimidx);
   }
+  resmgr.copy(eqjacsp_idx_dev_, eqjacsp_idx);
+  resmgr.copy(eqjacsp_diag_idx_dev_, eqjacsp_diag_idx);
+  resmgr.copy(isdcline_dev_, isdcline);
 #else
   Gff_dev_ = Gff;
   Bff_dev_ = Bff;
@@ -251,6 +260,9 @@ int LINEParamsRajaHiop::copy(OPFLOW opflow) {
     gbineqidx_dev_ = gbineqidx;
     linelimidx_dev_ = linelimidx;
   }
+  eqjacsp_idx_dev_ = eqjacsp_idx;
+  eqjacsp_diag_idx_dev_ = eqjacsp_diag_idx;
+  isdcline_dev_ = isdcline;
 #endif
   return 0;
 }
@@ -278,6 +290,9 @@ int LINEParamsRajaHiop::destroy(OPFLOW opflow) {
     h_allocator_.deallocate(gbineqidx);
     h_allocator_.deallocate(linelimidx);
   }
+  h_allocator_.deallocate(eqjacsp_idx);
+  h_allocator_.deallocate(eqjacsp_diag_idx);
+  h_allocator_.deallocate(isdcline);
 
 #ifdef EXAGO_ENABLE_GPU
   // Destroy parameter arrays on the device
@@ -302,6 +317,9 @@ int LINEParamsRajaHiop::destroy(OPFLOW opflow) {
     d_allocator_.deallocate(gbineqidx_dev_);
     d_allocator_.deallocate(linelimidx_dev_);
   }
+  d_allocator_.deallocate(eqjacsp_idx_dev_);
+  d_allocator_.deallocate(eqjacsp_diag_idx_dev_);
+  d_allocator_.deallocate(isdcline_dev_);
 #endif
 
   return 0;
@@ -350,6 +368,10 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
     gbineqidx = paramAlloc<int>(h_allocator_, nlinelim);
   }
 
+  eqjacsp_idx = paramAlloc<int>(h_allocator_, nlineON);
+  eqjacsp_diag_idx = paramAlloc<int>(h_allocator_, 4 * nlineON);
+  isdcline = paramAlloc<int>(h_allocator_, nlineON);
+
   PetscInt j = 0;
   /* Populate arrays */
   for (i = 0; i < ps->nline; i++) {
@@ -394,6 +416,7 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
       j++;
     }
 
+    isdcline[linei] = (int)line->isdcline;
     linei++;
   }
 
@@ -421,6 +444,10 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
     gbineqidx_dev_ = paramAlloc<int>(d_allocator_, nlinelim);
     linelimidx_dev_ = paramAlloc<int>(d_allocator_, nlinelim);
   }
+
+  eqjacsp_idx_dev_ = paramAlloc<int>(d_allocator_, nlineON);
+  eqjacsp_diag_idx_dev_ = paramAlloc<int>(d_allocator_, 4 * nlineON);
+  isdcline_dev_ = paramAlloc<int>(d_allocator_, nlineON);
 #endif
   return 0;
 }
@@ -568,6 +595,8 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
     h_allocator_.deallocate(gineqidxgen);
     h_allocator_.deallocate(gbineqidxgen);
     h_allocator_.deallocate(pgs);
+    h_allocator_.deallocate(xpdevidx);
+    h_allocator_.deallocate(xpsetidx);
     h_allocator_.deallocate(eqjacspgen_idx);
     h_allocator_.deallocate(ineqjacspgen_idx);
   }
@@ -591,6 +620,8 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
     d_allocator_.deallocate(gineqidxgen_dev_);
     d_allocator_.deallocate(gbineqidxgen_dev_);
     d_allocator_.deallocate(pgs_dev_);
+    d_allocator_.deallocate(xpdevidx_dev_);
+    d_allocator_.deallocate(xpsetidx_dev_);
     d_allocator_.deallocate(eqjacspgen_idx_dev_);
     d_allocator_.deallocate(ineqjacspgen_idx_dev_);
   }
@@ -629,6 +660,8 @@ int GENParamsRajaHiop::copy(OPFLOW opflow) {
     resmgr.copy(eqjacspgen_idx_dev_, eqjacspgen_idx);
     resmgr.copy(ineqjacspgen_idx_dev_, ineqjacspgen_idx);
     resmgr.copy(pgs_dev_, pgs);
+    resmgr.copy(xpdevidx_dev_, xpdevidx);
+    resmgr.copy(xpsetidx_dev_, xpsetidx);
   }
 #else
   cost_alpha_dev_ = cost_alpha;
@@ -650,6 +683,8 @@ int GENParamsRajaHiop::copy(OPFLOW opflow) {
   eqjacspgen_idx_dev_ = eqjacspgen_idx;
   ineqjacspgen_idx_dev_ = ineqjacspgen_idx;
   pgs_dev_ = pgs;
+  xpdevidx_dev_ = xpdevidx;
+  xpsetidx_dev_ = xpsetidx;
 #endif
   return 0;
 }
@@ -697,6 +732,8 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
     eqjacspgen_idx = paramAlloc<int>(h_allocator_, ngenON);
     ineqjacspgen_idx = paramAlloc<int>(h_allocator_, ngenON);
     pgs = paramAlloc<double>(h_allocator_, ngenON);
+    xpdevidx = paramAlloc<int>(h_allocator_, ngenON);
+    xpsetidx = paramAlloc<int>(h_allocator_, ngenON);
   }
 
   /* Insert data in genparams */
@@ -722,6 +759,10 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
       isrenewable[geni] = (int)gen->isrenewable;
       if (opflow->has_gensetpoint) {
         pgs[geni] = gen->pgs;
+        if (!gen->isrenewable) {
+          xpdevidx[geni] = opflow->idxn2sd_map[gen->startxpdevloc];
+          xpsetidx[geni] = opflow->idxn2sd_map[gen->startxpsetloc];
+        }
       }
 
       xidx[geni] = opflow->idxn2sd_map[loc];
@@ -762,6 +803,8 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
     eqjacspgen_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
     ineqjacspgen_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
     pgs_dev_ = paramAlloc<double>(d_allocator_, ngenON);
+    xpdevidx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
+    xpsetidx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
   }
 #endif
   return 0;
