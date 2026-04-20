@@ -39,7 +39,7 @@ static int compare_arrays(const double *ref, const double *gpu, int n,
 }
 
 /**
- * Test 8: Validate GPU inequality constraint Jacobian values against PETSc.
+ * @brief Validate GPU inequality constraint Jacobian values against PETSc.
  *
  * First solves with IPOPT/PBPOL to obtain a realistic solution, then
  * sets up the PBPOLRAJAHIOPSPARSE model and evaluates the inequality
