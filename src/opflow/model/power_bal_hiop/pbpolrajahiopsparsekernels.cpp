@@ -15,6 +15,15 @@
 #include "pbpolrajahiopsparsekernels.hpp"
 #include "pbpolrajahiopsparse.hpp"
 
+/**
+ * @brief Set the initial guess array for the PBPOLRAJAHIOPSPARSE model.
+ *
+ * Sets the inital guess on the host and copies it to `x0_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param x0_dev The device array for the initial guess.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWSetInitialGuessArray_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                                               double *x0_dev) {
   PetscErrorCode ierr;
@@ -43,6 +52,17 @@ PetscErrorCode OPFLOWSetInitialGuessArray_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Set the variable bounds arrays for the PBPOLRAJAHIOPSPARSE model.
+ *
+ * Sets lower and upper variable bounds on the host and copies them to `xl_dev`
+ * and `xu_dev`, respectively.
+ *
+ * @param opflow The OPFLOW object.
+ * @param xl_dev The device array for the lower constraint bounds.
+ * @param xu_dev The device array for the upper constraint bounds.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode
 OPFLOWSetVariableBoundsArray_PBPOLRAJAHIOPSPARSE(OPFLOW opflow, double *xl_dev,
                                                  double *xu_dev) {
@@ -75,6 +95,17 @@ OPFLOWSetVariableBoundsArray_PBPOLRAJAHIOPSPARSE(OPFLOW opflow, double *xl_dev,
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Set the constraint bounds arrays for the PBPOLRAJAHIOPSPARSE model.
+ *
+ * Sets the constraint bounds on the host and copies them to `gl_dev` and
+ * `gu_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param gl_dev The device array for the lower constraint bounds.
+ * @param gu_dev The device array for the upper constraint bounds.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWSetConstraintBoundsArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, double *gl_dev, double *gu_dev) {
 
@@ -110,11 +141,24 @@ PetscErrorCode OPFLOWSetConstraintBoundsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
-/** EQUALITY CONSTRAINTS */
+/**
+ * @brief Compute the equality constraints residual for the PBPOLRAJAHIOPSPARSE
+ * model.
+ *
+ * Computes the equality constraints on the device using the current iterate
+ * `x_dev` and stores the result in `ge_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param x_dev The device array for the current solutioniterate.
+ * @param ge_dev The device array for the equality constraint residuals.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWComputeEqualityConstraintsArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, double *ge_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
+
+  // Get device pointers for model parameters
   BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
   GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
   LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
@@ -128,7 +172,7 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionBegin;
   //  PetscPrintf(MPI_COMM_SELF,"Entered Equality constraints\n");
 
-  // Zero out array
+  // Zero out array with constraint residuals
   auto &resmgr = umpire::ResourceManager::getInstance();
   resmgr.memset(ge_dev, 0, opflow->nconeq * sizeof(double));
 
@@ -263,7 +307,18 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
-/** INEQUALITY CONSTRAINTS **/
+/**
+ * @brief Compute the inequality constraints residual for the
+ * PBPOLRAJAHIOPSPARSE model.
+ *
+ * Computes the inequality constraints on the device using the current solution
+ * iterate `x_dev` and stores the result in `gi_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param x_dev The device array for the current solution iterate.
+ * @param gi_dev The device array for the inequality constraint residuals.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWComputeInequalityConstraintsArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, double *gi_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
@@ -275,7 +330,7 @@ PetscErrorCode OPFLOWComputeInequalityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionBegin;
   //  PetscPrintf(MPI_COMM_SELF,"Entered Inequality Constraints\n");
 
-  // Zero out array
+  // Zero out residual array
   auto &resmgr = umpire::ResourceManager::getInstance();
   resmgr.memset(gi_dev, 0, opflow->nconineq * sizeof(double));
 
@@ -329,10 +384,24 @@ PetscErrorCode OPFLOWComputeInequalityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
-/** OBJECTIVE FUNCTION **/
-// Note: This kernel (and all the kernels for this model assume that the data
-// has been already allocated on the device. x_dev is pointer to array on the
-// GPU
+/** @brief Compute the objective function value for the PBPOLRAJAHIOPSPARSE
+ * model.
+ *
+ * Computes the objective function value on the device using the current
+ * solution iterate `x_dev` and stores the result in `obj`.
+ *
+ * @param[inout] opflow The OPFLOW object.
+ * @param[in] x_dev The device array for the current solution iterate.
+ * @param[out] obj The pointer to the scalar with the objective function value.
+ * @return PetscErrorCode indicating success or failure.
+ *
+ * @note This kernel (and all the kernels for this model assume that the data
+ * has been already allocated on the device. x_dev is pointer to array on the
+ * GPU.
+ *
+ * @todo We need to figure out how to manage PetscScalar vs double types in
+ * these kernels.
+ */
 PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, double *obj) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
@@ -356,10 +425,10 @@ PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
   int *l_xidx = loadparams->xidx_dev_;
   int *b_xidxpimb = busparams->xidxpimb_dev_;
 
-  /* Generator objective function contributions */
   // Set up reduce sum object
   RAJA::ReduceSum<exago_raja_reduce, double> obj_val_sum(0.0);
-  // Compute reduction on CUDA device
+
+  // Generation cost contributions to the objective function
   RAJA::forall<exago_raja_exec>(
       RAJA::RangeSegment(0, genparams->ngenON),
       RAJA_LAMBDA(RAJA::Index_type i) {
@@ -368,6 +437,7 @@ PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
                                         cost_beta[i] * Pg + cost_gamma[i]);
       });
 
+  // Load loss contributions to the objective function
   if (opflow->include_loadloss_variables) {
     RAJA::forall<exago_raja_exec>(
         RAJA::RangeSegment(0, loadparams->nload),
@@ -392,6 +462,7 @@ PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
         });
   }
 
+  // Copy value of the sum reduction to the output value.
   *obj = static_cast<double>(obj_val_sum.get());
   ierr = PetscLogFlops(genparams->ngenON * 8.0);
   CHKERRQ(ierr);
@@ -400,7 +471,17 @@ PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
-/** GRADIENT **/
+/** @brief Compute the gradient of the objective function for the
+ * PBPOLRAJAHIOPSPARSE model.
+ *
+ * Computes the objective function gradient on the device using the
+ * current solution iterate `x_dev` and stores the result in `grad_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param x_dev The device array with the current solution iterate.
+ * @param grad_dev The device array for the objective function gradient.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWComputeGradientArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, double *grad_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
@@ -468,6 +549,23 @@ PetscErrorCode OPFLOWComputeGradientArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Compute the Jacobian of the inequality constraints for the
+ * PBPOLRAJAHIOPSPARSE model.
+ *
+ * Takes current iterate of the solution vector x_dev and computes the
+ * Jacobian of the inequality constraints. The solution is stored in triplet
+ * format on the device in vectors iJacS_dev, jJacS_dev, and MJacS_dev,
+ * respectively.
+ *
+ * @param[inout] opflow The OPFLOW object.
+ * @param[in] x_dev The device array with the current solution iterate.
+ * @param[out] iJacS_dev The device array for the row indices of the Jacobian.
+ * @param[out] jJacS_dev The device array for the column indices of the
+ * Jacobian.
+ * @param[out] MJacS_dev The device array for the values of the Jacobian.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode
 OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, int *iJacS_dev, int *jJacS_dev,
@@ -487,11 +585,11 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
   PetscFunctionBegin;
 
+  // If sparsity pattern does not exist, create it!
   if (iJacS_dev != NULL && jJacS_dev != NULL) {
-    /* Set locations only */
 
+    // Create arrays on host to store i,j, and val arrays
     if (opflow->Nconineq) {
-      // Create arrays on host to store i,j, and val arrays
       umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
       pbpolrajahiopsparse->i_jacineq =
@@ -542,6 +640,8 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     }
   }
 
+  // TODO: This is bad! If MJacS_dev is NULL, this function will quietly do
+  // nothing. We should at least throw an error or warning.
   if (MJacS_dev != NULL) {
     if (opflow->Nconineq) {
       ierr = PetscLogEventBegin(opflow->ineqconsjaclogger, 0, 0, 0, 0);
@@ -558,7 +658,9 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       ierr = VecRestoreArray(opflow->X, &x);
       CHKERRQ(ierr);
 
-      /* Compute inequality constraint jacobian */
+      // Compute inequality constraint jacobian on the host
+      // The function pointer computeinequalityconstraintjacobian points to
+      // OPFLOWComputeInequalityConstraintJacobian_PBPOL
       ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
           opflow, opflow->X, opflow->Jac_Gi);
       CHKERRQ(ierr);
@@ -567,7 +669,8 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       CHKERRQ(ierr);
 
       values = pbpolrajahiopsparse->val_jacineq;
-      /* Copy over values */
+      // Unpack PETSc matrix and copy values to the array `values` in
+      // PbpolModelRajaHiop struct.
       for (i = 0; i < nrow; i++) {
         ierr = MatGetRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
         CHKERRQ(ierr);
@@ -590,6 +693,23 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Compute the Jacobian of the equality constraints for the
+ * PBPOLRAJAHIOPSPARSE model.
+ *
+ * Takes current iterate of the solution vector x_dev and computes the
+ * Jacobian of the equality constraints. The solution is stored in triplet
+ * format on the device in vectors iJacS_dev, jJacS_dev, and MJacS_dev,
+ * respectively.
+ *
+ * @param[inout] opflow The OPFLOW object.
+ * @param[in]  x_dev The device array with the current solution iterate.
+ * @param[out] iJacS_dev The device array for the row indices of the Jacobian.
+ * @param[out] jJacS_dev The device array for the column indices of the
+ * Jacobian.
+ * @param[out] MJacS_dev The device array for the values of the Jacobian.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode
 OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, int *iJacS_dev, int *jJacS_dev,
@@ -609,13 +729,16 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
   PetscFunctionBegin;
 
+  // If sparsity pattern has not been created, create it.
+  // This only needs to be done once since the sparsity pattern of the Jacobian
+  // does not change during the optimization.
   if (iJacS_dev != NULL && jJacS_dev != NULL) {
     /* Set locations only */
 
     roffset = 0;
     coffset = 0;
 
-    // Create arrays on host to store i,j, and val arrays
+    // Create arrays on the host to store i, j, and val arrays
     umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
     pbpolrajahiopsparse->i_jaceq =
@@ -628,6 +751,9 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     iRowstart = pbpolrajahiopsparse->i_jaceq;
     jColstart = pbpolrajahiopsparse->j_jaceq;
 
+    // Function pointer computeequalityconstraintjacobian points to
+    // OPFLOWComputeEqualityConstraintJacobian_PBPOL function.
+    // Use function from PBPOL model to create the sparsity pattern.
     ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
         opflow, opflow->X, opflow->Jac_Ge);
     CHKERRQ(ierr);
@@ -670,7 +796,10 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     ierr = VecRestoreArray(opflow->X, &x);
     CHKERRQ(ierr);
 
-    /* Compute equality constraint jacobian */
+    // Compute equality constraint jacobian on the host
+    // Function pointer computeequalityconstraintjacobian points to the
+    // implementation OPFLOWComputeEqualityConstraintJacobian_PBPOL in the
+    // PBPOL model.
     ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
         opflow, opflow->X, opflow->Jac_Ge);
     CHKERRQ(ierr);
@@ -680,7 +809,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
     values = pbpolrajahiopsparse->val_jaceq;
 
-    /* Copy over values */
+    // Unpack PETSc matrix and copy values to the host array in the
+    // PbpolModelRajaHiop struct.
     for (i = 0; i < nrow; i++) {
       ierr = MatGetRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
       CHKERRQ(ierr);
@@ -702,6 +832,19 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Compute the Hessian of the Lagrangian for the PBPOLRAJAHIOPSPARSE
+ * model.
+ *
+ * @param[inout] opflow The OPFLOW object.
+ * @param[in]  x_dev The device array with the current solution iterate.
+ * @param[out] lambda_dev The device array with the current Lagrange
+ * multipliers.
+ * @param[out] iHSS_dev The device array for the row indices of the Hessian.
+ * @param[out] jHSS_dev The device array for the column indices of the Hessian.
+ * @param[out] MHSS_dev The device array for the values of the Hessian.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, const double *lambda_dev, int *iHSS_dev,
     int *jHSS_dev, double *MHSS_dev) {
@@ -735,16 +878,19 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     iRow = pbpolrajahiopsparse->i_hess;
     jCol = pbpolrajahiopsparse->j_hess;
 
+    // Function pointer computehessian points to the function
+    // OPFLOWComputeHessian_PBPOL in PBPOL model.
     ierr = (*opflow->modelops.computehessian)(
         opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
     CHKERRQ(ierr);
     ierr = MatGetSize(opflow->Hes, &nrow, &nrow);
     CHKERRQ(ierr);
 
-    /* Copy over locations to triplet format */
-    /* Note that HIOP requires a upper triangular Hessian as oppposed
-       to IPOPT which requires a lower triangular Hessian
-    */
+    // Copy over locations to triplet format
+    //
+    // Note that HIOP requires a upper triangular Hessian as oppposed
+    // to IPOPT which requires a lower triangular Hessian
+    //
     for (i = 0; i < nrow; i++) {
       ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
       CHKERRQ(ierr);
@@ -792,7 +938,9 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
       CHKERRQ(ierr);
     }
 
-    /* Compute Hessian */
+    // Compute Hessian on the host
+    // Function pointer computehessian points to the function
+    // OPFLOWComputeHessian_PBPOL in PBPOL model.
     ierr = (*opflow->modelops.computehessian)(
         opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
     CHKERRQ(ierr);
@@ -807,6 +955,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     ierr = VecRestoreArray(opflow->Lambda, &lambda);
     CHKERRQ(ierr);
 
+    // It does not seem that computeauxhessian is set, so this if
+    // condition will evaluate to false.
     if (opflow->modelops.computeauxhessian) {
       ierr = VecGetArray(opflow->X, &x);
       CHKERRQ(ierr);

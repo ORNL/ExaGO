@@ -6,11 +6,20 @@
 #include <private/opflowimpl.h>
 #include "pbpolrajahiopsparsekernels.hpp"
 
-/* Initialization is done on the host through this function. Copying over values
+/**
+ * @brief `extern` initial guess function from PBPOL model.
+ *
+ * Initialization is done on the host through this function. Copying over values
  * to the device is done in OPFLOWSetInitialGuessArray_PBPOLRAJAHIOPSPARSE
  */
 extern PetscErrorCode OPFLOWSetInitialGuess_PBPOL(OPFLOW, Vec, Vec);
 
+/**
+ * @brief Set the initial guess for the PBPOL model with Raja and HiOp sparse.
+ *
+ * This function sets the initial guess by calling the same function from
+ * the PBPOL model.
+ */
 PetscErrorCode OPFLOWSetInitialGuess_PBPOLRAJAHIOPSPARSE(OPFLOW opflow, Vec X,
                                                          Vec Lambda) {
   PetscErrorCode ierr;
@@ -23,9 +32,14 @@ PetscErrorCode OPFLOWSetInitialGuess_PBPOLRAJAHIOPSPARSE(OPFLOW opflow, Vec X,
   PetscFunctionReturn(0);
 }
 
+/// @brief `extern` constraint bounds function from PBPOL model.
 extern PetscErrorCode OPFLOWSetConstraintBounds_PBPOL(OPFLOW, Vec, Vec);
 
-/* The constraint bounds are also calculated on the host.
+/**
+ * @brief Set the constraint bounds for the PBPOLHIOPSPARSE model.
+ *
+ * The constraint bounds are also calculated on the host by matching function
+ * from PBPOL model.
  */
 PetscErrorCode OPFLOWSetConstraintBounds_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                                              Vec Gl, Vec Gu) {
@@ -37,9 +51,14 @@ PetscErrorCode OPFLOWSetConstraintBounds_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
   PetscFunctionReturn(0);
 }
 
+/// @brief `extern` variable bounds function from PBPOL model.
 extern PetscErrorCode OPFLOWSetVariableBounds_PBPOL(OPFLOW, Vec, Vec);
 
-/* The variable bounds are also calculated on the host.
+/**
+ * @brief Set the variable bounds for the PBPOLHIOPSPARSE model.
+ *
+ * The variable bounds are also calculated on the host by matching function
+ * from PBPOL model.
  */
 PetscErrorCode OPFLOWSetVariableBounds_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                                            Vec Xl, Vec Xu) {
@@ -51,6 +70,10 @@ PetscErrorCode OPFLOWSetVariableBounds_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Store PBPOLRAJAHIOPSPARSE solution to the PS structure.
+ *
+ */
 PetscErrorCode OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   PetscErrorCode ierr;
   PS ps = (PS)opflow->ps;
@@ -199,10 +222,20 @@ PetscErrorCode OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 }
 
 /* Reuse PBPOL model set up for obtaining locations */
+/// @brief `extern` set up function from PBPOL model.
 extern PetscErrorCode OPFLOWModelSetUp_PBPOL(OPFLOW);
 
+/** @brief Set up the PBPOLRAJAHIOPSPARSE model.
+ *
+ * This function initializes the host objects for the PBPOLRAJAHIOPSPARSE
+ * model by calling the corresponding function from the PBPOL model, and then
+ * allocates structures with device data, defined in `paramsrajahiop.cpp`.
+ */
 PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   PetscErrorCode ierr;
+
+  // This struct is defined in `paramsrajahiop.h`. It inherits from
+  // _p_FormPBPOLRAJAHIOP, which is unwise mixture of C and C++ approaches.
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
 
@@ -272,9 +305,9 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     if (!line->status)
       continue;
 
-    // each line adds 4 (off-diagonal) entries for the to bus and 4
-    // entries for the from bus.  Each line also modifies 4 existing
-    // to and from bus entries.
+    // each line adds 4 (off-diagonal) entries for the "to" bus and 4
+    // entries for the "from" bus.  Each line also modifies 4 existing
+    // "to" and "from" bus entries.
     nnz_eqjac += 4;
     nnz_eqjac += 4;
   }
@@ -375,6 +408,10 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Destructor for the PBPOLRAJAHIOPSPARSE model.
+ *
+ */
 PetscErrorCode OPFLOWModelDestroy_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
@@ -403,10 +440,22 @@ extern PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
     OPFLOW, const double *, const double *, const double *, const double *,
     const double *, double);
 
+/**
+ * @brief Constructor for the PBPOLRAJAHIOPSPARSE model.
+ *
+ * This function creates a new PBPOLRAJAHIOPSPARSE model and sets pointers
+ * to the model's methods implementations.
+ *
+ * @param opflow The pointer to the object to instantiate.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWModelCreate_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 
   PetscFunctionBegin;
 
+  // This may be confusing: The class PbpolModelRajaHiop is a sparse model
+  // using HiOp solver, but is implemented in file with HiOp mixed dense-sparse
+  // model implementation.
   PbpolModelRajaHiop *pbpolrajahiopsparse = new PbpolModelRajaHiop();
 
   opflow->model = pbpolrajahiopsparse;
