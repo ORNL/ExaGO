@@ -314,8 +314,7 @@ int main(int argc, char **argv) {
           MatRestoreRow(opflow->Jac_Gi, i, &nv, &c, &v);
         }
 #ifdef EXAGO_ENABLE_GPU
-        (void)hipMemcpy(bench_dev, bench_vals, nnz_bytes,
-                        hipMemcpyHostToDevice);
+        resmgr.copy(bench_dev, bench_vals);
 #else
         memcpy(bench_dev, bench_vals, nnz_bytes);
 #endif
@@ -344,14 +343,14 @@ int main(int argc, char **argv) {
           static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
 #endif
 
-#ifdef EXAGO_ENABLE_GPU
+#ifdef EXAGO_ENABLE_HIP
       (void)hipDeviceSynchronize();
 #endif
       auto t0 = std::chrono::high_resolution_clock::now();
       for (int iter = 0; iter < niters; iter++) {
         ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, bench_dev);
       }
-#ifdef EXAGO_ENABLE_GPU
+#ifdef EXAGO_ENABLE_HIP
       (void)hipDeviceSynchronize();
 #endif
       auto t1 = std::chrono::high_resolution_clock::now();
