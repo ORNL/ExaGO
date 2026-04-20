@@ -69,20 +69,10 @@ bool OPFLOWHIOPSPARSEGPUInterface::get_sparse_blocks_info(
 
   nnz_sparse_Jaceq = opflow->nnz_eqjacsp = info_eq.nz_used;
 
-  nnz_sparse_Jacineq = 0;
-  if (opflow->Nconineq) {
-    ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
-        opflow, opflow->X, opflow->Jac_Gi);
-    CHKERRQ(ierr);
-    ierr =
-        MatSetOption(opflow->Jac_Gi, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE);
-    CHKERRQ(ierr);
-
-    ierr = MatGetInfo(opflow->Jac_Gi, MAT_LOCAL, &info_ineq);
-    CHKERRQ(ierr);
-
-    nnz_sparse_Jacineq = opflow->nnz_ineqjacsp = info_ineq.nz_used;
-  }
+  /* KS: Use pre-computed nnz_ineqjacsp from model setup (avoids PETSc Mat
+     assembly just for counting non-zeros -- not sure if faster or if it scales
+     but hey no PETSc!). */
+  nnz_sparse_Jacineq = opflow->nnz_ineqjacsp;
 
   /* Compute non-zeros for Hessian */
   ierr = (*opflow->modelops.computehessian)(opflow, opflow->X, opflow->Lambdae,
