@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
   PetscCall(VecView(X, PETSC_VIEWER_STDOUT_SELF));
   PetscCall(MatView(J_eq, PETSC_VIEWER_STDOUT_SELF));
 
-  PetscCall(MatAXPY(J_eq, -1.0, J_eq_ref, SAME_NONZERO_PATTERN));
+  PetscCall(MatAXPY(J_eq, -1.0, J_eq_ref, UNKNOWN_NONZERO_PATTERN));
   PetscReal norm = 0.0;
   PetscCall(MatNorm(J_eq, NORM_INFINITY, &norm));
   std::cout << "Error norm: " << norm << std::endl;
