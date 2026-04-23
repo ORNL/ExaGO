@@ -648,6 +648,7 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
   h_allocator_.deallocate(vs);
   h_allocator_.deallocate(xidx);
   h_allocator_.deallocate(xpdevidx);
+  h_allocator_.deallocate(xpsetidx);
   h_allocator_.deallocate(gidxbus);
   h_allocator_.deallocate(eqjacspbus_idx);
   h_allocator_.deallocate(eqjacsqbus_idx);
@@ -657,8 +658,6 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
     h_allocator_.deallocate(gineqidxgen);
     h_allocator_.deallocate(gbineqidxgen);
     h_allocator_.deallocate(pgs);
-    h_allocator_.deallocate(xpdevidx);
-    h_allocator_.deallocate(xpsetidx);
     h_allocator_.deallocate(eqjacspgen_idx);
     h_allocator_.deallocate(ineqjacspgen_idx);
   }
@@ -676,6 +675,7 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
   d_allocator_.deallocate(vs_dev_);
   d_allocator_.deallocate(xidx_dev_);
   d_allocator_.deallocate(xpdevidx_dev_);
+  d_allocator_.deallocate(xpsetidx_dev_);
   d_allocator_.deallocate(gidxbus_dev_);
   d_allocator_.deallocate(eqjacspbus_idx_dev_);
   d_allocator_.deallocate(eqjacsqbus_idx_dev_);
@@ -685,8 +685,6 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
     d_allocator_.deallocate(gineqidxgen_dev_);
     d_allocator_.deallocate(gbineqidxgen_dev_);
     d_allocator_.deallocate(pgs_dev_);
-    d_allocator_.deallocate(xpdevidx_dev_);
-    d_allocator_.deallocate(xpsetidx_dev_);
     d_allocator_.deallocate(eqjacspgen_idx_dev_);
     d_allocator_.deallocate(ineqjacspgen_idx_dev_);
   }
@@ -716,6 +714,7 @@ int GENParamsRajaHiop::copy(OPFLOW opflow) {
 
   resmgr.copy(xidx_dev_, xidx);
   resmgr.copy(xpdevidx_dev_, xpdevidx);
+  resmgr.copy(xpsetidx_dev_, xpsetidx);
   resmgr.copy(gidxbus_dev_, gidxbus);
 
   resmgr.copy(eqjacspbus_idx_dev_, eqjacspbus_idx);
@@ -728,8 +727,6 @@ int GENParamsRajaHiop::copy(OPFLOW opflow) {
     resmgr.copy(eqjacspgen_idx_dev_, eqjacspgen_idx);
     resmgr.copy(ineqjacspgen_idx_dev_, ineqjacspgen_idx);
     resmgr.copy(pgs_dev_, pgs);
-    resmgr.copy(xpdevidx_dev_, xpdevidx);
-    resmgr.copy(xpsetidx_dev_, xpsetidx);
   }
 #else
   cost_alpha_dev_ = cost_alpha;
@@ -744,6 +741,7 @@ int GENParamsRajaHiop::copy(OPFLOW opflow) {
   vs_dev_ = vs;
   xidx_dev_ = xidx;
   xpdevidx_dev_ = xpdevidx;
+  xpsetidx_dev_ = xpsetidx;
   gidxbus_dev_ = gidxbus;
   eqjacspbus_idx_dev_ = eqjacspbus_idx;
   eqjacsqbus_idx_dev_ = eqjacsqbus_idx;
@@ -754,8 +752,6 @@ int GENParamsRajaHiop::copy(OPFLOW opflow) {
   eqjacspgen_idx_dev_ = eqjacspgen_idx;
   ineqjacspgen_idx_dev_ = ineqjacspgen_idx;
   pgs_dev_ = pgs;
-  xpdevidx_dev_ = xpdevidx;
-  xpsetidx_dev_ = xpsetidx;
 #endif
   return 0;
 }
@@ -793,6 +789,7 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
 
   xidx = paramAlloc<int>(h_allocator_, ngenON);
   xpdevidx = paramAlloc<int>(h_allocator_, ngenON);
+  xpsetidx = paramAlloc<int>(h_allocator_, ngenON);
   gidxbus = paramAlloc<int>(h_allocator_, ngenON);
 
   eqjacspbus_idx = paramAlloc<int>(h_allocator_, ngenON);
@@ -806,8 +803,6 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
     eqjacspgen_idx = paramAlloc<int>(h_allocator_, ngenON);
     ineqjacspgen_idx = paramAlloc<int>(h_allocator_, ngenON);
     pgs = paramAlloc<double>(h_allocator_, ngenON);
-    xpdevidx = paramAlloc<int>(h_allocator_, ngenON);
-    xpsetidx = paramAlloc<int>(h_allocator_, ngenON);
   }
 
   /* Insert data in genparams */
@@ -873,6 +868,7 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
 
   xidx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
   xpdevidx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
+  xpsetidx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
   gidxbus_dev_ = paramAlloc<int>(d_allocator_, ngenON);
 
   eqjacspbus_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
@@ -885,8 +881,6 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
     eqjacspgen_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
     ineqjacspgen_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
     pgs_dev_ = paramAlloc<double>(d_allocator_, ngenON);
-    xpdevidx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
-    xpsetidx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
   }
 #endif
   return 0;
