@@ -163,10 +163,10 @@ With the parameters of the example network the matrix is:
 <td> </td> <td>theta1</td> <td>Vm1</td> <td>theta2</td> <td>Vm2</td> <td>theta3</td> <td>Vm3</td> <td>Pg3</td> <td>Qg3</td> <td>theta4</td> <td>Vm4</td> <td>theta5</td> <td>Vm5</td>
 </tr>
 <tr>
-<td>IEC1</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>200</td> <td>0</td> <td>-1.5</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
+<td>IEC1</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>4.178</td> <td>0</td> <td>-1.5</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>IEC2</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-200</td> <td>0</td> <td>-1.5</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
+<td>IEC2</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0.178</td> <td>0</td> <td>-1.5</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
 <td>Sf12</td> <td>7.68</td> <td>9.6</td> <td>-7.68</td> <td>1.92</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
@@ -184,13 +184,13 @@ With the parameters of the example network the matrix is:
 <td>Sf24</td> <td>0</td> <td>0</td> <td>7.68</td> <td>9.6</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-7.68</td> <td>1.92</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>St24</td> <td>0</td> <td>0</td> <td>-7.68</td> <td>1.92</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>7.68</td> <td>9.6</td> <td>1.6</td> <td>-0.4</td>
+<td>St24</td> <td>0</td> <td>0</td> <td>-7.68</td> <td>1.92</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>7.68</td> <td>9.6</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>Sf45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>15.36</td> <td>19.2</td> <td>-15.36</td> <td>3.84</td>
+<td>Sf45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>7.68</td> <td>9.6</td> <td>-7.68</td> <td>1.92</td>
 </tr>
 <tr>
-<td>St45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-15.36</td> <td>3.84</td> <td>15.36</td> <td>19.2</td>
+<td>St45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-7.68</td> <td>1.92</td> <td>7.68</td> <td>9.6</td>
 </tr>
 </table>
 
