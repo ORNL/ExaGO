@@ -21,8 +21,8 @@
  * @param jace_dev   Device output array for equality Jacobian values
  */
 void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                                const double *x_dev,
-                                                double *jace_dev);
+                                               const double *x_dev,
+                                               double *jace_dev);
 
 #endif // EXAGO_ENABLE_HIOP_SPARSE
 #endif // EXAGO_ENABLE_RAJA

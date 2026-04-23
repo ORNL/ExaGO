@@ -12,8 +12,8 @@
 #include "pbpolrajahiopsparse_gpu.hpp"
 
 void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                                const double *x_dev,
-                                                double *jace_dev) {
+                                               const double *x_dev,
+                                               double *jace_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
   BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
@@ -39,7 +39,8 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
     double *b_gl = busparams->gl_dev_;
     double *b_bl = busparams->bl_dev_;
     int *b_selfidx = busparams->eqjacsp_selfidx_dev_;
-/*KS: can probably parallelize this differently but it is correct  -- optimizing existing code is easier than writing it froms scratch .... */
+    /*KS: can probably parallelize this differently but it is correct  --
+     * optimizing existing code is easier than writing it froms scratch .... */
     RAJA::forall<exago_raja_exec>(
         RAJA::RangeSegment(0, busparams->nbus),
         RAJA_LAMBDA(RAJA::Index_type i) {
@@ -160,12 +161,10 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
           double sin_tf = sin(thetatf), cos_tf = cos(thetatf);
 
           /* From-bus diagonal derivatives (accumulate into bus self entries) */
-          double dPf_dthetaf =
-              Vmf * Vmt * (-Gft * sin_ft + Bft * cos_ft);
+          double dPf_dthetaf = Vmf * Vmt * (-Gft * sin_ft + Bft * cos_ft);
           double dPf_dVmf =
               2.0 * Gff * Vmf + Vmt * (Gft * cos_ft + Bft * sin_ft);
-          double dQf_dthetaf =
-              Vmf * Vmt * (Bft * sin_ft + Gft * cos_ft);
+          double dQf_dthetaf = Vmf * Vmt * (Bft * sin_ft + Gft * cos_ft);
           double dQf_dVmf =
               -2.0 * Bff * Vmf + Vmt * (-Bft * cos_ft + Gft * sin_ft);
 
@@ -174,38 +173,28 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
 
           RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[pfbase + 0],
                                              dPf_dthetaf);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[pfbase + 1],
-                                             dPf_dVmf);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[pfbase + 1], dPf_dVmf);
           RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[qfbase + 0],
                                              dQf_dthetaf);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[qfbase + 1],
-                                             dQf_dVmf);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[qfbase + 1], dQf_dVmf);
 
           /* From-bus off-diagonal derivatives (atomicAdd for parallel lines) */
-          double dPf_dthetat =
-              Vmf * Vmt * (Gft * sin_ft - Bft * cos_ft);
+          double dPf_dthetat = Vmf * Vmt * (Gft * sin_ft - Bft * cos_ft);
           double dPf_dVmt = Vmf * (Gft * cos_ft + Bft * sin_ft);
-          double dQf_dthetat =
-              Vmf * Vmt * (-Bft * sin_ft - Gft * cos_ft);
+          double dQf_dthetat = Vmf * Vmt * (-Bft * sin_ft - Gft * cos_ft);
           double dQf_dVmt = Vmf * (-Bft * cos_ft + Gft * sin_ft);
 
           int obase = l_eqjacsp_idx[l];
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 0],
-                                             dPf_dthetat);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 1],
-                                             dPf_dVmt);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 2],
-                                             dQf_dthetat);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 3],
-                                             dQf_dVmt);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 0], dPf_dthetat);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 1], dPf_dVmt);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 2], dQf_dthetat);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 3], dQf_dVmt);
 
           /* To-bus diagonal derivatives */
-          double dPt_dthetat =
-              Vmt * Vmf * (-Gtf * sin_tf + Btf * cos_tf);
+          double dPt_dthetat = Vmt * Vmf * (-Gtf * sin_tf + Btf * cos_tf);
           double dPt_dVmt =
               2.0 * Gtt * Vmt + Vmf * (Gtf * cos_tf + Btf * sin_tf);
-          double dQt_dthetat =
-              Vmt * Vmf * (Btf * sin_tf + Gtf * cos_tf);
+          double dQt_dthetat = Vmt * Vmf * (Btf * sin_tf + Gtf * cos_tf);
           double dQt_dVmt =
               -2.0 * Btt * Vmt + Vmf * (-Btf * cos_tf + Gtf * sin_tf);
 
@@ -214,29 +203,21 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
 
           RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[ptbase + 0],
                                              dPt_dthetat);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[ptbase + 1],
-                                             dPt_dVmt);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[ptbase + 1], dPt_dVmt);
           RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[qtbase + 0],
                                              dQt_dthetat);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[qtbase + 1],
-                                             dQt_dVmt);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[qtbase + 1], dQt_dVmt);
 
           /* To-bus off-diagonal derivatives (atomicAdd for parallel lines) */
-          double dPt_dthetaf =
-              Vmt * Vmf * (Gtf * sin_tf - Btf * cos_tf);
+          double dPt_dthetaf = Vmt * Vmf * (Gtf * sin_tf - Btf * cos_tf);
           double dPt_dVmf = Vmt * (Gtf * cos_tf + Btf * sin_tf);
-          double dQt_dthetaf =
-              Vmt * Vmf * (-Btf * sin_tf - Gtf * cos_tf);
+          double dQt_dthetaf = Vmt * Vmf * (-Btf * sin_tf - Gtf * cos_tf);
           double dQt_dVmf = Vmt * (-Btf * cos_tf + Gtf * sin_tf);
 
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 4],
-                                             dPt_dthetaf);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 5],
-                                             dPt_dVmf);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 6],
-                                             dQt_dthetaf);
-          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 7],
-                                             dQt_dVmf);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 4], dPt_dthetaf);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 5], dPt_dVmf);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 6], dQt_dthetaf);
+          RAJA::atomicAdd<RAJA::auto_atomic>(&jace_dev[obase + 7], dQt_dVmf);
         });
   }
 }

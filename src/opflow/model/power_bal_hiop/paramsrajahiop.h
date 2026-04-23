@@ -75,9 +75,11 @@ public:
   double *qt;         /* min. reactive power gen. limits */
   double *qb;         /* max. reactive power gen. limits */
   double *pgs;        /* real power output setpoint */
-  int *xpdevidx; /* KS: Starting locations in X vector for deviation variables */
-  int *xpsetidx; /* KS: Starting locations in X vector for set-point variables */
-  int *isrenewable;   /* Is renewable generator? */
+  int *
+      xpdevidx; /* KS: Starting locations in X vector for deviation variables */
+  int *
+      xpsetidx; /* KS: Starting locations in X vector for set-point variables */
+  int *isrenewable; /* Is renewable generator? */
 
   int *xidx; /* starting locations in X vector */
   int *
@@ -109,8 +111,8 @@ public:
   double *qt_dev_;         /* min. reactive power gen. limits */
   double *qb_dev_;         /* max. reactive power gen. limits */
   double *pgs_dev_;        /* real power output setpoint */
-  int *xpdevidx_dev_;   /* KS: xpdevidx_ GPU counterpart */
-  int *xpsetidx_dev_;   /* KS: xpsetidx_ GPU counterpart */
+  int *xpdevidx_dev_;      /* KS: xpdevidx_ GPU counterpart */
+  int *xpsetidx_dev_;      /* KS: xpsetidx_ GPU counterpart */
   int *isrenewable_dev_;   /* Is renewable generator? */
 
   int *xidx_dev_;        /* starting locations in X vector */
@@ -199,10 +201,10 @@ struct LINEParamsRajaHiop {
                     contribution in constraints vector */
   int *gineqidx; /* Starting location to insert contribution to inequality
                     constraint */
-  int *gbineqidx;  /* Starting location to insert contribution to inequality
-                      constraint bound */
-  int *linelimidx; /* Indices for subset of lines that have finite limits */
-  int *eqjacsp_idx;      /* Flat-array offset for off-diagonal eq Jacobian entries */
+  int *gbineqidx;   /* Starting location to insert contribution to inequality
+                       constraint bound */
+  int *linelimidx;  /* Indices for subset of lines that have finite limits */
+  int *eqjacsp_idx; /* Flat-array offset for off-diagonal eq Jacobian entries */
   int *eqjacsp_diag_idx; /* Flat-array positions for diagonal entries per line
                             [4*l+0]=from P-row, [4*l+1]=from Q-row,
                             [4*l+2]=to P-row, [4*l+3]=to Q-row */
@@ -230,7 +232,7 @@ struct LINEParamsRajaHiop {
                           constraint bound */
   int *
       linelimidx_dev_; /* Indices for subset of lines that have finite limits */
-  int *eqjacsp_idx_dev_; /* KS: GPU counterpart for eqjacsp_idx_ */
+  int *eqjacsp_idx_dev_;      /* KS: GPU counterpart for eqjacsp_idx_ */
   int *eqjacsp_diag_idx_dev_; /* KS: GPU counterpart for eqjacsp_diag_idx_*/
   int *isdcline_dev_;
 
