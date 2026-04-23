@@ -61,7 +61,7 @@ struct BUSParamsRajaHiop {
   int *ineqjacsp_idx_dev_; /* KS: device counterpart of ineqjacsp_idx_ */
   int *genoffset_dev_;     /* KS: dev counterpart of genoffset */
   int *ngenONbus_dev_;     /* KS: dev counterpart of ngenONbus */
-  int *eqjacsp_selfidx_dev_;
+  int *eqjacsp_selfidx_dev_; /* KS: eqjacsp_selfidx device counterpart */
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
@@ -123,7 +123,7 @@ public:
   double *pgs_dev_;        /* real power output setpoint */
   double *apf_dev_;        /* KS: device counterpart of apf */
   double *vs_dev_;         /* KS: device counterpart of vs */
-  int *xpsetidx_dev_;
+  int *xpsetidx_dev_;   /* KS: xpsetidx_ GPU counterpart */
   int *isrenewable_dev_;   /* Is renewable generator? */
 
   int *xidx_dev_;        /* starting locations in X vector */
@@ -248,8 +248,8 @@ struct LINEParamsRajaHiop {
       linelimidx_dev_; /* Indices for subset of lines that have finite limits */
   int *ineqjacsp_idx_dev_; /* KS: Position in flat sparse ineq Jacobian array */
   int *xslackidx_dev_; /* Starting location of slack variables in X vector */
-  int *eqjacsp_idx_dev_;
-  int *eqjacsp_diag_idx_dev_;
+  int *eqjacsp_idx_dev_; /* KS: GPU counterpart for eqjacsp_idx_ */
+  int *eqjacsp_diag_idx_dev_; /* KS: GPU counterpart for eqjacsp_diag_idx_*/
   int *isdcline_dev_;
 
   int allocate(OPFLOW);

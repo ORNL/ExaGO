@@ -703,8 +703,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   // does not change during the optimization.
   if (iJacS_dev != NULL && jJacS_dev != NULL) {
     /* Compute sparsity pattern on host, matching the flat-array layout
-       defined during setup in OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE. */
-
+       defined during setup in OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE. 
+*/
     roffset = 0;
     coffset = 0;
 
@@ -727,6 +727,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
     int geni = 0, loadi = 0;
+/*KS: not worth movint this to the gpu */
     for (int ibus = 0; ibus < ps->nbus; ibus++) {
       PSBUS bus = &ps->bus[ibus];
       int P_row = roffset + busparams->gidx[ibus];
