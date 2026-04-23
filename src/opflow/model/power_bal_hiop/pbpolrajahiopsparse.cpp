@@ -518,7 +518,7 @@ extern PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
  */
 PetscErrorCode
 OPFLOWComputeEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                                             Vec X, Mat Je) {
+                                                            Vec X, Mat Je) {
   (void)opflow;
   (void)X;
   (void)Je;

@@ -151,8 +151,8 @@ int main(int argc, char **argv) {
   double *values_dev =
       static_cast<double *>(d_allocator.allocate(nnz_eq * sizeof(double)));
 
-  umpire::util::AllocationRecord record_x{
-      x_host, sizeof(double) * nx, h_allocator.getAllocationStrategy()};
+  umpire::util::AllocationRecord record_x{x_host, sizeof(double) * nx,
+                                          h_allocator.getAllocationStrategy()};
   resmgr.registerAllocation(x_host, record_x);
   resmgr.copy(x_dev, x_host);
 #else
@@ -198,10 +198,10 @@ int main(int argc, char **argv) {
   double worst_ref = 0, worst_gpu = 0;
   const double tol = 1e-6;
 
-  printf("  %-8s %-8s %16s %16s %12s  %s\n", "Row", "Col", "PETSc (ref)",
-         "GPU", "AbsErr", "Status");
-  printf("  %-8s %-8s %16s %16s %12s  %s\n", "---", "---", "-----------",
-         "---", "------", "------");
+  printf("  %-8s %-8s %16s %16s %12s  %s\n", "Row", "Col", "PETSc (ref)", "GPU",
+         "AbsErr", "Status");
+  printf("  %-8s %-8s %16s %16s %12s  %s\n", "---", "---", "-----------", "---",
+         "------", "------");
 
   for (const auto &e : ref_entries) {
     auto key = std::make_pair(e.row, e.col);
@@ -215,8 +215,7 @@ int main(int argc, char **argv) {
     }
 
     double abs_err = fabs(gpu_val - e.val);
-    double rel_err =
-        (fabs(e.val) > 1e-12) ? abs_err / fabs(e.val) : abs_err;
+    double rel_err = (fabs(e.val) > 1e-12) ? abs_err / fabs(e.val) : abs_err;
     const char *status;
 
     if (!found) {
@@ -269,9 +268,8 @@ int main(int argc, char **argv) {
   printf("  Max relative err:  %.2e\n", max_rel_err);
   printf("  Tolerance:         %.2e\n", tol);
   printf("  RESULT:            %s\n",
-         (n_mismatch == 0 && n_missing_gpu == 0 && n_extra_gpu == 0)
-             ? "PASS"
-             : "FAIL");
+         (n_mismatch == 0 && n_missing_gpu == 0 && n_extra_gpu == 0) ? "PASS"
+                                                                     : "FAIL");
   printf("============================================================\n\n");
 
   int result =

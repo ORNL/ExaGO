@@ -143,8 +143,8 @@ int main(int argc, char **argv) {
   values_dev =
       static_cast<double *>(d_allocator.allocate(nnz_eq * sizeof(double)));
 
-  umpire::util::AllocationRecord record_x{
-      x_host, sizeof(double) * nx, h_allocator.getAllocationStrategy()};
+  umpire::util::AllocationRecord record_x{x_host, sizeof(double) * nx,
+                                          h_allocator.getAllocationStrategy()};
   resmgr.registerAllocation(x_host, record_x);
   resmgr.copy(x_dev, x_host);
 #else
@@ -227,9 +227,10 @@ int main(int argc, char **argv) {
   printf("  %-20s %10.4f ms %10.4f ms\n", "Avg time/call", petsc_ms, gpu_ms);
   if (gpu_ms > 0.0) {
     double speedup = petsc_ms / gpu_ms;
-    printf("  %-20s %10s    %9.2fx\n", "Speedup", "",  speedup);
+    printf("  %-20s %10s    %9.2fx\n", "Speedup", "", speedup);
   }
-  printf("================================================================\n\n");
+  printf(
+      "================================================================\n\n");
 
   ierr = OPFLOWDestroy(&opflow_ref);
   CHKERRQ(ierr);

@@ -31,11 +31,11 @@ struct BUSParamsRajaHiop {
   int *hesssp_idx; /* KS: Hessian indices */
   int *eqjacsp_selfidx; /* Flat-array position for bus self-admittance in eq
                            Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
-  int *ispv;       /* KS: ispv[i] = 1 if bus is PV bus */
-  int *gineqidx;   /* KS: starting position of bus ineq constraints */
-  int *ineqjacsp_idx; /* KS: index in flat sparse ineq Jacobian array */
-  int *genoffset;     /* KS: Offset into flattened gen array for this bus */
-  int *ngenONbus;     /* KS: Number of ON generators on this bus */
+  int *ispv;            /* KS: ispv[i] = 1 if bus is PV bus */
+  int *gineqidx;        /* KS: starting position of bus ineq constraints */
+  int *ineqjacsp_idx;   /* KS: index in flat sparse ineq Jacobian array */
+  int *genoffset;       /* KS: Offset into flattened gen array for this bus */
+  int *ngenONbus;       /* KS: Number of ON generators on this bus */
 
   // Device data
   int *isref_dev_;      /* isref[i] = 1 if bus is reference bus */
@@ -53,15 +53,15 @@ struct BUSParamsRajaHiop {
                          X vector */
   int *gidx_dev_; /* starting locations for bus balance equations in constraint
                      vector */
-  int *jacsp_idx_dev_;     /* Location number in the sparse Jacobian for Pimb */
-  int *jacsq_idx_dev_;     /* Location number in the sparse Jacobian for Qimb */
-  int *hesssp_idx_dev_;    /* Location number in the Hessian */
+  int *jacsp_idx_dev_;  /* Location number in the sparse Jacobian for Pimb */
+  int *jacsq_idx_dev_;  /* Location number in the sparse Jacobian for Qimb */
+  int *hesssp_idx_dev_; /* Location number in the Hessian */
   int *eqjacsp_selfidx_dev_; /* KS: eqjacsp_selfidx device counterpart */
-  int *ispv_dev_;          /* KS: dev counterpart of ispv */
-  int *gineqidx_dev_;      /* KS: dev counterpart of gineqidx */
-  int *ineqjacsp_idx_dev_; /* KS: device counterpart of ineqjacsp_idx_ */
-  int *genoffset_dev_;     /* KS: dev counterpart of genoffset */
-  int *ngenONbus_dev_;     /* KS: dev counterpart of ngenONbus */
+  int *ispv_dev_;            /* KS: dev counterpart of ispv */
+  int *gineqidx_dev_;        /* KS: dev counterpart of gineqidx */
+  int *ineqjacsp_idx_dev_;   /* KS: device counterpart of ineqjacsp_idx_ */
+  int *genoffset_dev_;       /* KS: dev counterpart of genoffset */
+  int *ngenONbus_dev_;       /* KS: dev counterpart of ngenONbus */
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
@@ -91,7 +91,8 @@ public:
 
   int *xidx;     /* starting locations in X vector */
   int *xpdevidx; /* KS: tarting locations of deviation variables in X vector */
-  int *xpsetidx; /* KS: Starting locations in X vector for set-point variables */
+  int *
+      xpsetidx; /* KS: Starting locations in X vector for set-point variables */
   int *
       gidxbus; /* starting locations in constraint vector for bus constraints */
   int *geqidxgen;    /* starting locations in equality constraint vector for gen
@@ -218,7 +219,7 @@ struct LINEParamsRajaHiop {
   int *linelimidx;    /* Indices for subset of lines that have finite limits */
   int *ineqjacsp_idx; /* KS: Position in flat sparse ineq Jacobian array */
   int *xslackidx;     /* Starting location of slack variables in X vector */
-  int *eqjacsp_idx;      /* Flat-array offset for off-diagonal eq Jacobian entries */
+  int *eqjacsp_idx; /* Flat-array offset for off-diagonal eq Jacobian entries */
   int *eqjacsp_diag_idx; /* Flat-array positions for diagonal entries per line
                             [4*l+0]=from P-row, [4*l+1]=from Q-row,
                             [4*l+2]=to P-row, [4*l+3]=to Q-row */
