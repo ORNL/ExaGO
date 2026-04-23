@@ -28,9 +28,14 @@ struct BUSParamsRajaHiop {
                       vector */
   int *jacsp_idx;  /* Location number in the sparse Jacobian for Pimb */
   int *jacsq_idx;  /* Location number in the sparse Jacobian for Qimb */
-  int *hesssp_idx; /* Location number in the Hessian */
+  int *hesssp_idx; /* KS: Hessian indices */
   int *eqjacsp_selfidx; /* Flat-array position for bus self-admittance in eq
                            Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
+  int *ispv;       /* KS: ispv[i] = 1 if bus is PV bus */
+  int *gineqidx;   /* KS: starting position of bus ineq constraints */
+  int *ineqjacsp_idx; /* KS: index in flat sparse ineq Jacobian array */
+  int *genoffset;     /* KS: Offset into flattened gen array for this bus */
+  int *ngenONbus;     /* KS: Number of ON generators on this bus */
 
   // Device data
   int *isref_dev_;      /* isref[i] = 1 if bus is reference bus */
@@ -48,10 +53,15 @@ struct BUSParamsRajaHiop {
                          X vector */
   int *gidx_dev_; /* starting locations for bus balance equations in constraint
                      vector */
-  int *jacsp_idx_dev_;  /* Location number in the sparse Jacobian for Pimb */
-  int *jacsq_idx_dev_;  /* Location number in the sparse Jacobian for Qimb */
-  int *hesssp_idx_dev_; /* Location number in the Hessian */
+  int *jacsp_idx_dev_;     /* Location number in the sparse Jacobian for Pimb */
+  int *jacsq_idx_dev_;     /* Location number in the sparse Jacobian for Qimb */
+  int *hesssp_idx_dev_;    /* Location number in the Hessian */
   int *eqjacsp_selfidx_dev_; /* KS: eqjacsp_selfidx device counterpart */
+  int *ispv_dev_;          /* KS: dev counterpart of ispv */
+  int *gineqidx_dev_;      /* KS: dev counterpart of gineqidx */
+  int *ineqjacsp_idx_dev_; /* KS: device counterpart of ineqjacsp_idx_ */
+  int *genoffset_dev_;     /* KS: dev counterpart of genoffset */
+  int *ngenONbus_dev_;     /* KS: dev counterpart of ngenONbus */
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
@@ -75,11 +85,13 @@ public:
   double *qt;         /* min. reactive power gen. limits */
   double *qb;         /* max. reactive power gen. limits */
   double *pgs;        /* real power output setpoint */
-  int *xpdevidx; /* KS: Starting locations in X vector for deviation variables */
-  int *xpsetidx; /* KS: Starting locations in X vector for set-point variables */
+  double *apf;        /* generator AGC participation factor */
+  double *vs;         /* voltage setpoint */
   int *isrenewable;   /* Is renewable generator? */
 
-  int *xidx; /* starting locations in X vector */
+  int *xidx;     /* starting locations in X vector */
+  int *xpdevidx; /* KS: tarting locations of deviation variables in X vector */
+  int *xpsetidx; /* KS: Starting locations in X vector for set-point variables */
   int *
       gidxbus; /* starting locations in constraint vector for bus constraints */
   int *geqidxgen;    /* starting locations in equality constraint vector for gen
@@ -109,11 +121,13 @@ public:
   double *qt_dev_;         /* min. reactive power gen. limits */
   double *qb_dev_;         /* max. reactive power gen. limits */
   double *pgs_dev_;        /* real power output setpoint */
-  int *xpdevidx_dev_;   /* KS: xpdevidx_ GPU counterpart */
-  int *xpsetidx_dev_;   /* KS: xpsetidx_ GPU counterpart */
+  double *apf_dev_;        /* KS: device counterpart of apf */
+  double *vs_dev_;         /* KS: device counterpart of vs */
   int *isrenewable_dev_;   /* Is renewable generator? */
 
   int *xidx_dev_;        /* starting locations in X vector */
+  int *xpdevidx_dev_;    /* KS: device coutnerpart of xpdevidx*/
+  int *xpsetidx_dev_;    /* KS: xpsetidx device counterpart */
   int *gidxbus_dev_;     /* starting locations in constraint vector for bus
                             constraints */
   int *geqidxgen_dev_;   /* starting locations in equality constraint vector for
@@ -150,7 +164,7 @@ struct LOADParamsRajaHiop {
   double *pl;               /* active power demand */
   double *ql;               /* reactive power demand */
   double *loadloss_penalty; /* Penalty for load loss */
-  int *xidx;                /* starting location in X vector */
+  int *xidx;                /* KS: starting location in X vector */
   int *gidx;                /* starting location in constraint vector */
 
   /* The following members are only used with HIOP */
@@ -199,9 +213,11 @@ struct LINEParamsRajaHiop {
                     contribution in constraints vector */
   int *gineqidx; /* Starting location to insert contribution to inequality
                     constraint */
-  int *gbineqidx;  /* Starting location to insert contribution to inequality
-                      constraint bound */
-  int *linelimidx; /* Indices for subset of lines that have finite limits */
+  int *gbineqidx;     /* Starting location to insert contribution to inequality
+                         constraint bound */
+  int *linelimidx;    /* Indices for subset of lines that have finite limits */
+  int *ineqjacsp_idx; /* KS: Position in flat sparse ineq Jacobian array */
+  int *xslackidx;     /* Starting location of slack variables in X vector */
   int *eqjacsp_idx;      /* Flat-array offset for off-diagonal eq Jacobian entries */
   int *eqjacsp_diag_idx; /* Flat-array positions for diagonal entries per line
                             [4*l+0]=from P-row, [4*l+1]=from Q-row,
@@ -230,8 +246,10 @@ struct LINEParamsRajaHiop {
                           constraint bound */
   int *
       linelimidx_dev_; /* Indices for subset of lines that have finite limits */
-  int *eqjacsp_idx_dev_; /* KS: GPU counterpart for eqjacsp_idx_ */
-  int *eqjacsp_diag_idx_dev_; /* KS: GPU counterpart for eqjacsp_diag_idx_*/
+  int *ineqjacsp_idx_dev_; /* KS: Position in flat sparse ineq Jacobian array */
+  int *xslackidx_dev_; /* Starting location of slack variables in X vector */
+  int *eqjacsp_idx_dev_;
+  int *eqjacsp_diag_idx_dev_;
   int *isdcline_dev_;
 
   int allocate(OPFLOW);
@@ -262,6 +280,9 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
   LOADParamsRajaHiop loadparams;
   LINEParamsRajaHiop lineparams;
   BUSParamsRajaHiop busparams;
+
+  int agc_xidx; /* KS: X-vector index for the AGC delta-P variable
+                   (ps->startxloc) */
 
   // Arrays to store Jacobian and Hessian indices and entries on CPU (used with
   // GPU sparse model)

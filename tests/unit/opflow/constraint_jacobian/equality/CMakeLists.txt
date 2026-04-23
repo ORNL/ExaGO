@@ -105,7 +105,6 @@ if(EXAGO_RUN_TESTS)
       set(testname
           "UNIT_TESTS_EQUALITY_CONSTRAINT_JACOBIAN_${net}_${solver}_${model}"
       )
-      message(STATUS "Setting up test: ${testname}")
       exago_add_test(
         NAME
         ${testname}
