@@ -55,12 +55,10 @@ int main(int argc, char **argv) {
                                PETSC_MAX_PATH_LEN, &flgscen);
   CHKERRQ(ierr);
 
-
   /* Get load data file from command line */
   ierr = PetscOptionsGetString(NULL, NULL, "-loadfile", loadfile,
                                PETSC_MAX_PATH_LEN, &flgload);
   CHKERRQ(ierr);
-
 
   /* Stage 1 - Application creation and reading data */
   ierr = PetscLogStagePush(stages[0]);

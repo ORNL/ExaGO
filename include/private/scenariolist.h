@@ -18,8 +18,8 @@ struct _p_Forecast {
   PetscInt nele;     /* Number of devices/elements involved in this forecast */
   PetscInt *buses;   /* Bus numbers */
   char **id;         /* Device ids */
-  PetscScalar *val1 = nullptr;  /* forecast values */
-  PetscScalar *val2 = nullptr;  /* 2nd set of forecast values */
+  PetscScalar *val1 = nullptr; /* forecast values */
+  PetscScalar *val2 = nullptr; /* 2nd set of forecast values */
 };
 
 typedef struct _p_Forecast Forecast;

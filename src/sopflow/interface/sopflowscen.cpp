@@ -39,8 +39,8 @@ PetscErrorCode SOPFLOWSetScenarioData(SOPFLOW sopflow,
 }
 
 /*
-  SOPFLOWReadScenarioData_LoadPQ_SinglePeriod - Reads the load data and populates
-the scenario list Input Parameters
+  SOPFLOWReadScenarioData_LoadPQ_SinglePeriod - Reads the load data and
+populates the scenario list Input Parameters
 + sopflow - SOPFLOW object
 . loadprofile - load profile file
 
@@ -49,7 +49,7 @@ files.
 */
 PetscErrorCode
 SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
-                                             const char windgenprofile[]) {
+                                            const char windgenprofile[]) {
 
   PetscErrorCode ierr;
   FILE *fp;

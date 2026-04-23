@@ -140,8 +140,7 @@ struct SopflowFunctionalityTests
       }
     };
 
-    for (const auto &opt :
-         {"solver", "network", "num_scenarios", "tolerance"})
+    for (const auto &opt : {"solver", "network", "num_scenarios", "tolerance"})
       ensure_option_available(opt);
 
     bool is_multicontingency = false;
@@ -236,17 +235,19 @@ struct SopflowFunctionalityTests
     ExaGOCheckError(ierr);
 
     // Prepend installation directory to scenario data
-    if (params.loadfile != ""){
-      std::cout << "Network: " << params.network << " Using Load File: " << params.loadfile << std::endl;
+    if (params.loadfile != "") {
+      std::cout << "Network: " << params.network
+                << " Using Load File: " << params.loadfile << std::endl;
       resolve_datafiles_path(params.loadfile);
       ierr = SOPFLOWSetScenarioData(sopflow, SOPFLOW_NATIVE_SINGLEPERIOD, LOAD,
-                                  params.loadfile.c_str());
+                                    params.loadfile.c_str());
       ExaGOCheckError(ierr);
-    } else if (params.scenfile != ""){
-      std::cout << "Network: " << params.network << " Using Scenario File: " << params.scenfile << std::endl;
+    } else if (params.scenfile != "") {
+      std::cout << "Network: " << params.network
+                << " Using Scenario File: " << params.scenfile << std::endl;
       resolve_datafiles_path(params.scenfile);
       ierr = SOPFLOWSetScenarioData(sopflow, SOPFLOW_NATIVE_SINGLEPERIOD, WIND,
-                                  params.scenfile.c_str());
+                                    params.scenfile.c_str());
       ExaGOCheckError(ierr);
     }
 

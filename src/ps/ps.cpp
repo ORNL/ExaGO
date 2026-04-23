@@ -1659,7 +1659,8 @@ PetscErrorCode PSApplyScenario(PS ps, Scenario scenario) {
         CHKERRQ(ierr);
         if (load) {
           load->pl = forecast->val1[j] / ps->MVAbase; /* Set real power load. */
-          load->ql = forecast->val2[j] / ps->MVAbase; /* Set reactive power load. */
+          load->ql =
+              forecast->val2[j] / ps->MVAbase; /* Set reactive power load. */
         } else {
           printf("No load on bus %d with id %s. Cannot apply the "
                  "requested scenario\n",
