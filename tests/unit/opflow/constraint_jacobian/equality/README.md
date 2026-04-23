@@ -132,10 +132,10 @@ With the parameters of the example network the matrix is:
 <td>Q1</td> <td>-1.6</td> <td>-2.0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>P2</td> <td>-0.8</td> <td>-0.8</td> <td>0.8</td> <td>2.8</td> <td>0.8</td> <td>-0.2</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>-0.8</td> <td>0</td> <td>0</td>
+<td>P2</td> <td>-0.8</td> <td>-0.8</td> <td>0.8</td> <td>1.81</td> <td>0.8</td> <td>-0.2</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>-0.8</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>Q2</td> <td>1.6</td> <td>-0.4</td> <td>-3.6</td> <td>-3.8</td> <td>0.4</td> <td>0.4</td> <td>0</td> <td>0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td>
+<td>Q2</td> <td>1.6</td> <td>-0.4</td> <td>-3.6</td> <td>-3.998</td> <td>0.4</td> <td>0.4</td> <td>0</td> <td>0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
 <td>P3</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>0.2</td> <td>0.8</td> <td>1.8</td> <td>-1</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
