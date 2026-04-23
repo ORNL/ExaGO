@@ -31,9 +31,9 @@ struct BUSParamsRajaHiop {
   int *hesssp_idx; /* KS: Hessian indices */
   int *ispv;       /* KS: ispv[i] = 1 if bus is PV bus */
   int *gineqidx;   /* KS: starting position of bus ineq constraints */
-  int *ineqjacsp_idx; /* KS: index in flat sparse ineq Jacobian array */
-  int *genoffset;     /* KS: Offset into flattened gen array for this bus */
-  int *ngenONbus;     /* KS: Number of ON generators on this bus */
+  int *ineqjacsp_idx;   /* KS: index in flat sparse ineq Jacobian array */
+  int *genoffset;       /* KS: Offset into flattened gen array for this bus */
+  int *ngenONbus;       /* KS: Number of ON generators on this bus */
   int *eqjacsp_selfidx; /* Flat-array position for bus self-admittance in eq
                            Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
 
@@ -87,8 +87,8 @@ public:
   double *pgs;        /* real power output setpoint */
   double *apf;        /* generator AGC participation factor */
   double *vs;         /* voltage setpoint */
-  int *xpsetidx; /* Starting locations in X vector for set-point variables */
-  int *isrenewable;   /* Is renewable generator? */
+  int *xpsetidx;    /* Starting locations in X vector for set-point variables */
+  int *isrenewable; /* Is renewable generator? */
 
   int *xidx;     /* starting locations in X vector */
   int *xpdevidx; /* KS: tarting locations of deviation variables in X vector */
@@ -123,7 +123,7 @@ public:
   double *pgs_dev_;        /* real power output setpoint */
   double *apf_dev_;        /* KS: device counterpart of apf */
   double *vs_dev_;         /* KS: device counterpart of vs */
-  int *xpsetidx_dev_;   /* KS: xpsetidx_ GPU counterpart */
+  int *xpsetidx_dev_;      /* KS: xpsetidx_ GPU counterpart */
   int *isrenewable_dev_;   /* Is renewable generator? */
 
   int *xidx_dev_;        /* starting locations in X vector */
@@ -218,7 +218,7 @@ struct LINEParamsRajaHiop {
   int *linelimidx;    /* Indices for subset of lines that have finite limits */
   int *ineqjacsp_idx; /* KS: Position in flat sparse ineq Jacobian array */
   int *xslackidx;     /* Starting location of slack variables in X vector */
-  int *eqjacsp_idx;      /* Flat-array offset for off-diagonal eq Jacobian entries */
+  int *eqjacsp_idx; /* Flat-array offset for off-diagonal eq Jacobian entries */
   int *eqjacsp_diag_idx; /* Flat-array positions for diagonal entries per line
                             [4*l+0]=from P-row, [4*l+1]=from Q-row,
                             [4*l+2]=to P-row, [4*l+3]=to Q-row */
@@ -247,7 +247,7 @@ struct LINEParamsRajaHiop {
   int *
       linelimidx_dev_; /* Indices for subset of lines that have finite limits */
   int *ineqjacsp_idx_dev_; /* KS: Position in flat sparse ineq Jacobian array */
-  int *xslackidx_dev_; /* Starting location of slack variables in X vector */
+  int *xslackidx_dev_;   /* Starting location of slack variables in X vector */
   int *eqjacsp_idx_dev_; /* KS: GPU counterpart for eqjacsp_idx_ */
   int *eqjacsp_diag_idx_dev_; /* KS: GPU counterpart for eqjacsp_diag_idx_*/
   int *isdcline_dev_;

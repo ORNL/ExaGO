@@ -80,10 +80,15 @@ if(EXAGO_RUN_TESTS)
   if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_HIOP)
     set(prefix_net ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)
     exago_add_test(
-      NAME UNIT_TESTS_EQJAC_GPU_VS_PETSC_testx3
-      DEPENDS HIOP_SPARSE
-      COMMAND ${RUNCMD} $<TARGET_FILE:test_eqjac_compare>
-              -netfile ${prefix_net}testx3.m
+      NAME
+      UNIT_TESTS_EQJAC_GPU_VS_PETSC_testx3
+      DEPENDS
+      HIOP_SPARSE
+      COMMAND
+      ${RUNCMD}
+      $<TARGET_FILE:test_eqjac_compare>
+      -netfile
+      ${prefix_net}testx3.m
     )
   endif()
 endif()
