@@ -53,3 +53,13 @@ solver = 'EMPAR'
 num_scenarios = 3
 num_iters = 0
 obj_value = 14316.630954933302
+
+[[testcase]]
+description = 'LoadTest'
+tolerance = 1e-3
+network = 'datafiles/case9/case9mod.m'
+loadfile = 'datafiles/case9/10_scenarios_9bus_load.txt'
+solver = 'EMPAR'
+num_scenarios = 3
+num_iters = 0
+obj_value = 722.106958693

@@ -51,7 +51,6 @@ PetscErrorCode
 SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
                                              const char windgenprofile[]) {
 
-  // printf("I am being called\n");
   PetscErrorCode ierr;
   FILE *fp;
   char line[MAXLINE];
@@ -96,15 +95,6 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
     scen_num -= 1; /* Scenario numbers start with 1 in the file, convert to
                       zero-based start */
 
-    // printf("Parsing scenario number %d\n", scen_num);
-
-    // tok2 = strsep(&tok, sep2_dash); // Bus Number
-
-    // sscanf(tok2, "%d", &bus[nw]);
-    // tok3 = strsep(&tok, sep2_dash); // Wind
-    // tok4 = strsep(&tok, sep2_dash); // Gen ID
-    // tok5 = strsep(&tok, sep2_dash); // Value
-
     if (scen_num < scenlist->Nscen || scen_num == sopflow->Ns) {
       fclose(fp);
       PetscFunctionReturn(0);
@@ -122,43 +112,28 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
     tok = strtok(NULL, sep_comma);
     sscanf(tok, "%lf", &weight);
 
-    // printf("Scenario weight = %lf\n", weight);
-
     tok = strtok(NULL, sep_comma);
     while (tok != NULL) {
-
-      // printf("## tok = %s\n", tok);
 
       GenData gd;
 
       /* Parse generator info */
       tok2 = strsep(&tok, sep2_dash); // Bus Number
       sscanf(tok2, "%d", &gd.busnum);
-      // printf("Bus number = %d\n", gd.busnum);
       tok3 = strsep(&tok, sep2_dash); // Type (Load or Gen)
       tok4 = strsep(&tok, sep2_dash); // CKT
       sscanf(tok4, "%d", &genid);
       snprintf(gd.id, 3, "%-2d", genid);
-      // printf("Gen ID = %s\n", gd.id);
       tok5 = strsep(&tok, sep2_dash); // Value1
       sscanf(tok5, "%lf", &gd.value1);
-      // printf("Value1 = %lf\n", gd.value1);
       tok6 = strsep(&tok, sep2_dash); // Value2
       sscanf(tok6, "%lf", &gd.value2);
-      // printf("Value2 = %lf\n", gd.value2);
 
       gendata.push_back(gd);
 
-      // printf("## gd = %d, %s, %lf, %lf\n", gd.busnum, gd.id, gd.value1,
-      //        gd.value2);
-
-      // printf("!Token = %s\n", gendata.back());
       tok = strtok(NULL, sep_comma);
-
-      // printf("## tok = %s\n", tok);
     }
 
-    // printf("Done Parsing 1 line of Tokens\n");
     scenario = &scenlist->scen[scen_num];
     forecast = &scenario->forecastlist[scenario->nforecast];
     forecast->num = scen_num;
@@ -177,135 +152,15 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
     ierr = PetscCalloc1(forecast->nele, &forecast->val2);
     CHKERRQ(ierr);
 
-
-    // tok = strtok(NULL, sep_comma);
-
     for (i = 0; i < gendata.size(); i++) {
       forecast->buses[i] = gendata[i].busnum;
       ierr = PetscStrcpy(forecast->id[i], gendata[i].id);
       CHKERRQ(ierr);
-      //   sscanf(tok, "%lf", &pg);
       forecast->val1[i] = gendata[i].value1;
       forecast->val2[i] = gendata[i].value2;
-      //   tok = strtok(NULL, sep_comma);
     }
 
     // /* Read scenario weight */
-    // sscanf(tok, "%lf", &weight);
-    scenario->prob = weight;
-
-    scenario->nforecast++;
-    scenlist->Nscen++;
-  }
-  PetscFunctionReturn(0);
-}
-
-/*
-  SOPFLOWReadScenarioData_Wind_SinglePeriod - Reads the wind data and populates
-the scenario list Input Parameters
-+ sopflow - SOPFLOW object
-. windgenprofile - wind generator profile file
-
-  Note: This function reads the wind scenario data for "single period" format
-files.
-*/
-PetscErrorCode
-SOPFLOWReadScenarioData_Wind_SinglePeriod_2(SOPFLOW sopflow,
-                                            const char windgenprofile[]) {
-  PetscErrorCode ierr;
-  FILE *fp;
-  char line[MAXLINE];
-  char *out;
-  PetscInt ngenwind, nw = 0;
-  char *tok, *tok2;
-  char sep[] = ",", sep2[] = "_";
-  PetscReal pg, weight;
-  int scen_num = 0;
-  int genid;
-  int windgenbus[1000];
-  char windgenid[1000][3];
-  int i;
-  ScenarioList *scenlist = &sopflow->scenlist;
-  Scenario *scenario;
-  Forecast *forecast;
-
-  PetscFunctionBegin;
-
-  ngenwind = 1000; // This should be increased for larger cases (?)
-  fp = fopen(windgenprofile, "r");
-  if (fp == NULL) {
-    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_OPEN,
-            "Cannot open wind generation profile file %s", windgenprofile);
-  }
-
-  /* First line -- has the bus numbers */
-  out = fgets(line, MAXLINE, fp);
-  /* Parse wind generator numbers */
-  tok = strtok(line, sep);
-  tok = strtok(NULL, sep); /* Skip first token */
-  while (tok != NULL) {
-    if (strcmp(tok, "weight") == 0 || strcmp(tok, "weight\n") == 0 ||
-        strcmp(tok, "weight\r\n") == 0) {
-      tok = strtok(NULL, sep);
-      continue;
-    }
-    /* Parse generator info */
-    tok2 = strsep(&tok, sep2);
-    sscanf(tok2, "%d", &windgenbus[nw]);
-    tok2 = strsep(&tok, sep2);
-    tok2 = strsep(&tok, sep2); /* Skip string "Wind" */
-    sscanf(tok2, "%d", &genid);
-    if (nw == ngenwind)
-      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
-              "Exceeded max. number of wind generators=%d\n", ngenwind);
-    snprintf(windgenid[nw], 3, "%-2d", genid);
-
-    nw++;
-    tok = strtok(NULL, sep);
-  }
-
-  while ((out = fgets(line, MAXLINE, fp)) != NULL) {
-    if (strcmp(line, "\r\n") == 0 || strcmp(line, "\n") == 0) {
-      continue; /* Skip blank lines */
-    }
-
-    tok = strtok(line, sep);
-    sscanf(tok, "%d", &scen_num); /* Scenario number */
-    scen_num -= 1; /* Scenario numbers start with 1 in the file, convert to
-                      zero-based start */
-
-    if (scen_num < scenlist->Nscen || scen_num == sopflow->Ns) {
-      fclose(fp);
-      PetscFunctionReturn(0);
-    }
-
-    scenario = &scenlist->scen[scen_num];
-    forecast = &scenario->forecastlist[scenario->nforecast];
-    forecast->num = scen_num;
-    forecast->type = FORECAST_WIND;
-    forecast->nele = nw;
-    ierr = PetscCalloc1(forecast->nele, &forecast->buses);
-    CHKERRQ(ierr);
-    ierr = PetscCalloc1(forecast->nele, &forecast->id);
-    CHKERRQ(ierr);
-    for (i = 0; i < forecast->nele; i++) {
-      ierr = PetscCalloc1(3, &forecast->id[i]);
-    }
-    ierr = PetscCalloc1(forecast->nele, &forecast->val1);
-    CHKERRQ(ierr);
-
-    tok = strtok(NULL, sep);
-    for (i = 0; i < nw; i++) {
-      forecast->buses[i] = windgenbus[i];
-      ierr = PetscStrcpy(forecast->id[i], windgenid[i]);
-      CHKERRQ(ierr);
-      sscanf(tok, "%lf", &pg);
-      forecast->val1[i] = pg;
-      tok = strtok(NULL, sep);
-    }
-
-    /* Read scenario weight */
-    sscanf(tok, "%lf", &weight);
     scenario->prob = weight;
 
     scenario->nforecast++;
