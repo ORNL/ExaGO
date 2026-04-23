@@ -39,7 +39,7 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
     double *b_gl = busparams->gl_dev_;
     double *b_bl = busparams->bl_dev_;
     int *b_selfidx = busparams->eqjacsp_selfidx_dev_;
-
+/*KS: can probably parallelize this differently but it is correct  -- optimizing existing code is easier than writing it froms scratch .... */
     RAJA::forall<exago_raja_exec>(
         RAJA::RangeSegment(0, busparams->nbus),
         RAJA_LAMBDA(RAJA::Index_type i) {
