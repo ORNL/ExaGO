@@ -9,17 +9,8 @@ cmake_minimum_required(VERSION 3.18)
 project(ExaGO VERSION "1.6.0")
 
 set(CMAKE_CXX_STANDARD 17)
-# Enable setting Mac OS X rpath
-set(CMAKE_MACOSX_RPATH 1)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
-if(POLICY CMP0074)
-  cmake_policy(SET CMP0074 NEW) # CMake 3.12
-endif()
-
-if(POLICY CMP0104)
-  cmake_policy(SET CMP0104 NEW) # CMake 3.18
-endif()
 
 # We default to release builds
 set(_DEFAULT_CMAKE_BUILD_TYPE RelWithDebInfo)
@@ -68,7 +59,7 @@ option(EXAGO_ENABLE_PETSC "Enable PETSc support" ON)
 # MPI support is enabled by default
 option(EXAGO_ENABLE_MPI "Enable MPI support" ON)
 
-# Ipopt support is disabled by default
+# Ipopt support is enabled by default
 option(EXAGO_ENABLE_IPOPT "Enable Ipopt support" ON)
 
 # HiOP support is disabled by default
@@ -166,10 +157,6 @@ if(EXAGO_ENABLE_MPI)
     set(TESTING_MAX_NUMPROCS ${MPIEXEC_MAX_NUMPROCS})
   endif()
   message(STATUS "Max ranks for testing: ${TESTING_MAX_NUMPROCS}")
-  if(NOT DEFINED MPI_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER ${MPI_CXX_COMPILER})
-    set(CMAKE_C_COMPILER ${MPI_C_COMPILER})
-  endif(NOT DEFINED MPI_CXX_COMPILER)
   include_directories(
     ${MPI_CXX_HEADER_DIR} ${MPI_CXX_ADDITIONAL_INCLUDE_DIRS}
     ${MPI_CXX_COMPILER_INCLUDE_DIRS}
@@ -185,18 +172,18 @@ endif(EXAGO_ENABLE_MPI)
 # If CUDA support is enabled, set up CUDA compiler and flags
 if(EXAGO_ENABLE_CUDA)
   include(CheckLanguage)
-  enable_language(CUDA)
   check_language(CUDA)
+  enable_language(CUDA)
 
-  find_package(CUDA REQUIRED)
+  find_package(CUDAToolkit REQUIRED)
 
   if(NOT DEFINED CMAKE_CUDA_STANDARD)
-    set(CMAKE_CUDA_STANDARD 11)
+    set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
   endif()
 
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES 35)
+    set(CMAKE_CUDA_ARCHITECTURES 70)
   endif()
 
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-extended-lambda")
@@ -208,7 +195,7 @@ endif(EXAGO_ENABLE_CUDA)
 # If HIP support is enabled, set up HIP compiler and flags
 if(EXAGO_ENABLE_HIP)
   set(EXAGO_HAVE_HIP 1)
-  add_definitions(-DHAVE_HIP) # For hipmagma
+  add_compile_definitions(HAVE_HIP) # For hipmagma
   find_package(hip REQUIRED)
 endif()
 
@@ -226,9 +213,6 @@ if(EXAGO_ENABLE_PETSC)
   set(ENV{PKG_CONFIG_PATH} ${PKG_CONFIG_PATH_save})
 endif()
 
-# Set install rpath to the locations where EXAGO and PETSc libraries reside.
-# TODO: Automatically skip if PETSc and EXAGO are already on system lib path.
-# set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib ${PETSC_DIR}/lib)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON)
 
 if(EXAGO_ENABLE_IPOPT)
