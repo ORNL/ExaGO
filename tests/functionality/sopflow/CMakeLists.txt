@@ -22,8 +22,6 @@ if(EXAGO_RUN_TESTS)
     ${RUNCMD}
     $<TARGET_FILE:test_sopflow_functionality>
     ${CMAKE_CURRENT_SOURCE_DIR}/sopflow_multiscenario.toml
-    WORKING_DIRECTORY
-    ${CMAKE_SOURCE_DIR}
   )
 
   exago_add_test(
@@ -35,8 +33,6 @@ if(EXAGO_RUN_TESTS)
     ${RUNCMD}
     $<TARGET_FILE:test_sopflow_functionality>
     ${CMAKE_CURRENT_SOURCE_DIR}/sopflow_multiscenario2.toml
-    WORKING_DIRECTORY
-    ${CMAKE_SOURCE_DIR}
   )
 
   exago_add_test(
@@ -52,8 +48,6 @@ if(EXAGO_RUN_TESTS)
     -opflow_ignore_lineflow_constraints
     -hiop_mem_space
     HOST
-    WORKING_DIRECTORY
-    ${CMAKE_SOURCE_DIR}
   )
 
   exago_add_test(
@@ -80,8 +74,6 @@ if(EXAGO_RUN_TESTS)
     ${RUNCMD}
     $<TARGET_FILE:test_sopflow_functionality>
     ${CMAKE_CURRENT_SOURCE_DIR}/sopflow_multicontingency.toml
-    WORKING_DIRECTORY
-    ${CMAKE_SOURCE_DIR}
   )
 
   exago_add_test(
@@ -96,8 +88,6 @@ if(EXAGO_RUN_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/sopflow_multiscenario_serial.toml
     -hiop_mem_space
     HOST
-    WORKING_DIRECTORY
-    ${CMAKE_SOURCE_DIR}
   )
 
   exago_add_test(
@@ -112,8 +102,6 @@ if(EXAGO_RUN_TESTS)
     ${TESTING_MAX_NUMPROCS}
     $<TARGET_FILE:test_sopflow_functionality>
     ${CMAKE_CURRENT_SOURCE_DIR}/sopflow_multiscenario_parallel.toml
-    WORKING_DIRECTORY
-    ${CMAKE_SOURCE_DIR}
   )
 
   exago_add_test(

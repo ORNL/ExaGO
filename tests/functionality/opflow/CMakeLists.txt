@@ -56,8 +56,6 @@ if(EXAGO_RUN_TESTS)
       DEPENDS
       HIOP_SPARSE
       RAJA
-      WORKING_DIRECTORY
-      ${CMAKE_SOURCE_DIR}
     )
   endif(EXAGO_ENABLE_GPU)
 
@@ -83,8 +81,6 @@ if(EXAGO_RUN_TESTS)
     ${RUNCMD}
     $<TARGET_FILE:test_opflow_functionality>
     ${CMAKE_CURRENT_SOURCE_DIR}/ipopt_pbpol.toml
-    WORKING_DIRECTORY
-    ${CMAKE_SOURCE_DIR}
     DEPENDS
     IPOPT
   )
@@ -127,8 +123,6 @@ if(EXAGO_RUN_TESTS)
     -opflow_allow_lineflow_violation
     -opflow_lineflowviolation_penalty
     100
-    WORKING_DIRECTORY
-    ${CMAKE_SOURCE_DIR}
     DEPENDS
     IPOPT
   )
