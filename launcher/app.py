@@ -707,6 +707,9 @@ with tab_python:
             fmt = output_format or "MATPOWER"
             fmt_enum = _fmt_to_enum.get(fmt, f"exago.{fmt}")
             body.append(f"opf.save_solution({fmt_enum})")
+        body.append("")
+        body.append("# Delete opflow instance")
+        body.append("del opf")
 
     elif py_app == "SCOPFLOW":
         body += [
@@ -731,6 +734,9 @@ with tab_python:
             body.append("")
             body.append("# Print solution")
             body.append("scopf.print_solution(0)")
+        body.append("")
+        body.append("# Delete scopflow instance")
+        body.append("del scopf")
 
     elif py_app == "SOPFLOW":
         body += [
@@ -757,6 +763,9 @@ with tab_python:
             body.append("")
             body.append("# Print solution")
             body.append("sopf.print_solution(0)")
+        body.append("")
+        body.append("# Delete sopflow instance")
+        body.append("del sopf")
 
     elif py_app == "TCOPFLOW":
         body += [
@@ -780,6 +789,9 @@ with tab_python:
             body.append("")
             body.append("# Print solution")
             body.append("tcopf.print_solution(0)")
+        body.append("")
+        body.append("# Delete tcopflow instance")
+        body.append("del tcopf")
 
     elif py_app == "PFLOW":
         body += [
@@ -795,6 +807,9 @@ with tab_python:
             body.append("")
             body.append("# Print solution")
             body.append("pf.print_solution()")
+        body.append("")
+        body.append("# Delete pflow instance")
+        body.append("del pf")
 
     elif py_app == "DCOPFLOW":
         # DCOPFLOW has no Python bindings — skip init/finalize wrapper
@@ -809,11 +824,8 @@ with tab_python:
         lines += body
         lines += [
             "",
-            "# Clean up",
-            "try:",
-            "    exago.finalize()",
-            "except Exception:",
-            "    pass  # MPI finalization may throw during cleanup; results are valid",
+            "# Close ExaGO",
+            "exago.finalize()",
         ]
 
     python_code = "\n".join(lines)
