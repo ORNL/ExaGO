@@ -46,25 +46,11 @@ if(EXAGO_ENABLE_IPOPT)
   list(APPEND dependencies IPOPT)
 endif()
 
-# Set up HIOP solver tests if enabled (deprecated)
-if(EXAGO_ENABLE_HIOP)
-  list(APPEND solvers HIOP)
-  list(APPEND models POWER_BALANCE_HIOP)
-  list(APPEND dependencies HIOP)
-endif()
-
 # Set up HIOPSPARSE solver tests if enabled
 if(TARGET HiOp::SPARSE)
   list(APPEND solvers HIOPSPARSE)
   list(APPEND models POWER_BALANCE_POLAR)
   list(APPEND dependencies HIOP_SPARSE)
-endif()
-
-# Set up RAJA support tests if enabled (deprecated)
-if(EXAGO_ENABLE_RAJA)
-  list(APPEND solvers HIOP)
-  list(APPEND models PBPOLRAJAHIOP)
-  list(APPEND dependencies HIOP)
 endif()
 
 if(EXAGO_RUN_TESTS)
