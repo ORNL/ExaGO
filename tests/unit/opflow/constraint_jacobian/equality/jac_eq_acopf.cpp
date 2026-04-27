@@ -84,10 +84,11 @@ int main(int argc, char **argv) {
   PetscCall(OPFLOWGetConstraintJacobian(opflowtest, &J_eq, &J_ineq));
   PetscCall(OPFLOWComputeConstraintJacobian(opflowtest, X, J_eq, J_ineq));
 
-//   PetscViewerPushFormat(PETSC_VIEWER_STDOUT_SELF, PETSC_VIEWER_ASCII_DENSE);
-//   PetscCall(MatView(J_eq_ref, PETSC_VIEWER_STDOUT_SELF));
-//   PetscCall(VecView(X, PETSC_VIEWER_STDOUT_SELF));
-//   PetscCall(MatView(J_eq, PETSC_VIEWER_STDOUT_SELF));
+  //   PetscViewerPushFormat(PETSC_VIEWER_STDOUT_SELF,
+  //   PETSC_VIEWER_ASCII_DENSE); PetscCall(MatView(J_eq_ref,
+  //   PETSC_VIEWER_STDOUT_SELF)); PetscCall(VecView(X,
+  //   PETSC_VIEWER_STDOUT_SELF)); PetscCall(MatView(J_eq,
+  //   PETSC_VIEWER_STDOUT_SELF));
 
   PetscCall(MatAXPY(J_eq, -1.0, J_eq_ref, UNKNOWN_NONZERO_PATTERN));
   PetscReal norm = 0.0;
