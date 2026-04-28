@@ -230,17 +230,17 @@ struct ScopflowFunctionalityTests
     }
     ExaGOCheckError(ierr);
 
-    // Prepend installation directory to network path
+    // Prepend installation directory to pload path
     resolve_datafiles_path(params.pload);
     ierr = SCOPFLOWSetPLoadData(scopflow, params.pload.c_str());
     ExaGOCheckError(ierr);
 
-    // Prepend installation directory to network path
+    // Prepend installation directory to qload path
     resolve_datafiles_path(params.qload);
     ierr = SCOPFLOWSetQLoadData(scopflow, params.qload.c_str());
     ExaGOCheckError(ierr);
 
-    // Prepend installation directory to network path
+    // Prepend installation directory to windgen path
     resolve_datafiles_path(params.windgen);
     ierr = SCOPFLOWSetWindGenProfile(scopflow, params.windgen.c_str());
     ExaGOCheckError(ierr);
