@@ -478,6 +478,8 @@ PetscErrorCode TCOPFLOWComputeGradient_GENRAMP(TCOPFLOW tcopflow, Vec X,
   ierr = VecGetArray(Grad, &grad);
   CHKERRQ(ierr);
 
+  PetscFunctionBegin;
+
   for (i = 0; i < tcopflow->Nt; i++) {
     opflow = tcopflow->opflows[i];
     xi = x + tcopflow->xstarti[i];

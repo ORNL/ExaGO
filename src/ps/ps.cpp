@@ -1008,7 +1008,8 @@ PetscErrorCode PSSetUp(PS ps) {
   //    lineconn[0][2 * (Nlines+i)    ] = ps->isolated_buses[i];
   //    lineconn[0][2 * (Nlines+i) + 1] = 0;
   //  }
-  //  ierr = PetscFree(ps->isolated_buses);
+  ierr = PetscFree(ps->isolated_buses);
+  CHKERRQ(ierr);
 
   /* Set sizes for the network and provide edge connectivity information */
   ierr = DMNetworkSetNumSubNetworks(networkdm, PETSC_DECIDE, 1);

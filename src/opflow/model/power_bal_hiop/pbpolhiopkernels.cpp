@@ -574,6 +574,8 @@ PetscErrorCode OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLHIOP(
   LOADParams *loadparams = &pbpolhiop->loadparams;
   BUSParams *busparams = &pbpolhiop->busparams;
 
+  PetscFunctionBegin;
+
   if (iJacS != NULL && jJacS != NULL) {
 
     /* Power Imbalance Contributions (BUS Second Variables?) */
@@ -674,6 +676,8 @@ PetscErrorCode OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLHIOP(
   (void)opflow;
   (void)x;
 
+  PetscFunctionBegin;
+
   if (iJacS != NULL && jJacS != NULL) {
   }
 
@@ -702,6 +706,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLHIOP(OPFLOW opflow,
   double weight = opflow->weight;
   PetscInt flps = 0;
   int loc;
+
+  PetscFunctionBegin;
 
   if (iHSS != NULL && jHSS != NULL) {
 
@@ -1814,6 +1820,8 @@ PetscErrorCode OPFLOWComputeDenseHessian_PBPOLHIOP(OPFLOW opflow,
   PetscErrorCode ierr;
   int nxdense = opflow->nxdense;
 
+  PetscFunctionBegin;
+
   if (!HDD)
     PetscFunctionReturn(0);
 
@@ -1842,6 +1850,8 @@ PetscErrorCode OPFLOWSolutionCallback_PBPOLHIOP(
   (void)obj_value;
   PetscErrorCode ierr;
   PetscScalar *x, *lam, *g;
+
+  PetscFunctionBegin;
 
   ierr = VecGetArray(opflow->X, &x);
   CHKERRQ(ierr);

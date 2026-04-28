@@ -623,6 +623,8 @@ PetscErrorCode OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOP(
   LOADParamsRajaHiop *loadparams = &pbpolrajahiop->loadparams;
   BUSParamsRajaHiop *busparams = &pbpolrajahiop->busparams;
 
+  PetscFunctionBegin;
+
   //  PetscPrintf(MPI_COMM_SELF,"Entered sparse jacobian\n");
   if (iJacS_dev != NULL && jJacS_dev != NULL) {
 
@@ -777,6 +779,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOP(
   double weight = opflow->weight;
   PetscInt flps = 0;
   //  PetscPrintf(MPI_COMM_SELF,"Entered sparse Hessian\n");
+
+  PetscFunctionBegin;
 
   if (iHSS_dev != NULL && jHSS_dev != NULL) {
 
@@ -2077,6 +2081,8 @@ PetscErrorCode OPFLOWComputeDenseHessian_PBPOLRAJAHIOP(OPFLOW opflow,
   PetscErrorCode ierr;
   int nxdense = opflow->nxdense;
 
+  PetscFunctionBegin;
+
   if (!HDD_dev)
     PetscFunctionReturn(0);
 
@@ -2107,6 +2113,8 @@ PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOP(
 
   PetscErrorCode ierr;
   PetscScalar *x, *lam, *g;
+
+  PetscFunctionBegin;
 
   auto &resmgr = umpire::ResourceManager::getInstance();
   umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");

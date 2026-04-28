@@ -24,4 +24,4 @@ void registerWith(T *ptr, SizeType N, umpire::ResourceManager &resmgr,
   resmgr.registerAllocation(ptr, record);
 }
 
-#endif // EXAGO_ENABLE_HIOP
+#endif // EXAGO_ENABLE_RAJA

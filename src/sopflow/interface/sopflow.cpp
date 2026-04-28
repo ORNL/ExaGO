@@ -1421,6 +1421,7 @@ PetscErrorCode SOPFLOWGetConvergenceStatus(SOPFLOW sopflow, PetscBool *status) {
   SOPFLOWGetNumIterations - Returns the number of iterations for given solver
 */
 PetscErrorCode SOPFLOWGetNumIterations(SOPFLOW sopflow, PetscInt *iter) {
+  PetscFunctionBegin;
   *iter = sopflow->numiter;
   PetscFunctionReturn(0);
 }

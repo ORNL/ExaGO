@@ -317,7 +317,6 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
   const PSBUS *connbuses;
   PSBUS busf, bust;
 
-  PetscFunctionBegin;
   ierr = PSGetNumActiveLines(ps, &nlineON, NULL);
   CHKERRQ(ierr);
 
@@ -545,7 +544,7 @@ int LOADParamsRajaHiop::allocate(OPFLOW opflow) {
 
 #endif
 
-  return (0);
+  return 0;
 }
 
 int GENParamsRajaHiop::destroy(OPFLOW opflow) {
@@ -662,8 +661,6 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
   PSBUS bus;
   PetscInt i, j;
   PetscErrorCode ierr;
-
-  PetscFunctionBegin;
 
   /* Get the number of active generators (STATUS ON) */
   ierr = PSGetNumActiveGenerators(ps, &ngenON, NULL);
