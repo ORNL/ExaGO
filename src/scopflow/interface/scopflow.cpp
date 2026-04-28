@@ -354,8 +354,7 @@ PetscErrorCode SCOPFLOWSetNetworkData(SCOPFLOW scopflow, const char netfile[]) {
 
   PetscFunctionBegin;
 
-  ierr = PetscMemcpy(scopflow->netfile, netfile,
-                     PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(scopflow->netfile, netfile);
   CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
@@ -374,8 +373,7 @@ PetscErrorCode SCOPFLOWSetPLoadData(SCOPFLOW scopflow, const char profile[]) {
 
   PetscFunctionBegin;
 
-  ierr =
-      PetscMemcpy(scopflow->pload, profile, PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(scopflow->pload, profile);
   CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
@@ -394,8 +392,7 @@ PetscErrorCode SCOPFLOWSetQLoadData(SCOPFLOW scopflow, const char profile[]) {
 
   PetscFunctionBegin;
 
-  ierr =
-      PetscMemcpy(scopflow->qload, profile, PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(scopflow->qload, profile);
   CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
@@ -415,8 +412,7 @@ PetscErrorCode SCOPFLOWSetWindGenProfile(SCOPFLOW scopflow,
 
   PetscFunctionBegin;
 
-  ierr = PetscMemcpy(scopflow->windgen, profile,
-                     PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(scopflow->windgen, profile);
   CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
@@ -1371,8 +1367,7 @@ SCOPFLOWSetContingencyData(SCOPFLOW scopflow,
 
   PetscFunctionBegin;
 
-  ierr = PetscMemcpy(scopflow->ctgcfile, ctgcfile,
-                     PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(scopflow->ctgcfile, ctgcfile);
   CHKERRQ(ierr);
   scopflow->ctgcfileformat = ctgcfileformat;
   scopflow->ctgcfileset = PETSC_TRUE;
@@ -1394,8 +1389,7 @@ PetscErrorCode SCOPFLOWSetGICData(SCOPFLOW scopflow, const char gicfile[]) {
 
   PetscFunctionBegin;
 
-  ierr = PetscMemcpy(scopflow->gicfile, gicfile,
-                     PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(scopflow->gicfile, gicfile);
   CHKERRQ(ierr);
   scopflow->gicfileset = PETSC_TRUE;
 

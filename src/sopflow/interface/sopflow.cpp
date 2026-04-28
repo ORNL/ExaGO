@@ -434,8 +434,7 @@ PetscErrorCode SOPFLOWSetNetworkData(SOPFLOW sopflow, const char netfile[]) {
 
   PetscFunctionBegin;
 
-  ierr =
-      PetscMemcpy(sopflow->netfile, netfile, PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(sopflow->netfile, netfile);
   CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
@@ -467,8 +466,7 @@ PetscErrorCode SOPFLOWSetContingencyData(SOPFLOW sopflow,
   }
   CHKERRQ(ierr);
 
-  ierr =
-      PetscMemcpy(sopflow->ctgfile, ctgfile, PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(sopflow->ctgfile, ctgfile);
   CHKERRQ(ierr);
   sopflow->ctgcfileset = PETSC_TRUE;
   PetscFunctionReturn(0);
@@ -486,8 +484,7 @@ PetscErrorCode SOPFLOWSetWindGenProfile(SOPFLOW sopflow, const char windgen[]) {
 
   PetscFunctionBegin;
 
-  ierr =
-      PetscMemcpy(sopflow->windgen, windgen, PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(sopflow->windgen, windgen);
   CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
@@ -563,8 +560,7 @@ SOPFLOWSetContingencyData(SOPFLOW sopflow,
 
   PetscFunctionBegin;
 
-  ierr = PetscMemcpy(sopflow->ctgcfile, ctgcfile,
-                     PETSC_MAX_PATH_LEN * sizeof(char));
+  ierr = PetscStrcpy(sopflow->ctgcfile, ctgcfile);
   CHKERRQ(ierr);
   sopflow->ctgcfileformat = ctgcfileformat;
   sopflow->ctgcfileset = PETSC_TRUE;
@@ -1468,14 +1464,12 @@ PetscErrorCode SOPFLOWSetLoadProfiles(SOPFLOW sopflow,
   PetscFunctionBegin;
 
   if (ploadprofile) {
-    ierr = PetscMemcpy(sopflow->ploadprofile, ploadprofile,
-                       PETSC_MAX_PATH_LEN * sizeof(char));
+    ierr = PetscStrcpy(sopflow->ploadprofile, ploadprofile);
     CHKERRQ(ierr);
   }
 
   if (qloadprofile) {
-    ierr = PetscMemcpy(sopflow->qloadprofile, qloadprofile,
-                       PETSC_MAX_PATH_LEN * sizeof(char));
+    ierr = PetscStrcpy(sopflow->qloadprofile, qloadprofile);
     CHKERRQ(ierr);
   }
 
