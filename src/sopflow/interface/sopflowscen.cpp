@@ -100,14 +100,15 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
       PetscFunctionReturn(0);
     }
 
-    struct GenData {
+    struct ForecastData {
       int busnum;
+      char type[16];
       PetscReal value1;
       PetscReal value2;
       char id[3];
     };
 
-    vector<GenData> gendata;
+    vector<ForecastData> gendata;
 
     tok = strtok(NULL, sep_comma);
     sscanf(tok, "%lf", &weight);
@@ -115,19 +116,30 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
     tok = strtok(NULL, sep_comma);
     while (tok != NULL) {
 
-      GenData gd;
+      ForecastData gd;
 
       /* Parse generator info */
       tok2 = strsep(&tok, sep2_dash); // Bus Number
       sscanf(tok2, "%d", &gd.busnum);
+
       tok3 = strsep(&tok, sep2_dash); // Type (Load or Gen)
+      sscanf(tok3, "%s", gd.type);
+
       tok4 = strsep(&tok, sep2_dash); // CKT
       sscanf(tok4, "%d", &genid);
       snprintf(gd.id, 3, "%-2d", genid);
-      tok5 = strsep(&tok, sep2_dash); // Value1
-      sscanf(tok5, "%lf", &gd.value1);
-      tok6 = strsep(&tok, sep2_dash); // Value2
-      sscanf(tok6, "%lf", &gd.value2);
+
+      if (strcmp(gd.type, "Load") == 0) {
+        /* Load forecast */
+        tok5 = strsep(&tok, sep2_dash); // Value1
+        sscanf(tok5, "%lf", &gd.value1);
+        tok6 = strsep(&tok, sep2_dash); // Value2
+        sscanf(tok6, "%lf", &gd.value2);
+      } else if (strcmp(gd.type, "Gen") == 0) {
+        /* Gen forecast */
+        tok5 = strsep(&tok, sep2_dash); // Value1
+        sscanf(tok5, "%lf", &gd.value1);
+      }
 
       gendata.push_back(gd);
 
@@ -135,6 +147,9 @@ SOPFLOWReadScenarioData_LoadPQ_SinglePeriod(SOPFLOW sopflow,
     }
 
     scenario = &scenlist->scen[scen_num];
+
+    printf("scenario %d has %d forecasts\n", scen_num, scenario->nforecast);
+
     forecast = &scenario->forecastlist[scenario->nforecast];
     forecast->num = scen_num;
     forecast->type = FORECAST_LOAD_PQ;
