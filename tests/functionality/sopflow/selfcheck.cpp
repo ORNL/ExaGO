@@ -9,6 +9,7 @@ struct SopflowFunctionalityTestParameters {
   std::string solver = "";
   std::string network = "";
   std::string scenfile = "";
+  std::string loadfile = "";
   std::string contingencies = "";
   std::string pload = "";
   std::string qload = "";
@@ -54,6 +55,7 @@ struct SopflowFunctionalityTestParameters {
     set_if_found(solver, values, "solver");
     set_if_found(network, values, "network");
     set_if_found(scenfile, values, "scenfile");
+    set_if_found(loadfile, values, "loadfile");
     set_if_found(num_scenarios, values, "num_scenarios");
     set_if_found(tolerance, values, "tolerance");
     set_if_found(warning_tolerance, values, "warning_tolerance");
@@ -138,8 +140,7 @@ struct SopflowFunctionalityTests
       }
     };
 
-    for (const auto &opt :
-         {"solver", "network", "scenfile", "num_scenarios", "tolerance"})
+    for (const auto &opt : {"solver", "network", "num_scenarios", "tolerance"})
       ensure_option_available(opt);
 
     bool is_multicontingency = false;
@@ -171,7 +172,10 @@ struct SopflowFunctionalityTests
     testcase["description"] = params.description;
     testcase["solver"] = params.solver;
     testcase["network"] = params.network;
-    testcase["scenfile"] = params.scenfile;
+    if (params.loadfile != "")
+      testcase["loadfile"] = params.loadfile;
+    else if (params.scenfile != "")
+      testcase["scenfile"] = params.scenfile;
     testcase["num_scenarios"] = params.num_scenarios;
     testcase["initialization_type"] = params.initialization_type;
 
@@ -231,10 +235,21 @@ struct SopflowFunctionalityTests
     ExaGOCheckError(ierr);
 
     // Prepend installation directory to scenario data
-    resolve_datafiles_path(params.scenfile);
-    ierr = SOPFLOWSetScenarioData(sopflow, SOPFLOW_NATIVE_SINGLEPERIOD, WIND,
-                                  params.scenfile.c_str());
-    ExaGOCheckError(ierr);
+    if (params.loadfile != "") {
+      std::cout << "Network: " << params.network
+                << " Using Load File: " << params.loadfile << std::endl;
+      resolve_datafiles_path(params.loadfile);
+      ierr = SOPFLOWSetScenarioData(sopflow, SOPFLOW_NATIVE_SINGLEPERIOD, LOAD,
+                                    params.loadfile.c_str());
+      ExaGOCheckError(ierr);
+    } else if (params.scenfile != "") {
+      std::cout << "Network: " << params.network
+                << " Using Scenario File: " << params.scenfile << std::endl;
+      resolve_datafiles_path(params.scenfile);
+      ierr = SOPFLOWSetScenarioData(sopflow, SOPFLOW_NATIVE_SINGLEPERIOD, WIND,
+                                    params.scenfile.c_str());
+      ExaGOCheckError(ierr);
+    }
 
     ierr = SOPFLOWSetInitializationType(sopflow, params.initialization_type);
     ExaGOCheckError(ierr);

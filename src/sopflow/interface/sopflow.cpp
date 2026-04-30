@@ -204,7 +204,9 @@ PetscErrorCode SOPFLOWDestroy(SOPFLOW *sopflow) {
         }
         ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].id);
         CHKERRQ(ierr);
-        ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].val);
+        ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].val1);
+        CHKERRQ(ierr);
+        ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].val2);
         CHKERRQ(ierr);
       }
     }

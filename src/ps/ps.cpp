@@ -1609,6 +1609,7 @@ PetscErrorCode PSApplyScenario(PS ps, Scenario scenario) {
   PetscInt i, j;
   Forecast *forecast;
   PSGEN gen;
+  PSLOAD load;
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
@@ -1621,7 +1622,7 @@ PetscErrorCode PSApplyScenario(PS ps, Scenario scenario) {
         CHKERRQ(ierr);
         if (gen) {
           gen->pg = gen->pt =
-              forecast->val[j] /
+              forecast->val1[j] /
               ps->MVAbase;    /* Set real power generation. Note that
                    Pg upper limit is also set to the forecast value. This allows
                    the    wind generator to be dispatched at its limit */
@@ -1634,6 +1635,34 @@ PetscErrorCode PSApplyScenario(PS ps, Scenario scenario) {
           // the input file) */
         } else {
           printf("No generator on bus %d with id %s. Cannot apply the "
+                 "requested scenario\n",
+                 forecast->buses[j], forecast->id[j]);
+        }
+      }
+    } else if (forecast->type == FORECAST_LOAD_P) {
+      /* Load forecast */
+      for (j = 0; j < forecast->nele; j++) {
+        ierr = PSGetLoad(ps, forecast->buses[j], forecast->id[j], &load);
+        CHKERRQ(ierr);
+        if (load) {
+          load->pl = forecast->val1[j] / ps->MVAbase; /* Set real power load. */
+        } else {
+          printf("No load on bus %d with id %s. Cannot apply the "
+                 "requested scenario\n",
+                 forecast->buses[j], forecast->id[j]);
+        }
+      }
+    } else if (forecast->type == FORECAST_LOAD_PQ) {
+      /* Load forecast */
+      for (j = 0; j < forecast->nele; j++) {
+        ierr = PSGetLoad(ps, forecast->buses[j], forecast->id[j], &load);
+        CHKERRQ(ierr);
+        if (load) {
+          load->pl = forecast->val1[j] / ps->MVAbase; /* Set real power load. */
+          load->ql =
+              forecast->val2[j] / ps->MVAbase; /* Set reactive power load. */
+        } else {
+          printf("No load on bus %d with id %s. Cannot apply the "
                  "requested scenario\n",
                  forecast->buses[j], forecast->id[j]);
         }

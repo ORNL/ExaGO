@@ -21,7 +21,7 @@ typedef enum {
 typedef enum {
   FORECAST_WIND = 1,
   FORECAST_LOAD_P = 2,
-  FORECAST_LOAD_Q = 3
+  FORECAST_LOAD_PQ = 3
 } ForecastType;
 
 /**
