@@ -16,6 +16,10 @@
 #include "pbpolrajahiopsparse.hpp"
 #include "pbpolrajahiopsparse_gpu.hpp"
 
+#include <algorithm>
+#include <numeric>
+#include <vector>
+
 /**
  * @brief Set the initial guess array for the PBPOLRAJAHIOPSPARSE model.
  *
@@ -705,11 +709,9 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
         (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
     pbpolrajahiopsparse->j_jaceq =
         (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
-    pbpolrajahiopsparse->val_jaceq =
-        (double *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(double)));
 
-    int *iRow = pbpolrajahiopsparse->i_jaceq;
-    int *jCol = pbpolrajahiopsparse->j_jaceq;
+    int *iRow_temp = (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+    int *jCol_temp = (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
 
     PS ps = opflow->ps;
     BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
@@ -729,18 +731,18 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
       /* P-row self-admittance */
       base = busparams->eqjacsp_selfidx[2 * ibus];
-      iRow[base] = P_row;
-      jCol[base] = theta_col;
-      iRow[base + 1] = P_row;
-      jCol[base + 1] = Vm_col;
+      iRow_temp[base] = P_row;
+      jCol_temp[base] = theta_col;
+      iRow_temp[base + 1] = P_row;
+      jCol_temp[base + 1] = Vm_col;
 
       if (bus->ide == ISOLATED_BUS) {
         /* Q-row self-admittance for isolated bus */
         base = busparams->eqjacsp_selfidx[2 * ibus + 1];
-        iRow[base] = Q_row;
-        jCol[base] = theta_col;
-        iRow[base + 1] = Q_row;
-        jCol[base + 1] = Vm_col;
+        iRow_temp[base] = Q_row;
+        jCol_temp[base] = theta_col;
+        iRow_temp[base + 1] = Q_row;
+        jCol_temp[base + 1] = Vm_col;
         continue;
       }
 
@@ -748,10 +750,10 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       if (opflow->include_powerimbalance_variables) {
         base = busparams->jacsp_idx[ibus];
         int pimb_col = coffset + busparams->xidxpimb[ibus];
-        iRow[base] = P_row;
-        jCol[base] = pimb_col;
-        iRow[base + 1] = P_row;
-        jCol[base + 1] = pimb_col + 1;
+        iRow_temp[base] = P_row;
+        jCol_temp[base] = pimb_col;
+        iRow_temp[base + 1] = P_row;
+        jCol_temp[base + 1] = pimb_col + 1;
       }
 
       /* P-row gen Pg */
@@ -762,8 +764,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
         if (!gen->status)
           continue;
         base = genparams->eqjacspbus_idx[geni + gi];
-        iRow[base] = P_row;
-        jCol[base] = coffset + genparams->xidx[geni + gi];
+        iRow_temp[base] = P_row;
+        jCol_temp[base] = coffset + genparams->xidx[geni + gi];
         gi++;
       }
 
@@ -771,26 +773,26 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       if (opflow->include_loadloss_variables) {
         for (int k = 0; k < bus->nload; k++) {
           base = loadparams->jacsp_idx[loadi + k];
-          iRow[base] = P_row;
-          jCol[base] = coffset + loadparams->xidx[loadi + k];
+          iRow_temp[base] = P_row;
+          jCol_temp[base] = coffset + loadparams->xidx[loadi + k];
         }
       }
 
       /* Q-row self-admittance */
       base = busparams->eqjacsp_selfidx[2 * ibus + 1];
-      iRow[base] = Q_row;
-      jCol[base] = theta_col;
-      iRow[base + 1] = Q_row;
-      jCol[base + 1] = Vm_col;
+      iRow_temp[base] = Q_row;
+      jCol_temp[base] = theta_col;
+      iRow_temp[base + 1] = Q_row;
+      jCol_temp[base + 1] = Vm_col;
 
       /* Q-row power imbalance */
       if (opflow->include_powerimbalance_variables) {
         base = busparams->jacsq_idx[ibus];
         int pimb_col = coffset + busparams->xidxpimb[ibus];
-        iRow[base] = Q_row;
-        jCol[base] = pimb_col + 2;
-        iRow[base + 1] = Q_row;
-        jCol[base + 1] = pimb_col + 3;
+        iRow_temp[base] = Q_row;
+        jCol_temp[base] = pimb_col + 2;
+        iRow_temp[base + 1] = Q_row;
+        jCol_temp[base + 1] = pimb_col + 3;
       }
 
       /* Q-row gen Qg */
@@ -801,8 +803,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
         if (!gen->status)
           continue;
         base = genparams->eqjacsqbus_idx[geni + gi];
-        iRow[base] = Q_row;
-        jCol[base] = coffset + genparams->xidx[geni + gi] + 1;
+        iRow_temp[base] = Q_row;
+        jCol_temp[base] = coffset + genparams->xidx[geni + gi] + 1;
         gi++;
       }
 
@@ -810,8 +812,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       if (opflow->include_loadloss_variables) {
         for (int k = 0; k < bus->nload; k++) {
           base = loadparams->jacsq_idx[loadi + k];
-          iRow[base] = Q_row;
-          jCol[base] = coffset + loadparams->xidx[loadi + k] + 1;
+          iRow_temp[base] = Q_row;
+          jCol_temp[base] = coffset + loadparams->xidx[loadi + k] + 1;
         }
       }
 
@@ -835,25 +837,25 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       int Vmf_col = thetaf_col + 1;
 
       /* From-bus off-diagonal: Pf w.r.t. thetat, Vmt */
-      iRow[base + 0] = Pf_row;
-      jCol[base + 0] = thetat_col;
-      iRow[base + 1] = Pf_row;
-      jCol[base + 1] = Vmt_col;
+      iRow_temp[base + 0] = Pf_row;
+      jCol_temp[base + 0] = thetat_col;
+      iRow_temp[base + 1] = Pf_row;
+      jCol_temp[base + 1] = Vmt_col;
       /* Qf w.r.t. thetat, Vmt */
-      iRow[base + 2] = Qf_row;
-      jCol[base + 2] = thetat_col;
-      iRow[base + 3] = Qf_row;
-      jCol[base + 3] = Vmt_col;
+      iRow_temp[base + 2] = Qf_row;
+      jCol_temp[base + 2] = thetat_col;
+      iRow_temp[base + 3] = Qf_row;
+      jCol_temp[base + 3] = Vmt_col;
       /* To-bus off-diagonal: Pt w.r.t. thetaf, Vmf */
-      iRow[base + 4] = Pt_row;
-      jCol[base + 4] = thetaf_col;
-      iRow[base + 5] = Pt_row;
-      jCol[base + 5] = Vmf_col;
+      iRow_temp[base + 4] = Pt_row;
+      jCol_temp[base + 4] = thetaf_col;
+      iRow_temp[base + 5] = Pt_row;
+      jCol_temp[base + 5] = Vmf_col;
       /* Qt w.r.t. thetaf, Vmf */
-      iRow[base + 6] = Qt_row;
-      jCol[base + 6] = thetaf_col;
-      iRow[base + 7] = Qt_row;
-      jCol[base + 7] = Vmf_col;
+      iRow_temp[base + 6] = Qt_row;
+      jCol_temp[base + 6] = thetaf_col;
+      iRow_temp[base + 7] = Qt_row;
+      jCol_temp[base + 7] = Vmf_col;
     }
 
     /* Generator set-point equality constraint entries */
@@ -868,19 +870,40 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
         int delPg_col = coffset + genparams->xpdevidx[g];
         int Pset_col = coffset + genparams->xpsetidx[g];
 
-        iRow[base + 0] = row0;
-        jCol[base + 0] = Pg_col;
-        iRow[base + 1] = row0;
-        jCol[base + 1] = delPg_col;
-        iRow[base + 2] = row0;
-        jCol[base + 2] = Pset_col;
-        iRow[base + 3] = row1;
-        jCol[base + 3] = Pset_col;
+        iRow_temp[base + 0] = row0;
+        jCol_temp[base + 0] = Pg_col;
+        iRow_temp[base + 1] = row0;
+        jCol_temp[base + 1] = delPg_col;
+        iRow_temp[base + 2] = row0;
+        jCol_temp[base + 2] = Pset_col;
+        iRow_temp[base + 3] = row1;
+        jCol_temp[base + 3] = Pset_col;
       }
     }
 
+    // Sort and permute indices
+    std::vector<int> ind_temp(opflow->nnz_eqjacsp);
+    std::iota(ind_temp.begin(), ind_temp.end(), 0);
+    std::sort(ind_temp.begin(), 
+              ind_temp.end(), 
+              [&](int i, int j) {
+                return (iRow_temp[i] != iRow_temp[j]) ? 
+                        iRow_temp[i] < iRow_temp[j] : jCol_temp[i] < jCol_temp[j];
+              });
+
+    int *iRow = pbpolrajahiopsparse->i_jaceq;
+    int *jCol = pbpolrajahiopsparse->j_jaceq;
+    for (int i = 0; i < opflow->nnz_eqjacsp; i++) {
+      iRow[i] = iRow_temp[ind_temp[i]];
+      jCol[i] = jCol_temp[ind_temp[i]];
+    } 
+    h_allocator_.deallocate(iRow_temp);
+    h_allocator_.deallocate(jCol_temp);
+
+    // Copy indices from host to device
     resmgr.copy(iJacS_dev, pbpolrajahiopsparse->i_jaceq);
     resmgr.copy(jJacS_dev, pbpolrajahiopsparse->j_jaceq);
+    std::abort();
   }
 
   if (MJacS_dev != NULL) {
