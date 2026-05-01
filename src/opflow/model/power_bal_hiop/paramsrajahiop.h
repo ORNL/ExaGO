@@ -270,7 +270,8 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
   PbpolModelRajaHiop(void) {
     i_jaceq = j_jaceq = i_jacineq = j_jacineq = NULL;
     i_hess = j_hess = NULL;
-    val_jaceq = val_jacineq = val_hess = NULL;
+    perm_jaceq = NULL;
+    val_jacineq = val_hess = NULL;
   }
 
   void destroy(OPFLOW opflow);
@@ -288,10 +289,10 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
   // Arrays to store Jacobian and Hessian indices and entries on CPU (used with
   // GPU sparse model)
   int *i_jaceq,
-      *j_jaceq; // Row and column indices for equality constrained Jacobian
+      *j_jaceq; // Row and column indices for equality constraints Jacobian
   int *i_jacineq,
-      *j_jacineq; // Row and column indices for inequality constrained Jacobain
+      *j_jacineq; // Row and column indices for inequality constraints Jacobain
   int *i_hess, *j_hess; // Row and column indices for hessian
-  double *val_jaceq, *val_jacineq,
-      *val_hess; // values for equality, inequality jacobians and hessian
+  int *perm_jaceq; // Permutation for equality constraints Jacobian indices
+  double *val_jacineq, *val_hess; // values for inequality jacobians and hessian
 };

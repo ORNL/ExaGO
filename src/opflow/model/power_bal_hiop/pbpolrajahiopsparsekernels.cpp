@@ -709,6 +709,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
         (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
     pbpolrajahiopsparse->j_jaceq =
         (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+    pbpolrajahiopsparse->perm_jaceq =
+        (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
 
     int *iRow_temp = (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
     int *jCol_temp = (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
@@ -882,10 +884,10 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     }
 
     // Sort and permute indices
-    std::vector<int> ind_temp(opflow->nnz_eqjacsp);
-    std::iota(ind_temp.begin(), ind_temp.end(), 0);
-    std::sort(ind_temp.begin(), 
-              ind_temp.end(), 
+    std::vector<int> perm_temp(opflow->nnz_eqjacsp);
+    std::iota(perm_temp.begin(), perm_temp.end(), 0);
+    std::sort(perm_temp.begin(), 
+              perm_temp.end(), 
               [&](int i, int j) {
                 return (iRow_temp[i] != iRow_temp[j]) ? 
                         iRow_temp[i] < iRow_temp[j] : jCol_temp[i] < jCol_temp[j];
@@ -893,9 +895,11 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
     int *iRow = pbpolrajahiopsparse->i_jaceq;
     int *jCol = pbpolrajahiopsparse->j_jaceq;
+    int *perm = pbpolrajahiopsparse->perm_jaceq;
     for (int i = 0; i < opflow->nnz_eqjacsp; i++) {
-      iRow[i] = iRow_temp[ind_temp[i]];
-      jCol[i] = jCol_temp[ind_temp[i]];
+      iRow[i] = iRow_temp[perm_temp[i]];
+      jCol[i] = jCol_temp[perm_temp[i]];
+      perm[i] = perm_temp[i];
     } 
     h_allocator_.deallocate(iRow_temp);
     h_allocator_.deallocate(jCol_temp);
@@ -903,7 +907,6 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     // Copy indices from host to device
     resmgr.copy(iJacS_dev, pbpolrajahiopsparse->i_jaceq);
     resmgr.copy(jJacS_dev, pbpolrajahiopsparse->j_jaceq);
-    std::abort();
   }
 
   if (MJacS_dev != NULL) {
