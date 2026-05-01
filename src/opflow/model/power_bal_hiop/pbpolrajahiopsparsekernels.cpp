@@ -907,6 +907,12 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     // Copy indices from host to device
     resmgr.copy(iJacS_dev, pbpolrajahiopsparse->i_jaceq);
     resmgr.copy(jJacS_dev, pbpolrajahiopsparse->j_jaceq);
+
+    // Allocate permutation on device and copy from host
+    umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
+    pbpolrajahiopsparse->perm_jaceq_dev =
+        (int *)(d_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+    resmgr.copy(pbpolrajahiopsparse->perm_jaceq_dev, pbpolrajahiopsparse->perm_jaceq);
   }
 
   if (MJacS_dev != NULL) {
@@ -916,7 +922,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     /* KS: Compute equality constraint Jacobian directly on device.
        No H2D, D2H copies: x_dev is already on device, output goes
        straight into MJacS_dev. */
-    ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, MJacS_dev);
+    ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, pbpolrajahiopsparse->perm_jaceq_dev, MJacS_dev);
 
     ierr = PetscLogEventEnd(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);

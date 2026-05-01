@@ -900,10 +900,12 @@ void PbpolModelRajaHiop::destroy(OPFLOW opflow) {
 
     auto &resmgr = umpire::ResourceManager::getInstance();
     umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
+    umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
 
     h_allocator_.deallocate(i_jaceq);
     h_allocator_.deallocate(j_jaceq);
     h_allocator_.deallocate(perm_jaceq);
+    d_allocator_.deallocate(perm_jaceq_dev);
 
     h_allocator_.deallocate(i_hess);
     h_allocator_.deallocate(j_hess);

@@ -31,6 +31,7 @@ void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
  */
 void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                                const double *x_dev,
+                                               const int *perm_dev,
                                                double *jace_dev);
 
 #endif // EXAGO_ENABLE_HIOP_SPARSE
