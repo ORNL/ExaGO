@@ -712,8 +712,10 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     pbpolrajahiopsparse->perm_jaceq =
         (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
 
-    int *iRow_temp = (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
-    int *jCol_temp = (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+    int *iRow_temp =
+        (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+    int *jCol_temp =
+        (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
 
     PS ps = opflow->ps;
     BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
@@ -886,12 +888,10 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     // Sort and permute indices
     std::vector<int> perm_temp(opflow->nnz_eqjacsp);
     std::iota(perm_temp.begin(), perm_temp.end(), 0);
-    std::sort(perm_temp.begin(), 
-              perm_temp.end(), 
-              [&](int i, int j) {
-                return (iRow_temp[i] != iRow_temp[j]) ? 
-                        iRow_temp[i] < iRow_temp[j] : jCol_temp[i] < jCol_temp[j];
-              });
+    std::sort(perm_temp.begin(), perm_temp.end(), [&](int i, int j) {
+      return (iRow_temp[i] != iRow_temp[j]) ? iRow_temp[i] < iRow_temp[j]
+                                            : jCol_temp[i] < jCol_temp[j];
+    });
 
     int *iRow = pbpolrajahiopsparse->i_jaceq;
     int *jCol = pbpolrajahiopsparse->j_jaceq;
@@ -901,7 +901,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       jCol[i] = jCol_temp[perm_temp[i]];
       perm[perm_temp[i]] = i; // reverse map to store values directly in the
                               // desired location
-    } 
+    }
     h_allocator_.deallocate(iRow_temp);
     h_allocator_.deallocate(jCol_temp);
 
@@ -913,7 +913,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
     pbpolrajahiopsparse->perm_jaceq_dev =
         (int *)(d_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
-    resmgr.copy(pbpolrajahiopsparse->perm_jaceq_dev, pbpolrajahiopsparse->perm_jaceq);
+    resmgr.copy(pbpolrajahiopsparse->perm_jaceq_dev,
+                pbpolrajahiopsparse->perm_jaceq);
   }
 
   if (MJacS_dev != NULL) {
@@ -923,7 +924,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     /* KS: Compute equality constraint Jacobian directly on device.
        No H2D, D2H copies: x_dev is already on device, output goes
        straight into MJacS_dev. */
-    ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, pbpolrajahiopsparse->perm_jaceq_dev, MJacS_dev);
+    ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(
+        opflow, x_dev, pbpolrajahiopsparse->perm_jaceq_dev, MJacS_dev);
 
     ierr = PetscLogEventEnd(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
