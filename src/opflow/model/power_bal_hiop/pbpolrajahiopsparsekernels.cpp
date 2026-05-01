@@ -574,7 +574,6 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
   PetscErrorCode ierr;
-  double *x, *values;
   PetscInt *iRowstart, *jColstart;
   PetscInt roffset, coffset;
   PetscInt nrow, ncol;
@@ -686,14 +685,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
   PetscErrorCode ierr;
-  PetscInt *iRowstart, *jColstart;
-  PetscScalar *x, *values;
   PetscInt roffset, coffset;
-  PetscInt nrow, ncol;
-  PetscInt nvals;
-  const PetscInt *cols;
-  const PetscScalar *vals;
-  PetscInt i, j;
   auto &resmgr = umpire::ResourceManager::getInstance();
 
   PetscFunctionBegin;
@@ -702,9 +694,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   // This only needs to be done once since the sparsity pattern of the Jacobian
   // does not change during the optimization.
   if (iJacS_dev != NULL && jJacS_dev != NULL) {
-    /* Compute sparsity pattern on host, matching the flat-array layout
-       defined during setup in OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE.
-*/
+    // Compute sparsity pattern on host, matching the flat-array layout
+    // defined during setup in OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE.
     roffset = 0;
     coffset = 0;
 
@@ -727,7 +718,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
     int geni = 0, loadi = 0;
-    /*KS: not worth movint this to the gpu */
+    /*KS: not worth moving this to the gpu */
     for (int ibus = 0; ibus < ps->nbus; ibus++) {
       PSBUS bus = &ps->bus[ibus];
       int P_row = roffset + busparams->gidx[ibus];
