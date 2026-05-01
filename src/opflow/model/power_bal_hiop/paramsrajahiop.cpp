@@ -21,7 +21,7 @@ int BUSParamsRajaHiop::destroy(OPFLOW opflow) {
   h_allocator_.deallocate(bl);
   h_allocator_.deallocate(xidx);
   h_allocator_.deallocate(gidx);
-  h_allocator_.deallocate(eqjacsp_selfidx);
+  h_allocator_.deallocate(eqjacsp_idx);
   if (opflow->include_powerimbalance_variables) {
     h_allocator_.deallocate(xidxpimb);
     h_allocator_.deallocate(powerimbalance_penalty);
@@ -46,7 +46,7 @@ int BUSParamsRajaHiop::destroy(OPFLOW opflow) {
   d_allocator_.deallocate(bl_dev_);
   d_allocator_.deallocate(xidx_dev_);
   d_allocator_.deallocate(gidx_dev_);
-  d_allocator_.deallocate(eqjacsp_selfidx_dev_);
+  d_allocator_.deallocate(eqjacsp_idx_dev_);
   if (opflow->include_powerimbalance_variables) {
     d_allocator_.deallocate(xidxpimb_dev_);
     d_allocator_.deallocate(powerimbalance_penalty_dev_);
@@ -86,7 +86,7 @@ int BUSParamsRajaHiop::copy(OPFLOW opflow) {
 
   resmgr.copy(xidx_dev_, xidx);
   resmgr.copy(gidx_dev_, gidx);
-  resmgr.copy(eqjacsp_selfidx_dev_, eqjacsp_selfidx);
+  resmgr.copy(eqjacsp_idx_dev_, eqjacsp_idx);
   if (opflow->include_powerimbalance_variables) {
     resmgr.copy(xidxpimb_dev_, xidxpimb);
     resmgr.copy(jacsp_idx_dev_, jacsp_idx);
@@ -111,7 +111,7 @@ int BUSParamsRajaHiop::copy(OPFLOW opflow) {
   xidx_dev_ = xidx;
   xidxpimb_dev_ = xidxpimb;
   gidx_dev_ = gidx;
-  eqjacsp_selfidx_dev_ = eqjacsp_selfidx;
+  eqjacsp_idx_dev_ = eqjacsp_idx;
   jacsp_idx_dev_ = jacsp_idx;
   jacsq_idx_dev_ = jacsq_idx;
   powerimbalance_penalty_dev_ = powerimbalance_penalty;
@@ -149,7 +149,7 @@ int BUSParamsRajaHiop::allocate(OPFLOW opflow) {
 
   xidx = paramAlloc<int>(h_allocator_, nbus);
   gidx = paramAlloc<int>(h_allocator_, nbus);
-  eqjacsp_selfidx = paramAlloc<int>(h_allocator_, 2 * nbus);
+  eqjacsp_idx = paramAlloc<int>(h_allocator_, 2 * nbus);
 
   if (opflow->include_powerimbalance_variables) {
     xidxpimb = paramAlloc<int>(h_allocator_, nbus);
@@ -237,7 +237,7 @@ int BUSParamsRajaHiop::allocate(OPFLOW opflow) {
 
   xidx_dev_ = paramAlloc<int>(d_allocator_, nbus);
   gidx_dev_ = paramAlloc<int>(d_allocator_, nbus);
-  eqjacsp_selfidx_dev_ = paramAlloc<int>(d_allocator_, 2 * nbus);
+  eqjacsp_idx_dev_ = paramAlloc<int>(d_allocator_, 2 * nbus);
 
   if (opflow->include_powerimbalance_variables) {
     xidxpimb_dev_ = paramAlloc<int>(d_allocator_, nbus);

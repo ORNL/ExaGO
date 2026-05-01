@@ -29,7 +29,7 @@ struct BUSParamsRajaHiop {
   int *jacsp_idx;  /* Location number in the sparse Jacobian for Pimb */
   int *jacsq_idx;  /* Location number in the sparse Jacobian for Qimb */
   int *hesssp_idx; /* KS: Hessian indices */
-  int *eqjacsp_selfidx; /* Flat-array position for bus self-admittance in eq
+  int *eqjacsp_idx; /* Flat-array position for bus self-admittance in eq
                            Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
   int *ispv;            /* KS: ispv[i] = 1 if bus is PV bus */
   int *gineqidx;        /* KS: starting position of bus ineq constraints */
@@ -56,7 +56,7 @@ struct BUSParamsRajaHiop {
   int *jacsp_idx_dev_;  /* Location number in the sparse Jacobian for Pimb */
   int *jacsq_idx_dev_;  /* Location number in the sparse Jacobian for Qimb */
   int *hesssp_idx_dev_; /* Location number in the Hessian */
-  int *eqjacsp_selfidx_dev_; /* KS: eqjacsp_selfidx device counterpart */
+  int *eqjacsp_idx_dev_; /* KS: eqjacsp_idx device counterpart */
   int *ispv_dev_;            /* KS: dev counterpart of ispv */
   int *gineqidx_dev_;        /* KS: dev counterpart of gineqidx */
   int *ineqjacsp_idx_dev_;   /* KS: device counterpart of ineqjacsp_idx_ */

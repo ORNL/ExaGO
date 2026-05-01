@@ -730,7 +730,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       int base;
 
       /* P-row self-admittance */
-      base = busparams->eqjacsp_selfidx[2 * ibus];
+      base = busparams->eqjacsp_idx[2 * ibus];
       iRow_temp[base] = P_row;
       jCol_temp[base] = theta_col;
       iRow_temp[base + 1] = P_row;
@@ -738,7 +738,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
       if (bus->ide == ISOLATED_BUS) {
         /* Q-row self-admittance for isolated bus */
-        base = busparams->eqjacsp_selfidx[2 * ibus + 1];
+        base = busparams->eqjacsp_idx[2 * ibus + 1];
         iRow_temp[base] = Q_row;
         jCol_temp[base] = theta_col;
         iRow_temp[base + 1] = Q_row;
@@ -779,7 +779,7 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       }
 
       /* Q-row self-admittance */
-      base = busparams->eqjacsp_selfidx[2 * ibus + 1];
+      base = busparams->eqjacsp_idx[2 * ibus + 1];
       iRow_temp[base] = Q_row;
       jCol_temp[base] = theta_col;
       iRow_temp[base + 1] = Q_row;

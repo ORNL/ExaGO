@@ -264,13 +264,13 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
     int *b_xidx = busparams->xidx_dev_;
     double *b_gl = busparams->gl_dev_;
     double *b_bl = busparams->bl_dev_;
-    int *b_selfidx = busparams->eqjacsp_selfidx_dev_;
+    int *b_idx = busparams->eqjacsp_idx_dev_;
 
     RAJA::forall<exago_raja_exec>(
         RAJA::RangeSegment(0, busparams->nbus),
         RAJA_LAMBDA(RAJA::Index_type i) {
-          int pbase = b_selfidx[2 * i];
-          int qbase = b_selfidx[2 * i + 1];
+          int pbase = b_idx[2 * i];
+          int qbase = b_idx[2 * i + 1];
 
           if (b_isisolated[i]) {
             jace_dev[pbase + 0] = 1.0;
