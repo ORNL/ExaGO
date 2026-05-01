@@ -513,20 +513,6 @@ extern PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
     const double *, double);
 
 /**
- * Empty stub for the equality constraint Jacobian in the RAJA sparse model.
- * Can be deleted if needed (dead code).
- */
-PetscErrorCode
-OPFLOWComputeEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                                            Vec X, Mat Je) {
-  (void)opflow;
-  (void)X;
-  (void)Je;
-  PetscFunctionBegin;
-  PetscFunctionReturn(0);
-}
-
-/**
  * @brief Constructor for the PBPOLRAJAHIOPSPARSE model.
  *
  * This function creates a new PBPOLRAJAHIOPSPARSE model and sets pointers
@@ -579,7 +565,7 @@ PetscErrorCode OPFLOWModelCreate_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   opflow->modelops.solutiontops = OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.setup = OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.computeequalityconstraintjacobian =
-      OPFLOWComputeEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE;
+      OPFLOWComputeEqualityConstraintJacobian_PBPOL;
   opflow->modelops.computesparseequalityconstraintjacobianhiop =
       OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.computeinequalityconstraintjacobian =
