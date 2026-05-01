@@ -899,7 +899,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     for (int i = 0; i < opflow->nnz_eqjacsp; i++) {
       iRow[i] = iRow_temp[perm_temp[i]];
       jCol[i] = jCol_temp[perm_temp[i]];
-      perm[i] = perm_temp[i];
+      perm[perm_temp[i]] = i; // reverse map to store values directly in the
+                              // desired location
     } 
     h_allocator_.deallocate(iRow_temp);
     h_allocator_.deallocate(jCol_temp);
