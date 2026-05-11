@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
         opflow_gpu, x_dev, NULL, NULL, values_dev);
     CHKERRQ(ierr);
   }
-  GPU_SYNC();
+  int status = GPU_SYNC();
 
   /* Timed runs */
   auto t0 = Clock::now();
@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
         opflow_gpu, x_dev, NULL, NULL, values_dev);
     CHKERRQ(ierr);
   }
-  GPU_SYNC();
+  status = GPU_SYNC();
   auto t1 = Clock::now();
   double gpu_ms = Ms(t1 - t0).count() / niters;
 
