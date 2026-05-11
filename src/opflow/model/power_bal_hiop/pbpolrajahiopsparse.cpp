@@ -280,11 +280,11 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     for (int ibus = 0; ibus < ps->nbus; ++ibus) {
       PSBUS bus_eq = &(ps->bus[ibus]);
 
-      busparams->eqjacsp_selfidx[2 * ibus] = nnz_eqjacsp;
+      busparams->eqjacsp_idx[2 * ibus] = nnz_eqjacsp;
       nnz_eqjacsp += 2;
 
       if (bus_eq->ide == ISOLATED_BUS) {
-        busparams->eqjacsp_selfidx[2 * ibus + 1] = nnz_eqjacsp;
+        busparams->eqjacsp_idx[2 * ibus + 1] = nnz_eqjacsp;
         nnz_eqjacsp += 2;
         continue;
       }
@@ -316,7 +316,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
         }
       }
 
-      busparams->eqjacsp_selfidx[2 * ibus + 1] = nnz_eqjacsp;
+      busparams->eqjacsp_idx[2 * ibus + 1] = nnz_eqjacsp;
       nnz_eqjacsp += 2;
 
       if (opflow->include_powerimbalance_variables) {
@@ -364,13 +364,13 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
         int busidxt = (int)(connbuses_eq[1] - ps->bus);
 
         lineparams->eqjacsp_diag_idx[4 * linei_eq + 0] =
-            busparams->eqjacsp_selfidx[2 * busidxf];
+            busparams->eqjacsp_idx[2 * busidxf];
         lineparams->eqjacsp_diag_idx[4 * linei_eq + 1] =
-            busparams->eqjacsp_selfidx[2 * busidxf + 1];
+            busparams->eqjacsp_idx[2 * busidxf + 1];
         lineparams->eqjacsp_diag_idx[4 * linei_eq + 2] =
-            busparams->eqjacsp_selfidx[2 * busidxt];
+            busparams->eqjacsp_idx[2 * busidxt];
         lineparams->eqjacsp_diag_idx[4 * linei_eq + 3] =
-            busparams->eqjacsp_selfidx[2 * busidxt + 1];
+            busparams->eqjacsp_idx[2 * busidxt + 1];
 
         auto key = std::make_pair(std::min(busidxf, busidxt),
                                   std::max(busidxf, busidxt));
@@ -513,20 +513,6 @@ extern PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
     const double *, double);
 
 /**
- * Empty stub for the equality constraint Jacobian in the RAJA sparse model.
- * Can be deleted if needed (dead code).
- */
-PetscErrorCode
-OPFLOWComputeEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                                            Vec X, Mat Je) {
-  (void)opflow;
-  (void)X;
-  (void)Je;
-  PetscFunctionBegin;
-  PetscFunctionReturn(0);
-}
-
-/**
  * @brief Constructor for the PBPOLRAJAHIOPSPARSE model.
  *
  * This function creates a new PBPOLRAJAHIOPSPARSE model and sets pointers
@@ -579,7 +565,7 @@ PetscErrorCode OPFLOWModelCreate_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   opflow->modelops.solutiontops = OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.setup = OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.computeequalityconstraintjacobian =
-      OPFLOWComputeEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE;
+      OPFLOWComputeEqualityConstraintJacobian_PBPOL;
   opflow->modelops.computesparseequalityconstraintjacobianhiop =
       OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE;
   opflow->modelops.computeinequalityconstraintjacobian =

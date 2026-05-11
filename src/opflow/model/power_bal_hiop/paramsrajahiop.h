@@ -29,13 +29,13 @@ struct BUSParamsRajaHiop {
   int *jacsp_idx;  /* Location number in the sparse Jacobian for Pimb */
   int *jacsq_idx;  /* Location number in the sparse Jacobian for Qimb */
   int *hesssp_idx; /* KS: Hessian indices */
-  int *eqjacsp_selfidx; /* Flat-array position for bus self-admittance in eq
-                           Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
-  int *ispv;            /* KS: ispv[i] = 1 if bus is PV bus */
-  int *gineqidx;        /* KS: starting position of bus ineq constraints */
-  int *ineqjacsp_idx;   /* KS: index in flat sparse ineq Jacobian array */
-  int *genoffset;       /* KS: Offset into flattened gen array for this bus */
-  int *ngenONbus;       /* KS: Number of ON generators on this bus */
+  int *eqjacsp_idx;   /* Flat-array position for bus self-admittance in eq
+                             Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
+  int *ispv;          /* KS: ispv[i] = 1 if bus is PV bus */
+  int *gineqidx;      /* KS: starting position of bus ineq constraints */
+  int *ineqjacsp_idx; /* KS: index in flat sparse ineq Jacobian array */
+  int *genoffset;     /* KS: Offset into flattened gen array for this bus */
+  int *ngenONbus;     /* KS: Number of ON generators on this bus */
 
   // Device data
   int *isref_dev_;      /* isref[i] = 1 if bus is reference bus */
@@ -53,15 +53,15 @@ struct BUSParamsRajaHiop {
                          X vector */
   int *gidx_dev_; /* starting locations for bus balance equations in constraint
                      vector */
-  int *jacsp_idx_dev_;  /* Location number in the sparse Jacobian for Pimb */
-  int *jacsq_idx_dev_;  /* Location number in the sparse Jacobian for Qimb */
-  int *hesssp_idx_dev_; /* Location number in the Hessian */
-  int *eqjacsp_selfidx_dev_; /* KS: eqjacsp_selfidx device counterpart */
-  int *ispv_dev_;            /* KS: dev counterpart of ispv */
-  int *gineqidx_dev_;        /* KS: dev counterpart of gineqidx */
-  int *ineqjacsp_idx_dev_;   /* KS: device counterpart of ineqjacsp_idx_ */
-  int *genoffset_dev_;       /* KS: dev counterpart of genoffset */
-  int *ngenONbus_dev_;       /* KS: dev counterpart of ngenONbus */
+  int *jacsp_idx_dev_;     /* Location number in the sparse Jacobian for Pimb */
+  int *jacsq_idx_dev_;     /* Location number in the sparse Jacobian for Qimb */
+  int *hesssp_idx_dev_;    /* Location number in the Hessian */
+  int *eqjacsp_idx_dev_;   /* KS: eqjacsp_idx device counterpart */
+  int *ispv_dev_;          /* KS: dev counterpart of ispv */
+  int *gineqidx_dev_;      /* KS: dev counterpart of gineqidx */
+  int *ineqjacsp_idx_dev_; /* KS: device counterpart of ineqjacsp_idx_ */
+  int *genoffset_dev_;     /* KS: dev counterpart of genoffset */
+  int *ngenONbus_dev_;     /* KS: dev counterpart of ngenONbus */
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
@@ -270,7 +270,8 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
   PbpolModelRajaHiop(void) {
     i_jaceq = j_jaceq = i_jacineq = j_jacineq = NULL;
     i_hess = j_hess = NULL;
-    val_jaceq = val_jacineq = val_hess = NULL;
+    perm_jaceq = perm_jaceq_dev = NULL;
+    val_jacineq = val_hess = NULL;
   }
 
   void destroy(OPFLOW opflow);
@@ -288,10 +289,11 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
   // Arrays to store Jacobian and Hessian indices and entries on CPU (used with
   // GPU sparse model)
   int *i_jaceq,
-      *j_jaceq; // Row and column indices for equality constrained Jacobian
+      *j_jaceq; // Row and column indices for equality constraints Jacobian
   int *i_jacineq,
-      *j_jacineq; // Row and column indices for inequality constrained Jacobain
+      *j_jacineq; // Row and column indices for inequality constraints Jacobain
   int *i_hess, *j_hess; // Row and column indices for hessian
-  double *val_jaceq, *val_jacineq,
-      *val_hess; // values for equality, inequality jacobians and hessian
+  int *perm_jaceq,
+      *perm_jaceq_dev; // Permutation for equality constraints Jacobian indices
+  double *val_jacineq, *val_hess; // values for inequality jacobians and hessian
 };
