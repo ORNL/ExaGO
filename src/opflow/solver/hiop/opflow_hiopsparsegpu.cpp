@@ -56,18 +56,10 @@ bool OPFLOWHIOPSPARSEGPUInterface::get_sparse_blocks_info(
 
   nx = opflow->nx;
 
-  /* Compute nonzeros for the Jacobian */
-  /* Equality constraint Jacobian */
-  ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
-      opflow, opflow->X, opflow->Jac_Ge);
-  CHKERRQ(ierr);
-  ierr = MatSetOption(opflow->Jac_Ge, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE);
-  CHKERRQ(ierr);
-
-  ierr = MatGetInfo(opflow->Jac_Ge, MAT_LOCAL, &info_eq);
-  CHKERRQ(ierr);
-
-  nnz_sparse_Jaceq = opflow->nnz_eqjacsp = info_eq.nz_used;
+  /* Use the nnz count pre-computed during model setup
+     (OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE). This avoids calling the
+     PETSc-based Jacobian function, which is no longer wired up. */
+  nnz_sparse_Jaceq = opflow->nnz_eqjacsp;
 
   /* KS: Use pre-computed nnz_ineqjacsp from model setup (avoids PETSc Mat
      assembly just for counting non-zeros -- not sure if faster or if it scales

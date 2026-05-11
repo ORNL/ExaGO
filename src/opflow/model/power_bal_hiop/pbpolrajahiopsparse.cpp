@@ -3,6 +3,8 @@
 #if defined(EXAGO_ENABLE_RAJA)
 #if defined(EXAGO_ENABLE_HIOP_SPARSE)
 
+#include <map>
+
 #include <private/opflowimpl.h>
 #include "pbpolrajahiopsparsekernels.hpp"
 
@@ -267,11 +269,144 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     pbpolrajahiopsparse->agc_xidx = -1;
   }
 
-  /* KS: Compute the number of nonzeros in equality, inequality constraint
-   * Jacobians and Hessian. Equality and Hessian counts are still obtained
-   * from PETSc via get_sparse_blocks_info; inequality count is computed
-   * axplicitly so we can skip PETSc */
+  /* KS: Compute the number of nonzeros in equality and inequality constraint
+   * Jacobians. Equality count is computed explicitly for the GPU kernel.
+   * Inequality count is computed explicitly so we can skip PETSc. */
   int nnz_eqjacsp = 0, nnz_ineqjacsp = 0, nnz_hesssp = 0;
+
+  /* ---- Equality constraint Jacobian nnz counting ---- */
+  {
+    int geni_eq = 0, loadi_eq = 0;
+    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+      PSBUS bus_eq = &(ps->bus[ibus]);
+
+      busparams->eqjacsp_idx[2 * ibus] = nnz_eqjacsp;
+      nnz_eqjacsp += 2;
+
+      if (bus_eq->ide == ISOLATED_BUS) {
+        busparams->eqjacsp_idx[2 * ibus + 1] = nnz_eqjacsp;
+        nnz_eqjacsp += 2;
+        continue;
+      }
+
+      if (opflow->include_powerimbalance_variables) {
+        busparams->jacsp_idx[ibus] = nnz_eqjacsp;
+        nnz_eqjacsp += 2;
+      }
+
+      int gi_eq = 0;
+      for (int kk = 0; kk < bus_eq->ngen; kk++) {
+        PSGEN gen_eq;
+        ierr = PSBUSGetGen(bus_eq, kk, &gen_eq);
+        CHKERRQ(ierr);
+        if (!gen_eq->status)
+          continue;
+        genparams->eqjacspbus_idx[geni_eq + gi_eq] = nnz_eqjacsp;
+        nnz_eqjacsp += 1;
+        gi_eq++;
+      }
+
+      if (opflow->include_loadloss_variables) {
+        for (int kk = 0; kk < bus_eq->nload; kk++) {
+          PSLOAD load_eq;
+          ierr = PSBUSGetLoad(bus_eq, kk, &load_eq);
+          CHKERRQ(ierr);
+          loadparams->jacsp_idx[loadi_eq + kk] = nnz_eqjacsp;
+          nnz_eqjacsp += 1;
+        }
+      }
+
+      busparams->eqjacsp_idx[2 * ibus + 1] = nnz_eqjacsp;
+      nnz_eqjacsp += 2;
+
+      if (opflow->include_powerimbalance_variables) {
+        busparams->jacsq_idx[ibus] = nnz_eqjacsp;
+        nnz_eqjacsp += 2;
+      }
+
+      gi_eq = 0;
+      for (int kk = 0; kk < bus_eq->ngen; kk++) {
+        PSGEN gen_eq;
+        ierr = PSBUSGetGen(bus_eq, kk, &gen_eq);
+        CHKERRQ(ierr);
+        if (!gen_eq->status)
+          continue;
+        genparams->eqjacsqbus_idx[geni_eq + gi_eq] = nnz_eqjacsp;
+        nnz_eqjacsp += 1;
+        gi_eq++;
+      }
+
+      if (opflow->include_loadloss_variables) {
+        for (int kk = 0; kk < bus_eq->nload; kk++) {
+          PSLOAD load_eq;
+          ierr = PSBUSGetLoad(bus_eq, kk, &load_eq);
+          CHKERRQ(ierr);
+          loadparams->jacsq_idx[loadi_eq + kk] = nnz_eqjacsp;
+          nnz_eqjacsp += 1;
+        }
+      }
+
+      geni_eq += bus_eq->ngenON;
+      loadi_eq += bus_eq->nload;
+    }
+
+    int linei_eq = 0;
+    std::map<std::pair<int, int>, int> buspair_to_offdiag;
+    for (int iline = 0; iline < ps->nline; ++iline) {
+      PSLINE line_eq = &(ps->line[iline]);
+      if (!line_eq->status)
+        continue;
+      if (!line_eq->isdcline) {
+        const PSBUS *connbuses_eq;
+        ierr = PSLINEGetConnectedBuses(line_eq, &connbuses_eq);
+        CHKERRQ(ierr);
+        int busidxf = (int)(connbuses_eq[0] - ps->bus);
+        int busidxt = (int)(connbuses_eq[1] - ps->bus);
+
+        lineparams->eqjacsp_diag_idx[4 * linei_eq + 0] =
+            busparams->eqjacsp_idx[2 * busidxf];
+        lineparams->eqjacsp_diag_idx[4 * linei_eq + 1] =
+            busparams->eqjacsp_idx[2 * busidxf + 1];
+        lineparams->eqjacsp_diag_idx[4 * linei_eq + 2] =
+            busparams->eqjacsp_idx[2 * busidxt];
+        lineparams->eqjacsp_diag_idx[4 * linei_eq + 3] =
+            busparams->eqjacsp_idx[2 * busidxt + 1];
+
+        auto key = std::make_pair(std::min(busidxf, busidxt),
+                                  std::max(busidxf, busidxt));
+        auto it = buspair_to_offdiag.find(key);
+        if (it != buspair_to_offdiag.end()) {
+          lineparams->eqjacsp_idx[linei_eq] = it->second;
+        } else {
+          lineparams->eqjacsp_idx[linei_eq] = nnz_eqjacsp;
+          buspair_to_offdiag[key] = nnz_eqjacsp;
+          nnz_eqjacsp += 8;
+        }
+      }
+      linei_eq++;
+    }
+
+    if (opflow->has_gensetpoint) {
+      geni_eq = 0;
+      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+        PSBUS bus_eq = &(ps->bus[ibus]);
+        int gi_eq = 0;
+        for (int kk = 0; kk < bus_eq->ngen; kk++) {
+          PSGEN gen_eq;
+          ierr = PSBUSGetGen(bus_eq, kk, &gen_eq);
+          CHKERRQ(ierr);
+          if (!gen_eq->status)
+            continue;
+          if (!gen_eq->isrenewable) {
+            genparams->eqjacspgen_idx[geni_eq + gi_eq] = nnz_eqjacsp;
+            nnz_eqjacsp += 4;
+          }
+          gi_eq++;
+        }
+        geni_eq += bus_eq->ngenON;
+      }
+    }
+  }
 
   /*
    * KS: Count inequality Jacobian non-zeros. The traversal order must match

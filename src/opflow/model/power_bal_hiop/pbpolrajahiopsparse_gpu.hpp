@@ -26,5 +26,13 @@ void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                                  const double *x_dev,
                                                  double *jacd_dev);
 
+/**
+ * GPU-only (PETSc-free) computation of equality constraint Jacobian values.
+ */
+void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
+                                               const double *x_dev,
+                                               const int *perm_dev,
+                                               double *jace_dev);
+
 #endif // EXAGO_ENABLE_HIOP_SPARSE
 #endif // EXAGO_ENABLE_RAJA
