@@ -29,8 +29,10 @@ struct BUSParamsRajaHiop {
   int *jacsp_idx;  /* Location number in the sparse Jacobian for Pimb */
   int *jacsq_idx;  /* Location number in the sparse Jacobian for Qimb */
   int *hesssp_idx; /* KS: Hessian indices */
-  int *ispv;       /* KS: ispv[i] = 1 if bus is PV bus */
-  int *gineqidx;   /* KS: starting position of bus ineq constraints */
+  int *eqjacsp_idx;   /* Flat-array position for bus self-admittance in eq
+                             Jacobian. [2*i] = P-row base, [2*i+1] = Q-row base */
+  int *ispv;          /* KS: ispv[i] = 1 if bus is PV bus */
+  int *gineqidx;      /* KS: starting position of bus ineq constraints */
   int *ineqjacsp_idx; /* KS: index in flat sparse ineq Jacobian array */
   int *genoffset;     /* KS: Offset into flattened gen array for this bus */
   int *ngenONbus;     /* KS: Number of ON generators on this bus */
@@ -54,6 +56,7 @@ struct BUSParamsRajaHiop {
   int *jacsp_idx_dev_;     /* Location number in the sparse Jacobian for Pimb */
   int *jacsq_idx_dev_;     /* Location number in the sparse Jacobian for Qimb */
   int *hesssp_idx_dev_;    /* Location number in the Hessian */
+  int *eqjacsp_idx_dev_;   /* KS: eqjacsp_idx device counterpart */
   int *ispv_dev_;          /* KS: dev counterpart of ispv */
   int *gineqidx_dev_;      /* KS: dev counterpart of gineqidx */
   int *ineqjacsp_idx_dev_; /* KS: device counterpart of ineqjacsp_idx_ */
@@ -89,6 +92,8 @@ public:
   int *xidx;     /* starting locations in X vector */
   int *xpdevidx; /* KS: tarting locations of deviation variables in X vector */
   int *
+      xpsetidx; /* KS: Starting locations in X vector for set-point variables */
+  int *
       gidxbus; /* starting locations in constraint vector for bus constraints */
   int *geqidxgen;    /* starting locations in equality constraint vector for gen
                         constraints */
@@ -123,6 +128,7 @@ public:
 
   int *xidx_dev_;        /* starting locations in X vector */
   int *xpdevidx_dev_;    /* KS: device coutnerpart of xpdevidx*/
+  int *xpsetidx_dev_;    /* KS: xpsetidx device counterpart */
   int *gidxbus_dev_;     /* starting locations in constraint vector for bus
                             constraints */
   int *geqidxgen_dev_;   /* starting locations in equality constraint vector for
@@ -213,6 +219,11 @@ struct LINEParamsRajaHiop {
   int *linelimidx;    /* Indices for subset of lines that have finite limits */
   int *ineqjacsp_idx; /* KS: Position in flat sparse ineq Jacobian array */
   int *xslackidx;     /* Starting location of slack variables in X vector */
+  int *eqjacsp_idx; /* Flat-array offset for off-diagonal eq Jacobian entries */
+  int *eqjacsp_diag_idx; /* Flat-array positions for diagonal entries per line
+                            [4*l+0]=from P-row, [4*l+1]=from Q-row,
+                            [4*l+2]=to P-row, [4*l+3]=to Q-row */
+  int *isdcline;         /* isdcline[i] = 1 if line is a DC line */
 
   // Device data
   double *Gff_dev_;    /* From side self conductance */
@@ -238,6 +249,9 @@ struct LINEParamsRajaHiop {
       linelimidx_dev_; /* Indices for subset of lines that have finite limits */
   int *ineqjacsp_idx_dev_; /* KS: Position in flat sparse ineq Jacobian array */
   int *xslackidx_dev_; /* Starting location of slack variables in X vector */
+  int *eqjacsp_idx_dev_;
+  int *eqjacsp_diag_idx_dev_;
+  int *isdcline_dev_;
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
@@ -256,7 +270,8 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
   PbpolModelRajaHiop(void) {
     i_jaceq = j_jaceq = i_jacineq = j_jacineq = NULL;
     i_hess = j_hess = NULL;
-    val_jaceq = val_jacineq = val_hess = NULL;
+    perm_jaceq = perm_jaceq_dev = NULL;
+    val_jacineq = val_hess = NULL;
   }
 
   void destroy(OPFLOW opflow);
@@ -274,10 +289,11 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
   // Arrays to store Jacobian and Hessian indices and entries on CPU (used with
   // GPU sparse model)
   int *i_jaceq,
-      *j_jaceq; // Row and column indices for equality constrained Jacobian
+      *j_jaceq; // Row and column indices for equality constraints Jacobian
   int *i_jacineq,
-      *j_jacineq; // Row and column indices for inequality constrained Jacobain
+      *j_jacineq; // Row and column indices for inequality constraints Jacobain
   int *i_hess, *j_hess; // Row and column indices for hessian
-  double *val_jaceq, *val_jacineq,
-      *val_hess; // values for equality, inequality jacobians and hessian
+  int *perm_jaceq,
+      *perm_jaceq_dev; // Permutation for equality constraints Jacobian indices
+  double *val_jacineq, *val_hess; // values for inequality jacobians and hessian
 };
