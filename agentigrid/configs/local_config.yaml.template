@@ -1,0 +1,39 @@
+# AgentiGrid Local Configuration Template
+# Copy this file to local_config.yaml and adjust values for your setup:
+#   cp local_config.yaml.template local_config.yaml
+# Usage: agentigrid --config configs/local_config.yaml ./data/case_ACTIVSg200.m "your goal"
+
+# ExaGO settings
+exago:
+  binary_dir: "./applications"
+  env_script: "./configs/env_setup.sh"
+  timeout: 120
+
+# Data settings
+data:
+  data_dir: "./data"
+
+# LLM backend settings — adjust for your provider
+llm:
+  backend: "ollama"                    # openai | anthropic | ollama | ollama-cloud
+  model: "qwen2.5:7b"                 # model name for your backend
+  api_key_env: "ANTHROPIC_API_KEY"     # env var name (unused for local Ollama)
+  ollama_host: "http://localhost:11434"
+  # ollama_cloud_host: null            # set for Ollama Cloud
+  temperature: 0.3
+  max_tokens: 4096
+
+# Search settings
+search:
+  max_iterations: 10
+  default_mode: "fresh"
+  application: "opflow"
+
+# Output settings
+output:
+  workdir: "./workdir"
+  logs_dir: "./logs"
+  save_journal: true
+  journal_format: "json"
+  save_modified_files: true
+  verbose: true

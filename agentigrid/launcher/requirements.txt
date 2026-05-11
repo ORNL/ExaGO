@@ -1,0 +1,5 @@
+streamlit>=1.30.0
+plotly>=5.18.0
+kaleido>=0.2.1
+reportlab>=4.0
+pyyaml>=6.0

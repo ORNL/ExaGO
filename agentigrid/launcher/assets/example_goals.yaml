@@ -1,0 +1,60 @@
+# Preset search goals for the AgentiGrid Launcher
+# Each entry has a short label (for the dropdown) and the full goal text
+
+goals:
+  - label: "Minimize generation cost"
+    goal: "Minimize total generation cost while maintaining all bus voltages within 0.95–1.05 p.u. and keeping all line loadings below 100%."
+
+  - label: "Reduce cost by 10%"
+    goal: "Reduce the total generation cost by at least 10% compared to the base case, while maintaining system feasibility (all voltages within limits, no line overloads)."
+
+  - label: "Maximize loadability"
+    goal: "Find the maximum uniform load scaling factor the network can serve while keeping all line loadings below 90% and all bus voltages within 0.95–1.05 p.u."
+
+  - label: "Fix voltage violations"
+    goal: "Identify any buses with voltage magnitudes outside the 0.95–1.05 p.u. range and adjust generator voltage setpoints and dispatch to bring all voltages within limits, while minimizing the increase in generation cost."
+
+  - label: "Minimize losses"
+    goal: "Minimize total active power losses in the network by adjusting generator dispatch and voltage setpoints, while keeping all bus voltages within 0.95–1.05 p.u. and all line loadings below 100%."
+
+  - label: "N-1 security improvement"
+    goal: "Improve the network's ability to handle single contingencies by reducing the loading on the most heavily loaded lines to below 75%, adjusting generator dispatch as needed while maintaining voltage limits."
+
+  - label: "Multi-objective: cost vs voltage stability"
+    goal: "Minimize generation cost while simultaneously keeping all bus voltages as close to 1.0 p.u. as possible and keeping all line loadings below 85%. Report the tradeoffs between cost reduction and voltage/loading margins."
+
+  - label: "Stress test: find critical N-1 contingency"
+    goal: "Systematically test N-1 contingencies (single line outages) to identify the most critical lines whose outage causes the largest cost increase, voltage violations, or system infeasibility. Start with the most heavily loaded lines. Report a ranked list of critical contingencies."
+
+  - label: "SCOPFLOW: Security premium analysis"
+    goal: "Run SCOPFLOW with all contingencies and report the base case cost. Compare this to the unconstrained OPFLOW cost to quantify the security premium — the additional cost of ensuring N-1 security."
+
+  - label: "SCOPFLOW: Maximum secure load"
+    goal: "Find the maximum uniform load scaling factor before the security-constrained dispatch becomes infeasible. Use binary search with fresh mode. This finds the N-1-secure loadability limit."
+
+  - label: "TCOPFLOW: Maximum temporal loadability"
+    goal: "Find the maximum uniform load profile scaling factor the network can serve across the entire time horizon while keeping all bus voltages within 0.95–1.05 p.u. and all line loadings below 100% in every time period. Use scale_load_profile to adjust demand and fresh mode for binary search. The worst-case period determines overall feasibility."
+
+  - label: "TCOPFLOW: Peak period stress analysis"
+    goal: "Identify the time period with the highest demand and determine whether the system can handle a further 10% increase in load during that peak period only. Scale the load profile by increasing factors and report at what factor the system becomes infeasible. Pay attention to the per-period voltage and loading trends."
+
+  - label: "TCOPFLOW: Ramp constraint impact"
+    goal: "Compare the TCOPFLOW solution with ramp coupling enabled vs disabled to quantify the cost of generator ramp constraints. Run the base case first, then try disabling coupling to see if cost decreases. Report the ramp constraint premium — the additional cost imposed by inter-temporal ramp limits."
+
+  - label: "SOPFLOW: Evaluate wind scenario robustness"
+    goal: "Using SOPFLOW with the wind scenario file, evaluate whether the grid can handle all wind generation scenarios simultaneously. Report the base-case dispatch cost, any scenarios where constraints are violated, and which buses are most affected by wind variability."
+
+  - label: "SOPFLOW: Find maximum wind penetration"
+    goal: "Find the maximum wind generation scaling factor such that all stochastic scenarios remain feasible with voltages within 0.95–1.05 p.u. and no line overloads. Use binary search with the scale_wind_scenario command and fresh mode."
+
+  - label: "SOPFLOW: Compare deterministic vs stochastic dispatch"
+    goal: "Using SOPFLOW, compare the base-case deterministic dispatch cost with the stochastic solution that accounts for all wind scenarios. Quantify how much additional generation reserve is needed in the stochastic formulation vs. a single-scenario OPFLOW run. Report the stochastic premium."
+
+  - label: "PFLOW: Maximize loadability"
+    goal: "Using PFLOW, find the maximum uniform load scaling factor before the power flow fails to converge. Use binary search with scale_all_loads and fresh mode. The LLM controls the search — PFLOW does not optimise, so you must propose each load level and evaluate feasibility based on convergence status, voltage limits (0.95–1.05 p.u.), and line loading (below 100%). Declare complete when the feasible/infeasible gap is below 1%."
+
+  - label: "PFLOW: Minimize generation cost via dispatch"
+    goal: "Using PFLOW, reduce the total generation cost by adjusting generator dispatch (set_gen_dispatch) while maintaining feasibility. PFLOW does not optimise cost — you must propose dispatch changes and evaluate the computed cost after each simulation. Reduce expensive generator outputs and increase cheaper ones, staying within Pmin/Pmax bounds. Keep all voltages within 0.95–1.05 p.u. and line loadings below 100%."
+
+  - label: "PFLOW: Improve voltage profile"
+    goal: "Using PFLOW, improve the network voltage profile so that all bus voltages are between 0.98 and 1.02 p.u. Use set_gen_voltage to directly control generator voltage setpoints (PFLOW enforces these as hard constraints), set_tap_ratio to adjust transformer taps, and set_shunt_susceptance to add reactive support. PFLOW will enforce your voltage setpoints — this is the primary voltage control tool."

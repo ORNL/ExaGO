@@ -1,0 +1,6 @@
+#!/bin/bash
+# Environment setup for ExaGO binaries
+# Copy this file to env_setup.sh and adjust paths to match your installation:
+#   cp env_setup.sh.template env_setup.sh
+export LD_LIBRARY_PATH=/path/to/coinhsl/lib64:$LD_LIBRARY_PATH
+export PATH=/path/to/petsc-install/bin:$PATH

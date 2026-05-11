@@ -1,0 +1,66 @@
+# AgentiGrid Default Configuration
+
+# ExaGO settings
+exago:
+  binary_dir: "./applications"  # Local applications/ folder; override for external ExaGO install
+  # Individual binary paths (derived from binary_dir if not set)
+  opflow_binary: null    # defaults to {binary_dir}/opflow
+  scopflow_binary: null
+  tcopflow_binary: null
+  sopflow_binary: null
+  dcopflow_binary: null
+  pflow_binary: null
+  # Environment setup script (optional, run before simulation)
+  # Copy configs/env_setup.sh.template to configs/env_setup.sh and adjust paths
+  env_script: "./configs/env_setup.sh"
+  # Default timeout for simulation execution (seconds)
+  timeout: 360
+
+# Data settings
+data:
+  data_dir: "./data"            # Default location for network files and scenarios
+
+# LLM backend settings
+llm:
+  backend: "anthropic"          # openai | anthropic | ollama | ollama-cloud
+  model: "claude-sonnet-4-20250514"
+  api_key_env: "ANTHROPIC_API_KEY"  # env var name containing the API key
+  # OpenAI-specific
+  openai_base_url: null
+  # Ollama-specific
+  ollama_host: "http://localhost:11434"
+  ollama_cloud_host: null
+  # Generation parameters
+  temperature: 0.3
+  max_tokens: 4096
+
+# Search settings
+search:
+  max_iterations: 20
+  default_mode: "accumulative"  # accumulative | fresh
+  # Base case files (can be overridden via CLI)
+  base_case: null               # path to .m file
+  gic_file: null                # path to .gic file (optional)
+  application: "opflow"         # opflow | scopflow | tcopflow | sopflow | dcopflow | pflow
+  # SCOPFLOW-specific
+  ctgc_file: null               # contingency file (.cont) for SCOPFLOW
+  # TCOPFLOW-specific
+  pload_profile: null           # active load profile CSV for TCOPFLOW
+  qload_profile: null           # reactive load profile CSV for TCOPFLOW
+  wind_profile: null            # wind generation profile CSV for TCOPFLOW (optional)
+  tcopflow_duration: 1.0        # duration in hours (default: 1.0)
+  tcopflow_dT: 60.0             # time-step in minutes (default: 60)
+  tcopflow_iscoupling: 1        # generator ramp coupling: 1=on, 0=off
+  # SOPFLOW-specific
+  scenario_file: null            # wind scenario CSV for SOPFLOW (single-period: scenario_nr,<wind_cols>,weight; multi-period: sim_timestamp,scenario_nr,<wind_cols>)
+  sopflow_solver: "IPOPT"        # SOPFLOW solver: IPOPT (single-core) or EMPAR (multi-core, requires --np >= 2)
+  sopflow_iscoupling: 0          # first/second stage coupling: 0=off (default), 1=on
+
+# Output settings
+output:
+  workdir: "./workdir"
+  logs_dir: "./logs"
+  save_journal: true            # save journal to file after search
+  journal_format: "json"        # json | csv
+  save_modified_files: true     # keep modified .m files from each iteration
+  verbose: false                # print detailed output during search
