@@ -5,7 +5,7 @@ H \equiv \nabla^2 f(x) + \sum_{i=1}^{n_c} y_{c,i} \nabla^2 c_i(x) + \sum_{i=1}^{
 \end{aligned}
 ```
 Here $`H`$ is the Hessian, $`f(x)`$ is the objective function, $`y_{c,i}`$ are the equality constraints and $`y_{d,i}`$ are the inequality constraints.
-See the explicit derivatives [here](/docs/opflow/pbpol.md).
+See the explicit derivatives documented [here](/docs/opflow/pbpol.md).
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
