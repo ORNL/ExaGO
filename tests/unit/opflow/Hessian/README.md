@@ -14,4 +14,4 @@ A 5-bus system **CICJ-unittestx1.m** will be used as a basis for this test. In a
 ### Hessian sparsity structure:
 
 The Hessian has the following sparsity structure for our test:
-![Hessian_sparsity.jpg](/tests/unit/opflow/Hessian/Hessian_sparsity.jpg)
+![Hessian_sparsity.png](/tests/unit/opflow/Hessian/Hessian_sparsity.png)
