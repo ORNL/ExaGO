@@ -1,7 +1,7 @@
 ## Hessian Definition
 ```math
 \begin{aligned}
-H \equiv \nabla^2 f(x) + \sum_{i=1}^{n_c} y_{c,i} \nabla^2 c_i(x) + \sum_{i=1}^{\n_d} y_{d,i} \nabla^2 d_i(x)
+H \equiv \nabla^2 f(x) + \sum_{i=1}^{n_c} y_{c,i} \nabla^2 c_i(x) + \sum_{i=1}^{n_d} y_{d,i} \nabla^2 d_i(x)
 \end{aligned}
 ```
 Here $`H`$ is the Hessian, $`f(x)`$ is the objective function, $`y_{c,i}`$ are the equality constraints and $`y_{d,i}`$ are the inequality constraints.
@@ -14,4 +14,4 @@ A 5-bus system **CICJ-unittestx1.m** will be used as a basis for this test. In a
 ### Hessian sparsity structure:
 
 The Hessian has the following sparsity structure for our test:
-![img1.png](Hessian_sparsity.jpg)
+![Hessian_sparsity.jpg](/tests/unit/opflow/Hessian/Hessian_sparsity.jpg)
