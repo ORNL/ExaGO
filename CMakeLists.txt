@@ -88,6 +88,12 @@ option(EXAGO_ENABLE_RAJA "Enables RAJA and Umpire libraries" OFF)
 # Enable Python interface
 option(EXAGO_ENABLE_PYTHON "Enables Python bindings and tests" ON)
 
+# Enable AgentiGrid (LLM-driven simulation agent). Disabled by default
+# because AgentiGrid requires Python packages (Anthropic SDK, Streamlit,
+# Plotly, ReportLab, openai, ollama) that are not needed by the core
+# ExaGO build. Enable with -DEXAGO_ENABLE_AGENTIGRID=ON.
+option(EXAGO_ENABLE_AGENTIGRID "Enable the AgentiGrid LLM-driven simulation agent" OFF)
+
 # Enable OpenMP support. This should not be toggled directly by the user, which
 # is why it's marked as advanced.
 option(EXAGO_ENABLE_OMP "Enables OpenMP" ON)
@@ -389,5 +395,8 @@ endif()
 if(EXAGO_ENABLE_PYTHON)
   add_subdirectory(launcher)
   add_subdirectory(viz)
+  if(EXAGO_ENABLE_AGENTIGRID)
+    add_subdirectory(agentigrid)
+  endif()
   install(DIRECTORY ${PROJECT_SOURCE_DIR}/datafiles DESTINATION share/exago)
 endif()
