@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
 
   // HIP kernels do not synchronize by default
 #ifdef EXAGO_ENABLE_HIP
-  int status =  hipDeviceSynchronize();
+  int status = hipDeviceSynchronize();
 #endif
 
   /* Timed runs */
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
 
   // HIP kernels do not synchronize by default
 #ifdef EXAGO_ENABLE_HIP
-  status =  hipDeviceSynchronize();
+  status = hipDeviceSynchronize();
 #endif
 
   auto t1 = Clock::now();
