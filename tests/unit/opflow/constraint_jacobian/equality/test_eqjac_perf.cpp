@@ -13,16 +13,6 @@
 #include <umpire/ResourceManager.hpp>
 #endif
 
-#if defined(EXAGO_ENABLE_HIP)
-#include <hip/hip_runtime.h>
-#define GPU_SYNC() hipDeviceSynchronize()
-#elif defined(EXAGO_ENABLE_CUDA)
-#include <cuda_runtime.h>
-#define GPU_SYNC() cudaDeviceSynchronize()
-#else
-#define GPU_SYNC() ((void)0)
-#endif
-
 using Clock = std::chrono::high_resolution_clock;
 using Ms = std::chrono::duration<double, std::milli>;
 
@@ -181,7 +171,11 @@ int main(int argc, char **argv) {
         opflow_gpu, x_dev, NULL, NULL, values_dev);
     CHKERRQ(ierr);
   }
-  int status = GPU_SYNC();
+
+  // HIP kernels do not synchronize by default
+#ifdef EXAGO_ENABLE_HIP
+  int status = hipDeviceSynchronize();
+#endif
 
   /* Timed runs */
   auto t0 = Clock::now();
@@ -190,7 +184,12 @@ int main(int argc, char **argv) {
         opflow_gpu, x_dev, NULL, NULL, values_dev);
     CHKERRQ(ierr);
   }
-  status = GPU_SYNC();
+
+  // HIP kernels do not synchronize by default
+#ifdef EXAGO_ENABLE_HIP
+  status = hipDeviceSynchronize();
+#endif
+
   auto t1 = Clock::now();
   double gpu_ms = Ms(t1 - t0).count() / niters;
 
