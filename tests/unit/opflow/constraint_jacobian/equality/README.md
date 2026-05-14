@@ -73,7 +73,7 @@ In general, solution vector has following elements per bus:
 For the 5-bus system **CECJ-unittestx1.m**, solution vector is:
 <table>
 <tr>
-<td>0</td> <td>2</td> <td>0</td> <td>2</td> <td>30</td> <td>2</td> <td>1.6</td> <td>-2.2</td> <td>0</td> <td>2</td> <td>0</td> <td>2</td> 
+<td>0</td> <td>2</td> <td>0</td> <td>2</td> <td>30*PI/180.0</td> <td>2</td> <td>1.6</td> <td>-2.2</td> <td>0</td> <td>2</td> <td>0</td> <td>2</td> 
 </tr>
 </table>
 
@@ -132,10 +132,10 @@ With the parameters of the example network the matrix is:
 <td>Q1</td> <td>-1.6</td> <td>-2.0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>P2</td> <td>-0.8</td> <td>-0.8</td> <td>0.8</td> <td>2.8</td> <td>0.8</td> <td>-0.2</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>-0.8</td> <td>0</td> <td>0</td>
+<td>P2</td> <td>-0.8</td> <td>-0.8</td> <td>0.8</td> <td>1.81</td> <td>0.8</td> <td>-0.2</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>-0.8</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>Q2</td> <td>1.6</td> <td>-0.4</td> <td>-3.6</td> <td>-3.8</td> <td>0.4</td> <td>0.4</td> <td>0</td> <td>0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td>
+<td>Q2</td> <td>1.6</td> <td>-0.4</td> <td>-3.6</td> <td>-3.998</td> <td>0.4</td> <td>0.4</td> <td>0</td> <td>0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
 <td>P3</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>0.2</td> <td>0.8</td> <td>1.8</td> <td>-1</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
@@ -170,7 +170,7 @@ To scale the solution vector, following needs to be done:
 For N=3 the solution vector is:
 <table>
 <tr>
-<td>0   2   0   2   30   2   1.6   -2.2   0   2   0   2</td> <td>0   2   30   2   1.6   -2.2   0   2   0   2</td><td>0   2   30   2   1.6   -2.2   0   2   0   2</td>
+<td>0   2   0   2   30*PI/180.0   2   1.6   -2.2   0   2   0   2</td> <td>0   2   30*PI/180.0   2   1.6   -2.2   0   2   0   2</td><td>0   2   30*PI/180.0   2   1.6   -2.2   0   2   0   2</td>
 </tr>
 </table>
 
