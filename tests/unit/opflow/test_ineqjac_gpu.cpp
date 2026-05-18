@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
   std::string file;
   char appname[] = "opflow";
   MPI_Comm comm = MPI_COMM_WORLD;
-  char help[] = "Test 8: GPU ineq Jacobian validation\n";
+  char help[] = "GPU inequality constraints Jacobian validation\n";
   int fail = 0;
 
   ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);
@@ -66,8 +66,6 @@ int main(int argc, char **argv) {
   else
     file.assign(file_c_str);
 
-  std::cout << "=== Test 8: GPU Inequality Jacobian Validation ==="
-            << std::endl;
   std::cout << "Network file: " << file << std::endl;
 
   /* ------------------------------------------------------------------
@@ -99,6 +97,9 @@ int main(int argc, char **argv) {
   ierr = VecGetArray(Xsol, &xsol_nat);
   CHKERRQ(ierr);
 
+  std::cout << "\n=== GPU inequality constraints Jacobian validation ==="
+            << std::endl;
+
   /* ------------------------------------------------------------------
    * Create the PBPOLRAJAHIOPSPARSE model and set up
    * ------------------------------------------------------------------ */
@@ -118,11 +119,11 @@ int main(int argc, char **argv) {
   ierr = OPFLOWGetSizes(opflow, &nx, &nconeq, &nconineq);
   CHKERRQ(ierr);
 
-  std::cout << "nx=" << nx << " nconeq=" << nconeq << " nconineq=" << nconineq
-            << " nnz_ineqjacsp=" << opflow->nnz_ineqjacsp << std::endl;
+  std::cout << "  nx = " << nx << " , nconeq = " << nconeq << " , nconineq = " << nconineq
+            << " , nnz_ineqjacsp=" << opflow->nnz_ineqjacsp << std::endl;
 
   if (!nconineq) {
-    std::cout << "No inequality constraints -- nothing to test. PASS."
+    std::cout << "  No inequality constraints -- nothing to test. PASS."
               << std::endl;
     ierr = VecRestoreArray(Xsol, &xsol_nat);
     CHKERRQ(ierr);
@@ -148,7 +149,7 @@ int main(int argc, char **argv) {
   ierr = VecRestoreArray(Xsol, &xsol_nat);
   CHKERRQ(ierr);
 
-  std::cout << "Evaluating Jacobian at IPOPT-converged solution." << std::endl;
+  std::cout << "  Evaluating Jacobian at IPOPT-converged solution..." << std::endl;
 
   /* ------------------------------------------------------------------
    * Compute reference inequality Jacobian via PETSc.
@@ -191,11 +192,11 @@ int main(int argc, char **argv) {
   }
 
   int ref_count = (int)(vptr - ref_vals);
-  std::cout << "PETSc extracted " << ref_count << " ineq Jacobian values"
+  std::cout << "  PETSc extracted " << ref_count << " ineq Jacobian values"
             << " (expected " << nnz << ")" << std::endl;
 
   if (ref_count != nnz) {
-    std::cout << "FAIL: NNZ mismatch! PETSc=" << ref_count
+    std::cout << "  FAIL: NNZ mismatch! PETSc=" << ref_count
               << " analytical=" << nnz << std::endl;
     fail++;
   }
@@ -238,7 +239,7 @@ int main(int argc, char **argv) {
   resmgr.copy(x_dev, x_sd);
 #endif
 
-  std::cout << "Running RAJA GPU inequality Jacobian kernel..." << std::endl;
+  std::cout << "  Running RAJA GPU inequality Jacobian kernel..." << std::endl;
   ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, gpu_vals_dev);
 
   gpu_vals = static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
@@ -251,18 +252,20 @@ int main(int argc, char **argv) {
   /* ------------------------------------------------------------------
    * Compare for correctness
    * ------------------------------------------------------------------ */
-  std::cout << "Comparing " << nnz << " inequality Jacobian values..."
+  std::cout << "  Comparing " << nnz << " inequality Jacobian values..."
             << std::endl;
   int cmp_fail = compare_arrays(ref_vals, gpu_vals, nnz, "ineqjac");
   fail += cmp_fail;
 
   if (cmp_fail == 0)
-    std::cout << "PASS: All " << nnz
+    std::cout << "  PASS: All " << nnz
               << " inequality Jacobian values match within tol=" << TOL
               << std::endl;
   else
-    std::cout << "FAIL: " << cmp_fail << " of " << nnz << " values differ"
+    std::cout << "  FAIL: " << cmp_fail << " of " << nnz << " values differ"
               << std::endl;
+
+  std::cout << "=== End validation ===" << std::endl;
 
   /* ------------------------------------------------------------------
    * Performance comparison
@@ -276,7 +279,7 @@ int main(int argc, char **argv) {
     double *bench_vals =
         static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
 
-    std::cout << "\n=== Performance Benchmark (" << niters
+    std::cout << "\n=== Performance benchmark (" << niters
               << " iterations) ===" << std::endl;
 
     /* --- PETSc path: compute + MatGetRow extraction + copy to device --- */
@@ -376,7 +379,7 @@ int main(int argc, char **argv) {
     }
 
     h_allocator.deallocate(bench_vals);
-    std::cout << "=== End Benchmark ===" << std::endl;
+    std::cout << "=== End benchmark ===" << std::endl;
   }
 
   /* ------------------------------------------------------------------

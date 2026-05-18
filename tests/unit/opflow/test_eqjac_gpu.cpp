@@ -64,8 +64,8 @@ int main(int argc, char **argv) {
     file.assign(file_c_str);
 
   /* ----------------------------------------------------------------
-   * Step 1: Set up OPFLOW with PBPOL model (PETSc path) to get
-   *         the reference Jacobian and the initial guess X.
+   * Set up OPFLOW with PBPOL model (PETSc path) to get
+   * the reference Jacobian and the initial guess X.
    * ---------------------------------------------------------------- */
   OPFLOW opflow_ref;
   ierr = OPFLOWCreate(PETSC_COMM_WORLD, &opflow_ref);
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
   computeReferenceJacobian(opflow_ref, X_ref, ref_entries);
 
   /* ----------------------------------------------------------------
-   * Step 2: Set up OPFLOW with HIOPSPARSE to exercise the GPU path.
+   * Set up OPFLOW with HIOPSPARSE to exercise the GPU path.
    * ---------------------------------------------------------------- */
   OPFLOW opflow_gpu;
   ierr = OPFLOWCreate(PETSC_COMM_WORLD, &opflow_gpu);
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
 
   printf("\n");
   printf("============================================================\n");
-  printf("  Equality Constraint Jacobian: PETSc vs GPU Comparison\n");
+  printf("  Equality constraint Jacobian: PETSc vs GPU Comparison\n");
   printf("  Network: %s\n", file.c_str());
   printf("  nx = %d, nconeq = %d, nnz_eqjac(GPU) = %d, nnz_eqjac(PETSc) = %d\n",
          nx, opflow_gpu->nconeq, nnz_eq, (int)ref_entries.size());
@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
   }
 
   /* ----------------------------------------------------------------
-   * Step 3: Compare and print results
+   * Compare and print results
    * ---------------------------------------------------------------- */
   int n_match = 0, n_mismatch = 0, n_missing_gpu = 0, n_extra_gpu = 0;
   double max_abs_err = 0.0, max_rel_err = 0.0;

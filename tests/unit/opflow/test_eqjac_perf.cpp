@@ -211,7 +211,7 @@ int main(int argc, char **argv) {
    * ---------------------------------------------------------------- */
   printf("\n");
   printf("================================================================\n");
-  printf("  Equality Constraint Jacobian — Performance Comparison\n");
+  printf("  Equality constraint Jacobian — performance comparison\n");
   printf("================================================================\n");
   printf("  Network:          %s\n", file.c_str());
   printf("  Buses:            %d\n", opflow_gpu->ps->nbus);
