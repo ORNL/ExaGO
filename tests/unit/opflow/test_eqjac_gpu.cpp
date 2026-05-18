@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
@@ -13,6 +14,9 @@
 #include <umpire/Allocator.hpp>
 #include <umpire/ResourceManager.hpp>
 #endif
+
+using Clock = std::chrono::high_resolution_clock;
+using Ms = std::chrono::duration<double, std::milli>;
 
 struct TripletEntry {
   int row, col;
@@ -40,6 +44,22 @@ static void computeReferenceJacobian(OPFLOW opflow, Vec X,
   }
 }
 
+static double benchmarkPETSc(OPFLOW opflow, Vec X, int niters) {
+  PetscErrorCode ierr;
+  PetscScalar *x_arr;
+
+  ierr = VecGetArray(X, &x_arr);
+  auto t0 = Clock::now();
+  for (int iter = 0; iter < niters; iter++) {
+    ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
+        opflow, X, opflow->Jac_Ge);
+  }
+  auto t1 = Clock::now();
+  ierr = VecRestoreArray(X, &x_arr);
+
+  return Ms(t1 - t0).count() / niters;
+}
+
 int main(int argc, char **argv) {
   PetscErrorCode ierr;
   PetscBool flg;
@@ -47,8 +67,9 @@ int main(int argc, char **argv) {
   std::string file;
   char appname[] = "opflow";
   MPI_Comm comm = MPI_COMM_WORLD;
+  int niters = 1000;
 
-  char help[] = "Compare PETSc vs GPU equality constraint Jacobian\n";
+  char help[] = "Compare and benchmark PETSc vs GPU equality constraint Jacobian\n";
 
   ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);
   if (ierr) {
@@ -196,7 +217,7 @@ int main(int argc, char **argv) {
   double max_abs_err = 0.0, max_rel_err = 0.0;
   int worst_row = -1, worst_col = -1;
   double worst_ref = 0, worst_gpu = 0;
-  const double tol = 1e-6;
+  const double tol = 1e-8;
 
   printf("  %-8s %-8s %16s %16s %12s  %s\n", "Row", "Col", "PETSc (ref)", "GPU",
          "AbsErr", "Status");
@@ -275,6 +296,41 @@ int main(int argc, char **argv) {
   int result =
       (n_mismatch == 0 && n_missing_gpu == 0 && n_extra_gpu == 0) ? 0 : 1;
 
+  /* ----------------------------------------------------------------
+   * Benchmark performance
+   * ---------------------------------------------------------------- */
+  /* Warmup and benchmark PETSc*/
+  benchmarkPETSc(opflow_ref, X_ref, 5);
+  double petsc_ms = benchmarkPETSc(opflow_ref, X_ref, niters);
+
+  /* Warmup the GPU values kernel */
+  for (int i = 0; i < 5; i++) {
+    ierr = (*opflow_gpu->modelops.computesparseequalityconstraintjacobianhiop)(
+        opflow_gpu, x_dev, NULL, NULL, values_dev);
+    CHKERRQ(ierr);
+  }
+
+  // HIP kernels do not synchronize by default
+#ifdef EXAGO_ENABLE_HIP
+  int status = hipDeviceSynchronize();
+#endif
+
+  /* Timed runs */
+  auto t0 = Clock::now();
+  for (int iter = 0; iter < niters; iter++) {
+    ierr = (*opflow_gpu->modelops.computesparseequalityconstraintjacobianhiop)(
+        opflow_gpu, x_dev, NULL, NULL, values_dev);
+    CHKERRQ(ierr);
+  }
+
+  // HIP kernels do not synchronize by default
+#ifdef EXAGO_ENABLE_HIP
+  status = hipDeviceSynchronize();
+#endif
+
+  auto t1 = Clock::now();
+  double gpu_ms = Ms(t1 - t0).count() / niters;
+
   h_allocator.deallocate(iRow);
   h_allocator.deallocate(jCol);
   h_allocator.deallocate(values);
@@ -287,6 +343,25 @@ int main(int argc, char **argv) {
 
   ierr = VecRestoreArray(X_gpu, &x_host);
   CHKERRQ(ierr);
+
+  /* ----------------------------------------------------------------
+   * Print results
+   * ---------------------------------------------------------------- */
+  printf("\n");
+  printf("================================================================\n");
+  printf("  Equality constraint Jacobian — performance comparison\n");
+  printf("================================================================\n");
+  printf("  Iterations:       %d\n", niters);
+  printf("----------------------------------------------------------------\n");
+  printf("  %-20s %12s %12s\n", "", "PETSc (CPU)", "RAJA (GPU)");
+  printf("  %-20s %12s %12s\n", "", "-----------", "----------");
+  printf("  %-20s %10.4f ms %10.4f ms\n", "Avg time/call", petsc_ms, gpu_ms);
+  if (gpu_ms > 0.0) {
+    double speedup = petsc_ms / gpu_ms;
+    printf("  %-20s %10s    %9.2fx\n", "Speedup", "", speedup);
+  }
+  printf(
+      "================================================================\n\n");
 #endif // EXAGO_ENABLE_RAJA
 
   ierr = OPFLOWDestroy(&opflow_ref);
