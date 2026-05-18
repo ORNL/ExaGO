@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
   std::string file;
   char appname[] = "opflow";
   MPI_Comm comm = MPI_COMM_WORLD;
-  int niters = 100;
+  int niters = 1000;
 
   char help[] = "Benchmark PETSc vs GPU equality constraint Jacobian\n";
 
@@ -53,8 +53,6 @@ int main(int argc, char **argv) {
     file = "../datafiles/case9/case9mod.m";
   else
     file.assign(file_c_str);
-
-  ierr = PetscOptionsGetInt(NULL, NULL, "-niters", &niters, &flg);
 
   /* ----------------------------------------------------------------
    * PETSc path: IPOPT + PBPOL

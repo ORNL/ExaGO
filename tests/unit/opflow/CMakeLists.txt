@@ -58,7 +58,7 @@ if(EXAGO_RUN_TESTS)
     COMMAND
     ${RUNCMD}
     $<TARGET_FILE:test_eqjac_gpu>
-    -netfile
+    NETFILES
     ${network_files}
   )
 
