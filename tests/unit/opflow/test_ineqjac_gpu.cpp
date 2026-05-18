@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
   std::cout << "Network file: " << file << std::endl;
 
   /* ------------------------------------------------------------------
-   * Step 1: Solve with IPOPT/PBPOL to get a realistic solution
+   * Solve with IPOPT/PBPOL to get a realistic solution
    * ------------------------------------------------------------------ */
   OPFLOW opflow_ref;
   Vec Xsol;
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
   CHKERRQ(ierr);
 
   /* ------------------------------------------------------------------
-   * Step 2: Create the PBPOLRAJAHIOPSPARSE model and set up
+   * Create the PBPOLRAJAHIOPSPARSE model and set up
    * ------------------------------------------------------------------ */
   OPFLOW opflow;
   ierr = OPFLOWCreate(PETSC_COMM_WORLD, &opflow);
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
   }
 
   /* ------------------------------------------------------------------
-   * Step 3: Copy IPOPT solution into opflow->X (natural ordering)
+   * Copy IPOPT solution into opflow->X (natural ordering)
    * ------------------------------------------------------------------ */
   double *x_nat;
   ierr = VecGetArray(opflow->X, &x_nat);
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
   std::cout << "Evaluating Jacobian at IPOPT-converged solution." << std::endl;
 
   /* ------------------------------------------------------------------
-   * Step 4: Compute reference inequality Jacobian via PETSc.
+   * Compute reference inequality Jacobian via PETSc.
    * The first call establishes the sparsity pattern, the second
    * computes the actual values at the converged solution.
    * ------------------------------------------------------------------ */
@@ -201,7 +201,7 @@ int main(int argc, char **argv) {
   }
 
   /* ------------------------------------------------------------------
-   * Step 5: Compute GPU inequality Jacobian at the same solution
+   * Compute GPU inequality Jacobian at the same solution
    * ------------------------------------------------------------------ */
   double *x_host;
   ierr = VecGetArray(opflow->X, &x_host);
@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
 #endif
 
   /* ------------------------------------------------------------------
-   * Step 6: Compare
+   * Compare for correctness
    * ------------------------------------------------------------------ */
   std::cout << "Comparing " << nnz << " inequality Jacobian values..."
             << std::endl;
@@ -265,13 +265,9 @@ int main(int argc, char **argv) {
               << std::endl;
 
   /* ------------------------------------------------------------------
-   * Step 7: Performance comparison (enabled with -benchmark flag)
+   * Performance comparison
    * ------------------------------------------------------------------ */
-  PetscBool run_benchmark = PETSC_FALSE;
-  ierr = PetscOptionsGetBool(NULL, NULL, "-benchmark", NULL, &run_benchmark);
-  CHKERRQ(ierr);
-
-  if (run_benchmark) {
+  {
     int niters = 1000;
     PetscInt bench_nrow, bench_ncol;
     ierr = MatGetSize(opflow->Jac_Gi, &bench_nrow, &bench_ncol);
