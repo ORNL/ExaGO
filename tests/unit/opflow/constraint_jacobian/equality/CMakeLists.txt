@@ -81,7 +81,7 @@ if(EXAGO_RUN_TESTS)
     set(prefix_net ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)
     exago_add_test(
       NAME
-      UNIT_TESTS_EQJAC_GPU_VS_PETSC_testx3
+      UNIT_TESTS_EQUALITY_CONSTRAINT_JACOBIAN_GPU_testx3
       DEPENDS
       HIOP_SPARSE
       COMMAND
