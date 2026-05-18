@@ -1,9 +1,11 @@
 if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
   set_source_files_properties(jac_eq_acopf.cpp PROPERTIES LANGUAGE CUDA)
   set_source_files_properties(test_eqjac_compare.cpp PROPERTIES LANGUAGE CUDA)
+  set_source_files_properties(test_eqjac_perf.cpp PROPERTIES LANGUAGE CUDA)
 endif()
 if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_HIP)
   set_source_files_properties(test_eqjac_compare.cpp PROPERTIES LANGUAGE HIP)
+  set_source_files_properties(test_eqjac_perf.cpp PROPERTIES LANGUAGE HIP)
 endif()
 
 add_executable(test_eqjac_compare test_eqjac_compare.cpp)
@@ -12,12 +14,6 @@ target_include_directories(
   test_eqjac_compare PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow
 )
 
-if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_HIP)
-  set_source_files_properties(test_eqjac_perf.cpp PROPERTIES LANGUAGE HIP)
-endif()
-if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
-  set_source_files_properties(test_eqjac_perf.cpp PROPERTIES LANGUAGE CUDA)
-endif()
 add_executable(test_eqjac_perf test_eqjac_perf.cpp)
 target_link_libraries(test_eqjac_perf ExaGO::OPFLOW)
 target_include_directories(
