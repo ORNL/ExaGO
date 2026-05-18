@@ -1050,7 +1050,7 @@ PetscErrorCode OPFLOWComputeDenseInequalityConstraintJacobian_PBPOLHIOP(
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLHIOP(
+PetscErrorCode OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLHIOP(
     OPFLOW opflow, const double *x, const double *lambda, double *HDD) {
   PetscErrorCode ierr;
   PBPOLHIOP pbpolhiop = (PBPOLHIOP)opflow->model;
@@ -1379,7 +1379,7 @@ PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLHIOP(
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode OPFLOWComputeDenseInequalityConstraintHessian_PBPOLHIOP(
+PetscErrorCode OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLHIOP(
     OPFLOW opflow, const double *x, const double *lambda, double *HDD) {
   int i;
   PBPOLHIOP pbpolhiop = (PBPOLHIOP)opflow->model;
@@ -1821,12 +1821,12 @@ PetscErrorCode OPFLOWComputeDenseHessian_PBPOLHIOP(OPFLOW opflow,
     HDD[i] = 0.0;
 
   /* Equality constraint Hessian */
-  ierr = OPFLOWComputeDenseEqualityConstraintHessian_PBPOLHIOP(opflow, x,
+  ierr = OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLHIOP(opflow, x,
                                                                lambda, HDD);
   CHKERRQ(ierr);
 
   if (opflow->nconineq) {
-    ierr = OPFLOWComputeDenseInequalityConstraintHessian_PBPOLHIOP(
+    ierr = OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLHIOP(
         opflow, x, lambda + opflow->nconeq, HDD);
     CHKERRQ(ierr);
   }
