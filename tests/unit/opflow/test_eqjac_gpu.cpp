@@ -69,7 +69,8 @@ int main(int argc, char **argv) {
   MPI_Comm comm = MPI_COMM_WORLD;
   int niters = 1000;
 
-  char help[] = "Compare and benchmark PETSc vs GPU equality constraint Jacobian\n";
+  char help[] =
+      "Compare and benchmark PETSc vs GPU equality constraint Jacobian\n";
 
   ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);
   if (ierr) {

@@ -1822,7 +1822,7 @@ PetscErrorCode OPFLOWComputeDenseHessian_PBPOLHIOP(OPFLOW opflow,
 
   /* Equality constraint Hessian */
   ierr = OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLHIOP(opflow, x,
-                                                               lambda, HDD);
+                                                                lambda, HDD);
   CHKERRQ(ierr);
 
   if (opflow->nconineq) {

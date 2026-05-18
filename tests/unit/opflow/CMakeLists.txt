@@ -11,19 +11,27 @@ if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
   endif()
 endif()
 
-add_executable(test_acopf test_acopf.cpp
-               ${CMAKE_SOURCE_DIR}/tests/unit/utils/test_acopf_utils.cpp)
+add_executable(
+  test_acopf test_acopf.cpp
+             ${CMAKE_SOURCE_DIR}/tests/unit/utils/test_acopf_utils.cpp
+)
 target_link_libraries(test_acopf ExaGO::OPFLOW)
-target_include_directories(test_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/utils)
+target_include_directories(
+  test_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/utils
+)
 
 if(EXAGO_ENABLE_HIOP_SPARSE AND EXAGO_ENABLE_GPU)
   add_executable(test_ineqjac_gpu test_ineqjac_gpu.cpp)
   target_link_libraries(test_ineqjac_gpu ExaGO::OPFLOW)
-  target_include_directories(test_ineqjac_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src/opflow)
+  target_include_directories(
+    test_ineqjac_gpu PRIVATE ${CMAKE_SOURCE_DIR}/src/opflow
+  )
 
   add_executable(test_eqjac_gpu test_eqjac_gpu.cpp)
   target_link_libraries(test_eqjac_gpu ExaGO::OPFLOW)
-  target_include_directories(test_eqjac_gpu PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow)
+  target_include_directories(
+    test_eqjac_gpu PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow
+  )
 endif()
 
 if(EXAGO_RUN_TESTS)

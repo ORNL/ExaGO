@@ -119,7 +119,8 @@ int main(int argc, char **argv) {
   ierr = OPFLOWGetSizes(opflow, &nx, &nconeq, &nconineq);
   CHKERRQ(ierr);
 
-  std::cout << "  nx = " << nx << " , nconeq = " << nconeq << " , nconineq = " << nconineq
+  std::cout << "  nx = " << nx << " , nconeq = " << nconeq
+            << " , nconineq = " << nconineq
             << " , nnz_ineqjacsp=" << opflow->nnz_ineqjacsp << std::endl;
 
   if (!nconineq) {
@@ -149,7 +150,8 @@ int main(int argc, char **argv) {
   ierr = VecRestoreArray(Xsol, &xsol_nat);
   CHKERRQ(ierr);
 
-  std::cout << "  Evaluating Jacobian at IPOPT-converged solution..." << std::endl;
+  std::cout << "  Evaluating Jacobian at IPOPT-converged solution..."
+            << std::endl;
 
   /* ------------------------------------------------------------------
    * Compute reference inequality Jacobian via PETSc.
