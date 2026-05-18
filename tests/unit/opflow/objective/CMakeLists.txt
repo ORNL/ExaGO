@@ -3,11 +3,11 @@ if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
 endif()
 
 add_executable(
-  objective_acopf objective_acopf.cpp ../../utils/test_acopf_utils.cpp
+  objective_acopf objective_acopf.cpp ${CMAKE_SOURCE_DIR}/tests/unit/utils/test_acopf_utils.cpp
 )
 target_link_libraries(objective_acopf ExaGO::OPFLOW)
-target_include_directories(objective_acopf PRIVATE ../../utils)
-target_include_directories(objective_acopf PRIVATE ../)
+target_include_directories(objective_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/utils)
+target_include_directories(objective_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow)
 
 # Network files to run on - doing 3 and 600 bus examples.
 set(prefix ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)

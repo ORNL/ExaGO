@@ -7,7 +7,7 @@
 #include <utils.h>
 
 #include <pflow.h>
-#include "pflow/pflow_tests.h"
+#include "pflow_tests.h"
 #include "test_acopf_utils.h"
 
 //#if defined(EXAGO_ENABLE_RAJA)
