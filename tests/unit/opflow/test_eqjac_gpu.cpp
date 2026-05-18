@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
 
   printf("\n");
   printf("============================================================\n");
-  printf("  SUMMARY\n");
+  printf("  Validation summary\n");
   printf("============================================================\n");
   printf("  PETSc nnz:         %d\n", (int)ref_entries.size());
   printf("  GPU nnz:           %d\n", nnz_eq);
@@ -345,7 +345,7 @@ int main(int argc, char **argv) {
   CHKERRQ(ierr);
 
   /* ----------------------------------------------------------------
-   * Print results
+   * Print benchmark results
    * ---------------------------------------------------------------- */
   printf("\n");
   printf("================================================================\n");
