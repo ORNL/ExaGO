@@ -1,4 +1,6 @@
-\chapter{Security-constrained optimal power flow (\scopflow)}\label{chap:scopflow}
+\chapter{Security-constrained optimal power flow (SCOPFLOW)}
+\label{chap:scopflow}
+
 SCOPFLOW solves a contingency-constrained optimal power flow problem. The problem is set up as a two-stage optimization problem where the first-stage (base-case) represents the normal operation of the grid and the second-stage comprises $N_c$ contingency scenarios. Each contingency scenario can be single or multi-period.
 
 \section{Formulation}
@@ -76,8 +78,8 @@ To execute SCOPFLOW, the following files are required:
 \end{itemize}
 If the multi-period option is chosen, then additional files describing the load and wind generation can be (optionally) set.
 \begin{itemize}
-    \item \textbf{Load data:} One file for load real power and one for reactive power. The files need to be in CSV format. An example of the format for the 9-bus case is \href{https://gitlab.pnnl.gov/exasgd/frameworks/exago/-/tree/master/datafiles/case9}{here}.
-    \item \textbf{Wind generation:} The wind generation time-series described in CSV format. See an example of the format \href{https://gitlab.pnnl.gov/exasgd/frameworks/exago/-/tree/master/datafiles/case9}{here}.
+    \item \textbf{Load data:} One file for load real power and one for reactive power. The files need to be in CSV format. An example of the format for the 9-bus case is \href{https://github.com/ORNL/ExaGO/tree/develop/datafiles/case9}{here}.
+    \item \textbf{Wind generation:} The wind generation time-series described in CSV format. See an example of the format \href{https://github.com/ORNL/ExaGO/tree/develop/datafiles/case9}{here}.
 \end{itemize}
 
 The \scopflow output is saved to a directory named \texttt{scopflowout}. This
@@ -104,8 +106,8 @@ See table \ref{tab:scopflow_options}. In addition, all \opflow options in Table 
   \begin{tabular}{|p{0.3\textwidth}|p{0.2\textwidth}|p{0.3\textwidth}|p{0.2\textwidth}|}
     \hline
     \textbf{Option} & \textbf{Meaning} & \textbf{Values (Default value)} & \textbf{Compatibility} \\ \hline
-    -netfile & Network file name & string $<$ 4096 characters (\href{https://gitlab.pnnl.gov/exasgd/frameworks/exago/-/blob/master/datafiles/case9/case9mod_gen3_wind.m}{case9mod\_gen3\_wind.m}) &\\ \hline
-    -ctgcfile & Contingency file name & string $<$ 4096 characters (\href{https://gitlab.pnnl.gov/exasgd/frameworks/exago/-/blob/master/datafiles/case9/case9.cont}{case9.cont}) &\\ \hline
+    -netfile & Network file name & string $<$ 4096 characters (\href{https://github.com/ORNL/ExaGO/tree/develop/datafiles/case9/case9mod_gen3_wind.m}{case9mod\_gen3\_wind.m}) &\\ \hline
+    -ctgcfile & Contingency file name & string $<$ 4096 characters (\href{https://github.com/ORNL/ExaGO/tree/develop/datafiles/case9/case9.cont}{case9.cont}) &\\ \hline
     -print\_output & Print output to screen & 0 or 1 (0) &\\ \hline
     -save\_output & Save output to directory & 0 or 1 (0) & Format determined by OPFLOW option. \\ \hline
     -scopflow\_output\_directory & Output directory path & ``scopflowout'' & \\ \hline
@@ -116,9 +118,9 @@ See table \ref{tab:scopflow_options}. In addition, all \opflow options in Table 
     -scopflow\_Nc & Number of contingencies & int (0. Passing -1 results in all contingencies in the file used) &\\ \hline
     -scopflow\_mode & Operation mode: Preventive or corrective & 0 or 1 (0) &\\ \hline
     -scopflow\_enable\_multiperiod & Multi-period SCOPFLOW & 0 or 1 (0) & IPOPT solver only\\ \hline
-    -scopflow\_ploadprofile & Real power load profile & string (\href{https://gitlab.pnnl.gov/exasgd/frameworks/exago/-/blob/master/datafiles/case9/load_P.csv}{load\_P.csv}) &\\ \hline
-    -scopflow\_qloadprofile & Reactive power load profile & string (\href{https://gitlab.pnnl.gov/exasgd/frameworks/exago/-/blob/master/datafiles/case9/load_Q.csv}{load\_Q.csv}) &\\ \hline
-    -scopflow\_windgenprofile & Wind generation profile & string (\href{https://gitlab.pnnl.gov/exasgd/frameworks/exago/-/blob/master/datafiles/case9/scenarios_9bus.csv}{case9/scenarios\_9bus.csv}) &\\ \hline
+    -scopflow\_ploadprofile & Real power load profile & string (\href{https://github.com/ORNL/ExaGO/tree/develop/datafiles/case9/load_P.csv}{load\_P.csv}) &\\ \hline
+    -scopflow\_qloadprofile & Reactive power load profile & string (\href{https://github.com/ORNL/ExaGO/tree/develop/datafiles/case9/load_Q.csv}{load\_Q.csv}) &\\ \hline
+    -scopflow\_windgenprofile & Wind generation profile & string (\href{https://github.com/ORNL/ExaGO/tree/develop/datafiles/case9/scenarios_9bus.csv}{case9/scenarios\_9bus.csv}) &\\ \hline
     -scopflow\_dT & Length of time-step (minutes) & double (5.0) &\\ \hline
     -scopflow\_duration & Total duration (hours) & double (0.5) &\\ \hline 
     -scopflow\_tolerance & Optimization solver tolerance & double (1e-6) &\\ \hline 
@@ -133,7 +135,7 @@ corresponding base-case values. The generators at the reference bus pick up any
 make-up power required for the contingency. The corrective mode allows deviation
 of the PV and PQ generator real power from the base-case dispatch constrained by
 its 30-min. ramp rate capability. The optimization decides the optimal
-redispatch. One can have AGC control instead of having the generators proportionally share the deficit/excess power by using the option \emph(-opflow_use_agc).
+redispatch. One can have AGC control instead of having the generators proportionally share the deficit/excess power by using the option \emph(-opflow\_use\_agc).
 
 The option \texttt{-scopflow_enable_multiperiod} 1 must be used in order to enable any of the options listed in table \ref{tab:scopflow_options} for multiperiod analysis.
 

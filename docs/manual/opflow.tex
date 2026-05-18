@@ -220,7 +220,7 @@ When using cartesian coordinates for voltages, inequality constraints (\ref{eq:o
 
 A `model' in \exago describes the representation of the underlying physics. All \opflow models use the power balance formulation in polar coordinates for the ACOPF equations. The difference between the different models arises from their specific implementation/interface. The different models available for \opflow are listed in Table \ref{tab:opflow_models}. As discussed earlier, not every `model' is compatible with every `solver'. Table \ref{tab:opflow_model_solver_compatibility} lists the solver compatibility for the different models.
 
-\begin{table}[!h]
+\begin{table}[!ht]
   \caption{OPFLOW models}
   \small
   \begin{tabular}{|p{0.2\textwidth}|p{0.4\textwidth}|p{0.2\textwidth}|p{0.15\textwidth}|}
@@ -294,7 +294,7 @@ See table \ref{tab:opflow_options}
   \begin{tabular}{|p{0.4\textwidth}|p{0.2\textwidth}|p{0.2\textwidth}|p{0.2\textwidth}|}
     \hline
     \textbf{Option} & \textbf{Meaning} & \textbf{Values (Default value)} & \textbf{Compatibility}\\ \hline
-    -netfile & Network file name & string $<$ 4096 characters (\href{https://gitlab.pnnl.gov/exasgd/frameworks/exago/-/blob/master/datafiles/case9/case9mod.m}{case9mod.m}) & \\ \hline
+    -netfile & Network file name & string $<$ 4096 characters (\href{https://github.com/ORNL/ExaGO/tree/develop/datafiles/case9/case9mod.m}{case9mod.m}) & \\ \hline
     -print\_output & Print output to screen & 0 or 1 (0) & All solvers\\ \hline
     -save\_output & Save output to file & base file name (no output) & All solvers \\ \hline
     -opflow\_output\_format & Solution file format & See Table~\ref{tab:opflow_output_format} (MATPOWER) & All solvers \\ \hline
@@ -316,7 +316,7 @@ See table \ref{tab:opflow_options}
   \label{tab:opflow_options}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[ht!]
   \centering
   \caption{OPFLOW solution output formats}
   \label{tab:opflow_output_format}
