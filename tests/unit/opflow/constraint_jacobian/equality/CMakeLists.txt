@@ -81,7 +81,7 @@ if(EXAGO_RUN_TESTS)
     set(prefix_net ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)
     exago_add_test(
       NAME
-      UNIT_TESTS_EQUALITY_CONSTRAINT_JACOBIAN_GPU_testx3
+      UNIT_TESTS_OPFLOW_EQUALITY_CONSTRAINT_JACOBIAN_GPU_testx3
       DEPENDS
       HIOP_SPARSE
       COMMAND
@@ -108,7 +108,7 @@ if(EXAGO_RUN_TESTS)
     foreach(network num IN ZIP_LISTS obj_network_files num_copies)
       get_filename_component(net ${network} NAME)
       set(testname
-          "UNIT_TESTS_EQUALITY_CONSTRAINT_JACOBIAN_${net}_${solver}_${model}"
+          "UNIT_TESTS_OPFLOW_EQUALITY_CONSTRAINT_JACOBIAN_${net}_${solver}_${model}"
       )
       exago_add_test(
         NAME

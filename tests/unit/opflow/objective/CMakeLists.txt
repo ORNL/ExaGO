@@ -40,7 +40,7 @@ if(EXAGO_RUN_TESTS)
     # Iterate over networks, matching network file to num_copies
     foreach(network num IN ZIP_LISTS obj_network_files num_copies)
       get_filename_component(net ${network} NAME)
-      set(testname "UNIT_TESTS_OBJECTIVE_${net}_${solver}_${model}")
+      set(testname "UNIT_TESTS_OPFLOW_OBJECTIVE_${net}_${solver}_${model}")
       exago_add_test(
         NAME
         ${testname}
