@@ -1208,7 +1208,7 @@ PetscErrorCode OPFLOWComputeDenseInequalityConstraintJacobian_PBPOLRAJAHIOP(
 /**
  * @param[inout] HDD_dev Hessian matrix with size nxdense x nxdense
  */
-PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLRAJAHIOP(
+PetscErrorCode OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLRAJAHIOP(
     OPFLOW opflow, const double *x_dev, const double *lambda_dev,
     double *HDD_dev) {
   PbpolModelRajaHiop *pbpolrajahiop =
@@ -1598,7 +1598,7 @@ PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLRAJAHIOP(
 /**
  * @param[inout] HDD_dev Hessian matrix with size nxdense x nxdense
  */
-PetscErrorCode OPFLOWComputeDenseInequalityConstraintHessian_PBPOLRAJAHIOP(
+PetscErrorCode OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLRAJAHIOP(
     OPFLOW opflow, const double *x_dev, const double *lambda_dev,
     double *HDD_dev) {
   PbpolModelRajaHiop *pbpolrajahiop =
@@ -2091,12 +2091,12 @@ PetscErrorCode OPFLOWComputeDenseHessian_PBPOLRAJAHIOP(OPFLOW opflow,
       RAJA_LAMBDA(RAJA::Index_type i) { HDD_dev[i] = 0.0; });
 
   /* Equality constraint Hessian */
-  ierr = OPFLOWComputeDenseEqualityConstraintHessian_PBPOLRAJAHIOP(
+  ierr = OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLRAJAHIOP(
       opflow, x_dev, lambda_dev, HDD_dev);
   CHKERRQ(ierr);
 
   if (opflow->nconineq) {
-    ierr = OPFLOWComputeDenseInequalityConstraintHessian_PBPOLRAJAHIOP(
+    ierr = OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLRAJAHIOP(
         opflow, x_dev, lambda_dev + opflow->nconeq, HDD_dev);
     CHKERRQ(ierr);
   }

@@ -1,28 +1,6 @@
 if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
   set_source_files_properties(jac_eq_acopf.cpp PROPERTIES LANGUAGE CUDA)
-  set_source_files_properties(test_eqjac_compare.cpp PROPERTIES LANGUAGE CUDA)
 endif()
-if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_HIP)
-  set_source_files_properties(test_eqjac_compare.cpp PROPERTIES LANGUAGE HIP)
-endif()
-
-add_executable(test_eqjac_compare test_eqjac_compare.cpp)
-target_link_libraries(test_eqjac_compare ExaGO::OPFLOW)
-target_include_directories(
-  test_eqjac_compare PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow
-)
-
-if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_HIP)
-  set_source_files_properties(test_eqjac_perf.cpp PROPERTIES LANGUAGE HIP)
-endif()
-if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
-  set_source_files_properties(test_eqjac_perf.cpp PROPERTIES LANGUAGE CUDA)
-endif()
-add_executable(test_eqjac_perf test_eqjac_perf.cpp)
-target_link_libraries(test_eqjac_perf ExaGO::OPFLOW)
-target_include_directories(
-  test_eqjac_perf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow
-)
 
 add_executable(
   jac_eq_acopf jac_eq_acopf.cpp
@@ -77,23 +55,6 @@ if(EXAGO_ENABLE_RAJA)
 endif()
 
 if(EXAGO_RUN_TESTS)
-  if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_HIOP)
-    set(prefix_net ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)
-    exago_add_test(
-      NAME
-      UNIT_TESTS_EQJAC_GPU_VS_PETSC_testx3
-      DEPENDS
-      HIOP_SPARSE
-      COMMAND
-      ${RUNCMD}
-      $<TARGET_FILE:test_eqjac_compare>
-      -netfile
-      ${prefix_net}testx3.m
-    )
-  endif()
-endif()
-
-if(EXAGO_RUN_TESTS)
   foreach(
     model
     solver
@@ -108,7 +69,7 @@ if(EXAGO_RUN_TESTS)
     foreach(network num IN ZIP_LISTS obj_network_files num_copies)
       get_filename_component(net ${network} NAME)
       set(testname
-          "UNIT_TESTS_EQUALITY_CONSTRAINT_JACOBIAN_${net}_${solver}_${model}"
+          "UNIT_TESTS_OPFLOW_EQUALITY_CONSTRAINT_JACOBIAN_${net}_${solver}_${model}"
       )
       exago_add_test(
         NAME

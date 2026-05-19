@@ -6,7 +6,7 @@
 #include <private/opflowimpl.h>
 #include <utils.h>
 
-#include "opflow/opflow_tests.h"
+#include "opflow_tests.h"
 #include "test_acopf_utils.h"
 
 #if defined(EXAGO_ENABLE_RAJA)
