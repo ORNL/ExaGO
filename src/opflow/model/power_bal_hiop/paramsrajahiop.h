@@ -268,10 +268,11 @@ typedef struct _p_FormPBPOLRAJAHIOP *PBPOLRAJAHIOP;
 
 struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
   PbpolModelRajaHiop(void) {
-    i_jaceq = j_jaceq = i_jacineq = j_jacineq = NULL;
+    i_jaceq = j_jaceq = NULL;
+    i_jacineq = j_jacineq = NULL;
     i_hess = j_hess = NULL;
     perm_jaceq = perm_jaceq_dev = NULL;
-    val_jacineq = val_hess = NULL;
+    perm_hess = perm_hess_dev = NULL;
   }
 
   void destroy(OPFLOW opflow);
@@ -292,8 +293,10 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
       *j_jaceq; // Row and column indices for equality constraints Jacobian
   int *i_jacineq,
       *j_jacineq; // Row and column indices for inequality constraints Jacobain
-  int *i_hess, *j_hess; // Row and column indices for hessian
+  int *i_hess, 
+      *j_hess; // Row and column indices for hessian
   int *perm_jaceq,
       *perm_jaceq_dev; // Permutation for equality constraints Jacobian indices
-  double *val_jacineq, *val_hess; // values for inequality jacobians and hessian
+  int *perm_hess,
+      *perm_hess_dev; // Permutation for equality constraints Jacobian indices
 };

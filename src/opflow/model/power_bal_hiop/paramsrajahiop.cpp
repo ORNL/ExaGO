@@ -906,12 +906,12 @@ void PbpolModelRajaHiop::destroy(OPFLOW opflow) {
 
     h_allocator_.deallocate(i_hess);
     h_allocator_.deallocate(j_hess);
-    h_allocator_.deallocate(val_hess);
+    h_allocator_.deallocate(perm_hess);
+    d_allocator_.deallocate(perm_hess_dev);
 
     if (opflow->nconineq) {
       h_allocator_.deallocate(i_jacineq);
       h_allocator_.deallocate(j_jacineq);
-      h_allocator_.deallocate(val_jacineq);
     }
   }
 #endif

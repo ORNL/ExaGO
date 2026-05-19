@@ -600,8 +600,6 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
           (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
       pbpolrajahiopsparse->j_jacineq =
           (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
-      pbpolrajahiopsparse->val_jacineq = (double *)(h_allocator_.allocate(
-          opflow->nnz_ineqjacsp * sizeof(double)));
 
       iRowstart = pbpolrajahiopsparse->i_jacineq;
       jColstart = pbpolrajahiopsparse->j_jacineq;
@@ -974,129 +972,29 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
         (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
     pbpolrajahiopsparse->j_hess =
         (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
-    pbpolrajahiopsparse->val_hess =
-        (double *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(double)));
 
     iRow = pbpolrajahiopsparse->i_hess;
     jCol = pbpolrajahiopsparse->j_hess;
 
-    // Function pointer computehessian points to the function
-    // OPFLOWComputeHessian_PBPOL in PBPOL model.
-    ierr = (*opflow->modelops.computehessian)(
-        opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
-    CHKERRQ(ierr);
-    ierr = MatGetSize(opflow->Hes, &nrow, &nrow);
-    CHKERRQ(ierr);
-
-    // Copy over locations to triplet format
-    //
-    // Note that HIOP requires a upper triangular Hessian as oppposed
-    // to IPOPT which requires a lower triangular Hessian
-    //
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      ctr = 0;
-      for (j = 0; j < nvals; j++) {
-        if (cols[j] >= i) { /* upper triangle */
-          /* save as upper triangle locations */
-          iRow[ctr] = i;
-          jCol[ctr] = cols[j];
-          ctr++;
-        }
-      }
-      iRow += ctr;
-      jCol += ctr;
-      ierr = MatRestoreRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-    }
+    // Compute indices
+    
+    // Sort indices
 
     // Copy over i_hess and j_hess arrays to device
     resmgr.copy(iHSS_dev, pbpolrajahiopsparse->i_hess);
     resmgr.copy(jHSS_dev, pbpolrajahiopsparse->j_hess);
   } else {
-
-    ierr = VecGetArray(opflow->X, &x);
+    ierr = PetscLogEventBegin(opflow->hesslogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
 
-    // Copy from device to host
-    umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-    registerWith(x, opflow->nx, resmgr, h_allocator_);
-    resmgr.copy((double *)x, (double *)x_dev);
+    /* Compute equality constraint Jacobian directly on device.
+       No H2D, D2H copies: x_dev is already on device, output goes
+       straight into MHSS_dev. */
+    ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
+        opflow, x_dev, pbpolrajahiopsparse->perm_hess_dev, MHSS_dev);
 
-    ierr = VecRestoreArray(opflow->X, &x);
+    ierr = PetscLogEventEnd(opflow->hesslogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
-
-    ierr = VecGetArray(opflow->Lambda, &lambda);
-
-    registerWith(lambda, opflow->ncon, resmgr, h_allocator_);
-    // copy lambda from device to host
-    resmgr.copy((double *)lambda, (double *)lambda_dev);
-
-    ierr = VecPlaceArray(opflow->Lambdae, lambda);
-    CHKERRQ(ierr);
-    if (opflow->Nconineq) {
-      ierr = VecPlaceArray(opflow->Lambdai, lambda + opflow->nconeq);
-      CHKERRQ(ierr);
-    }
-
-    // Compute Hessian on the host
-    // Function pointer computehessian points to the function
-    // OPFLOWComputeHessian_PBPOL in PBPOL model.
-    ierr = (*opflow->modelops.computehessian)(
-        opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
-    CHKERRQ(ierr);
-
-    ierr = VecResetArray(opflow->Lambdae);
-    CHKERRQ(ierr);
-    if (opflow->Nconineq) {
-      ierr = VecResetArray(opflow->Lambdai);
-      CHKERRQ(ierr);
-    }
-
-    ierr = VecRestoreArray(opflow->Lambda, &lambda);
-    CHKERRQ(ierr);
-
-    // It does not seem that computeauxhessian is set, so this if
-    // condition will evaluate to false.
-    if (opflow->modelops.computeauxhessian) {
-      ierr = VecGetArray(opflow->X, &x);
-      CHKERRQ(ierr);
-      ierr = (*opflow->modelops.computeauxhessian)(opflow, x, opflow->Hes,
-                                                   opflow->userctx);
-      CHKERRQ(ierr);
-      ierr = VecRestoreArray(opflow->X, &x);
-      CHKERRQ(ierr);
-
-      ierr = MatAssemblyBegin(opflow->Hes, MAT_FINAL_ASSEMBLY);
-      CHKERRQ(ierr);
-      ierr = MatAssemblyEnd(opflow->Hes, MAT_FINAL_ASSEMBLY);
-      CHKERRQ(ierr);
-    }
-
-    /* Copy over values */
-    ierr = MatGetSize(opflow->Hes, &nrow, &nrow);
-    CHKERRQ(ierr);
-
-    values = pbpolrajahiopsparse->val_hess;
-
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      ctr = 0;
-      for (j = 0; j < nvals; j++) {
-        if (cols[j] >= i) { /* Upper triangle values (same as lower triangle) */
-          values[ctr] = vals[j];
-          ctr++;
-        }
-      }
-      values += ctr;
-      ierr = MatRestoreRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-    }
-
-    // Copy over val_ineq to device
-    resmgr.copy(MHSS_dev, pbpolrajahiopsparse->val_hess);
   }
 
   PetscFunctionReturn(0);
@@ -1121,6 +1019,7 @@ PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
 
   ierr = VecGetArray(opflow->X, &x);
   CHKERRQ(ierr);
+
   /* Copy xsol from device to host */
   resmgr.copy(x, (double *)xsol);
   ierr = VecRestoreArray(opflow->X, &x);
