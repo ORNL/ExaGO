@@ -12,12 +12,12 @@ C = \sum_{k=1}^{ng} \alpha_kP^2_{Gk} + \beta_kP_{Gk} + \gamma_k + \sum_{j=1}^{nl
 + \sum_{i=1}^{nb}c_{\delta{S_i}}({\delta{P^2_{i}} + \delta{Q^2_{i}}})
 \end{aligned}
 ```
-where, $`\alpha_k`$, $`\beta_k`$, and $`\gamma_k`$ are the generator $`k`$ cost-cofficients. $`c_{\delta{S_Dj}}`$ is the penalty cost for $`j^{th}`$ load loss, and $`c_{\delta{S_i}}`$ is the penalty cost for power imbalance at bus $`i`$; $`n_g`$, $`n_l`$, and $`n_b`$ are number of generators, number of loads and number of buses; $`P_{Gk}`$ is the real power injection of the generator $`k`$; $`\delta{P_{Dj}}`$ and $`\delta{Q_{Dj}}`$ are real and reactive power load loss for each load $`j`$ if enabled; $`\delta{P^2_{i}}`$ and $`\delta{Q^2_{i}}`$ are real and imaginary power imbalance variables; 
+where, $`\alpha_k`$, $`\beta_k`$, and $`\gamma_k`$ are the generator $`k`$ cost-coefficients. $`c_{\delta{S_Dj}}`$ is the penalty cost for $`j^{th}`$ load loss, and $`c_{\delta{S_i}}`$ is the penalty cost for power imbalance at bus $`i`$; $`n_g`$, $`n_l`$, and $`n_b`$ are number of generators, number of loads and number of buses; $`P_{Gk}`$ is the real power injection of the generator $`k`$; $`\delta{P_{Dj}}`$ and $`\delta{Q_{Dj}}`$ are real and reactive power load loss for each load $`j`$ if enabled; $`\delta{P^2_{i}}`$ and $`\delta{Q^2_{i}}`$ are real and imaginary power imbalance variables; 
 
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
-A 5-bus system **OF-unittestx1.m** will be used as a basis for this test. In addition, an artifical solution vector will be also generated as an input for the test.
+A 5-bus system **OF-unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
 
 ### Parameter values in .m file
 

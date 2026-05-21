@@ -93,7 +93,7 @@ The figures show the visualization of the synthetic electric grid. The data for 
 ### 2D synthetic US western grid tranmission line flow display
 ![](images/flow_viz.PNG)
 
-### 2.5D synthetic US western grid network display with generation overlapped and doughnut chart for generataion mix
+### 2.5D synthetic US western grid network display with generation overlapped and doughnut chart for generation mix
 ![](images/generation_viz.PNG)
 
 ### 2.5D synthetic US western grid displaying load profile by counties
@@ -127,7 +127,7 @@ Behind the scenes, LLM translates natural language queries into SQL queries to r
       * Go to the `viz/backend` subdirectory and use the `pip install -r requirements.txt` command to install all the Python dependencies if already not done in previous steps. (Note: These steps are tested with Python 3.13.)
 
 
-    To use the provided script, ensure that the ExaGO output `.json` file is in the `viz/data` subdirectory (if not already performed in the previous steps) and run the following script in the `viz/backend` subdirectory (replace the example filename with your json filename). This will create three CSV files: `generation.csv`, `bus.csv`, and `tranmission_line.csv`. We are assuming `opflowout.json` is the data json file present in `viz/data` folder.
+    To use the provided script, ensure that the ExaGO output `.json` file is in the `viz/data` subdirectory (if not already performed in the previous steps) and run the following script in the `viz/backend` subdirectory (replace the example filename with your json filename). This will create three CSV files: `generation.csv`, `bus.csv`, and `transmission_line.csv`. We are assuming `opflowout.json` is the data json file present in `viz/data` folder.
             
     ```
     cd viz/backend
@@ -157,7 +157,7 @@ Behind the scenes, LLM translates natural language queries into SQL queries to r
 
 3. Create a PostgreSQL database and import the `.csv` files to it.
 
-    There are many ways to do that. If you are not familiar with SQL commands, you can use `pgAdmin 4` (a GUI management program of PostgreSQL database, usually installed along with PostgreSQL) and follow [this instruction](https://learnsql.com/blog/how-to-import-csv-to-postgresql/) to import the `.csv` files (e.g., generation.csv, bus.csv, tranmission_line.csv, counties.csv, US states.csv) to PostgreSQL database.
+    There are many ways to do that. If you are not familiar with SQL commands, you can use `pgAdmin 4` (a GUI management program of PostgreSQL database, usually installed along with PostgreSQL) and follow [this instruction](https://learnsql.com/blog/how-to-import-csv-to-postgresql/) to import the `.csv` files (e.g., generation.csv, bus.csv, transmission_line.csv, counties.csv, US states.csv) to PostgreSQL database.
 
     Note: 
 

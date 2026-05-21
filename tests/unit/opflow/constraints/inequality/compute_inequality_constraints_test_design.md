@@ -58,7 +58,7 @@ For the generator with the voltage setpoint following two constraints are calcul
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
-A 5-bus system **CIC-unittestx1.m** will be used as a basis for this test. In addition, an artifical solution vector will be also generated as an input for the test.
+A 5-bus system **CIC-unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
 
 ### Parameters values in .m file
 

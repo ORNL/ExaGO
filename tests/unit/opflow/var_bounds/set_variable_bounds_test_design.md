@@ -83,7 +83,7 @@ With the parameters of the example network arrays are:
 
 ## Scaling
 
-To build a solution when the network is being multiplied, to the original array all valuse except first two should be added N times; the elements for the reference ange should be replaced with -INF/INF.
+To build a solution when the network is being multiplied, to the original array all values except first two should be added N times; the elements for the reference ange should be replaced with -INF/INF.
 
 ### Solution for N=3
 So for N=3 the arrays are:

@@ -44,7 +44,7 @@ ExaGO builds array of the equality constraints. Array is build with **for loop**
 <td>2 * num. of gen units</td> <td>Generator</td> <td>No</td> <td></td>
 </tr>
 <tr>
-<td>2 * num. of loads points</td> <td>Load</td> <td>No</td> <td>Values will be diffrently calculated if the option **Include load loss** is ON. Default is OFF</td>
+<td>2 * num. of loads points</td> <td>Load</td> <td>No</td> <td>Values will be differently calculated if the option **Include load loss** is ON. Default is OFF</td>
 </tr>
 <tr>
 <td>2 * num. of connected lines</td> <td>Line</td> <td>No</td> <td></td>
@@ -57,7 +57,7 @@ ExaGO builds array of the equality constraints. Array is build with **for loop**
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
-A 5-bus system **CEC-unittestx1.m** will be used as a basis for this test. In addition, an artifical solution vector will be also generated as an input for the test.
+A 5-bus system **CEC-unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
 
 ### Parameters values in .m file
 
@@ -177,9 +177,9 @@ For N=3 the solution vector is:
 
 ### Residual vector
 
-To build a residual vector when the network is being multiplied folowing needs to be done:
+To build a residual vector when the network is being multiplied following needs to be done:
 
-Copy only once first 2 elements; next 6 elements will be copied without any modifications for each segment; last two elements are first multipled by 2 and then coppied for each N except last one where you copy without multiplication.
+Copy only once first 2 elements; next 6 elements will be copied without any modifications for each segment; last two elements are first multiplied by 2 and then copied for each N except the last one where you copy without multiplication.
 
 Example:
 a b c d e f g h i j

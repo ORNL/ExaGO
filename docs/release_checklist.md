@@ -25,7 +25,7 @@ Ensure the user manual has the appropriate version and has been updated with any
 ### Tag
 
 This projects aims to adhere to [version 2.0.0 of the Semantic Versioning guidelines](https://semver.org/spec/v2.0.0.html).
-The most important details of the guideslines are included here:
+The most important details of the guidelines are included here:
 
 > 1. MAJOR version when you make incompatible API changes,
 > 1. MINOR version when you add functionality in a backwards compatible manner, and
@@ -34,11 +34,11 @@ The most important details of the guideslines are included here:
 > Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
 
 Tags should only ever be made on the master branch.
-Before tagging, `CHANGELOG.md` must be updated such that the items under the `develop` or `unrealeased` header are moved to a new header indicative of the new version being tagged.
+Before tagging, `CHANGELOG.md` must be updated such that the items under the `develop` or `unreleased` header are moved to a new header indicative of the new version being tagged.
 
 ### CMake version
 
-Before merging `develop`->`master` ensure that the version number in the project definition in main [CMakeLists.txt](./CMakeLists.txt) is upated in accordance with the planned upcoming release.
+Before merging `develop`->`master` ensure that the version number in the project definition in main [CMakeLists.txt](./CMakeLists.txt) is updated in accordance with the planned upcoming release.
 
 ### Spack
 

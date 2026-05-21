@@ -15,7 +15,7 @@ More information on Spack can be found at the [GitHub repo](https://github.com/s
 
 ## Getting Started
 
-The ExaGO Spack package was first avilable in spack version `0.16.1-2103-c4a83aa22c`.
+The ExaGO Spack package was first available in spack version `0.16.1-2103-c4a83aa22c`.
 To use the ExaGO Spack package, download spack and check out a recent version like so:
 
 ```console
@@ -25,7 +25,7 @@ export PATH="$PATH:$PWD/spack/bin"
 
 ## Building with Spack
 
-The following configuration spack configuration is reccommended for a minimal install with Ipopt solver.
+The following spack configuration is recommended for a minimal install with Ipopt solver.
 The command `spack info exago` will provide the most up-to-date information about the ExaGO spack package.
 
 ***NOTE:*** Please see [the section on installing CoinHSL](#coinhsl-dependency) if you would like to build with Ipopt.
