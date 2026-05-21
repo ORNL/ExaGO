@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [develop]
 
+## [2.0]
+
 ### General
+- Move to C++17 standard
+- Removed Ipopt and PETSc deprecation warnings.
+- Added ExaGO launcher with a web-based GUI
 
 ### Build system
 - Upgraded to Spack v1+
@@ -22,8 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### PFLOW
 
 - Added unit tests for PFLOW
+- Print/save PFLOW output
 
 ### OPFLOW
+
+- Added HVDC line model
 
 ### TCOPFLOW
 
@@ -33,9 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Expanded documentation for TCOPFLOW
+- Updated documentation to new build requirements and dependencies
+
 ### Testing
 
+- Overhauled testing and fixed a number of bugs in the process
+
 ### Miscallenous
+
+- Updated to Spack v1.1.1
+- Improved visualization and AI support.
 
 
 ## [1.6.0]

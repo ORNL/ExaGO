@@ -6,7 +6,7 @@ Preamble
 
 cmake_minimum_required(VERSION 3.18)
 
-project(ExaGO VERSION "1.6.0")
+project(ExaGO VERSION "2.0.0")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
