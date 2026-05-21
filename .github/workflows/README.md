@@ -6,7 +6,7 @@ Runs on push, this action runs our perl script in `buildsystem/tools/file_naming
 
 ## `pre_commit.yaml`
 
-This enforces and runs pre-commit, and automatically commits fixes to any tests that it can. Noteably applies clang formatting, and cmake formatting most often, and requires developers to either install locally, or rebase to incorporate changes.
+This enforces and runs pre-commit, and automatically commits fixes to any tests that it can. Notably applies clang formatting, and cmake formatting most often, and requires developers to either install locally, or rebase to incorporate changes.
 
 ## `spack_cpu_build.yaml`
 

@@ -1,5 +1,5 @@
 ## AC optimal power flow (OPFLOW)
-OPFLOW solves a nonlinear AC optimal power flow problem where the  (default) objective is generator-cost minimization subject to network balance, line flow, capacity, and voltage constaints. Load-loss and nodal power-imbalance can be (optionally) activated. 
+OPFLOW solves a nonlinear AC optimal power flow problem where the  (default) objective is generator-cost minimization subject to network balance, line flow, capacity, and voltage constraints. Load-loss and nodal power-imbalance can be (optionally) activated. 
 
 ### Usage
 

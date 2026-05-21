@@ -15,7 +15,7 @@ OPFLOW does a minimization of the generation cost and the generation cost functi
 \dfrac{\partial{C}}{\partial{\delta{Q_{i}}}} &= 2c_{\delta{S_i}}\delta{Q_{i}}
 \end{aligned}
 ```
-where, $`\alpha_k`$, and $`\beta_k`$, are the generator $`k`$ cost-cofficients. $`c_{\delta{S_Dj}}`$ is the penalty cost for $`j^{th}`$ load loss, and $`c_{\delta{S_i}}`$ is the penalty cost for power imbalance at bus $`i`$; $`P_{Gk}`$ is the real power injection of the generator $`k`$; $`\delta{P_{Dj}}`$ and $`\delta{Q_{Dj}}`$ are real and reactive power load loss for each load $`j`$ if enabled; $`\delta{P_{i}}`$ and $`\delta{Q_{i}}`$ are real and imaginary power imbalance variables; 
+where, $`\alpha_k`$, and $`\beta_k`$, are the generator $`k`$ cost-coefficients. $`c_{\delta{S_Dj}}`$ is the penalty cost for $`j^{th}`$ load loss, and $`c_{\delta{S_i}}`$ is the penalty cost for power imbalance at bus $`i`$; $`P_{Gk}`$ is the real power injection of the generator $`k`$; $`\delta{P_{Dj}}`$ and $`\delta{Q_{Dj}}`$ are real and reactive power load loss for each load $`j`$ if enabled; $`\delta{P_{i}}`$ and $`\delta{Q_{i}}`$ are real and imaginary power imbalance variables; 
 
 For the purpose of this unit test, focus is only on the first gradient, because the other four are not calculated by default and are also zero if included. Those elements are include if following flags are enabled:
 - include_loadloss_variables
@@ -24,7 +24,7 @@ For the purpose of this unit test, focus is only on the first gradient, because 
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
-A 5-bus system **OFG-unittestx1.m** will be used as a basis for this test. In addition, an artifical solution vector will be also generated as an input for the test.
+A 5-bus system **OFG-unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
 
 ### Parameter values in .m file
 
@@ -80,7 +80,7 @@ For N=3 the solution vector is:
 
 ### Residual vector
 
-To build a residual vector when the network is being multiplied folowing needs to be done:
+To build a residual vector when the network is being multiplied following needs to be done:
 
 1. Create the vector with lenght(vector)=N.
 

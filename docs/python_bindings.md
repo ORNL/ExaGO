@@ -91,7 +91,7 @@ import exago
 comm = MPI.COMM_WORLD
 exago.initialize("app", comm)
 # ...
-exago.finalzie()
+exago.finalize()
 ```
 
 Additionally linting tools may re-order your imports, and so you may need to add appropriate comments in order to avoid this:
@@ -190,7 +190,7 @@ The following table assumes `scopflow = exago.SCOPFLOW()`.
 | C++ API | Python API | Notes |
 |---|---|---|
 | `SCOPFLOW` | `exago.SCOPFLOW` class |  |
-| `ContingencyFileInputFormat` enum | `exago.ContingencyFileInputFormat` enum | More details and possible values for this enum can be found in the [next section](#enums).  Currently, this is only be used as a Python enum. A string representation is not available. |
+| `ContingencyFileInputFormat` enum | `exago.ContingencyFileInputFormat` enum | More details and possible values for this enum can be found in the [next section](#enums).  Currently, this can only be used as a Python enum. A string representation is not available. |
 | `SCOPFLOWSetModel` | `set_model` |  |
 | `SCOPFLOWSetNetworkData` | `set_network_data` |  |
 | `SCOPFLOWSetLoadProfiles` | `set_load_profiles` | |
@@ -233,8 +233,8 @@ The following table assumes `sopflow = exago.SOPFLOW()`.
 | C++ API | Python API | Notes |
 |---|---|---|
 | `SCOPFLOW` | `exago.SCOPFLOW` class |  |
-| `ScenarioFileInputFormat` enum | `ScenarioFileInputFormat` enum  | More details and possible values for this enum can be found in the [next section](#enums).  Currently, this is only be used as a Python enum. A string representation is not available. |
-| `ScenarioUncertaintyType` enum | `ScenarioUncertaintyType` enum  | More details and possible values for this enum can be found in the [next section](#enums).  Currently, this is only be used as a Python enum. A string representation is not available. |
+| `ScenarioFileInputFormat` enum | `ScenarioFileInputFormat` enum  | More details and possible values for this enum can be found in the [next section](#enums).  Currently, this can only be used as a Python enum. A string representation is not available. |
+| `ScenarioUncertaintyType` enum | `ScenarioUncertaintyType` enum  | More details and possible values for this enum can be found in the [next section](#enums).  Currently, this can only be used as a Python enum. A string representation is not available. |
 | ` SOPFLOWSetModel` | `set_model` |  |
 | ` SOPFLOWSetNetworkData` | `set_network_data` |  |
 | ` SOPFLOWSetContingencyData` | `set_contingency_data` |  |

@@ -92,7 +92,7 @@ that you are using the newell partition on SLURM, <code>-n 2</code> specifies th
 number of MPI tasks for this session that you are requesting and
 <code>--pty bash</code> means your interactive session will be using the bash shell.
 One or two tests are using more than one MPI task with a maximum of three tasks, so you
-sould select at least three tasks
+should select at least three tasks
 in the interactive shell.  Using the newell partition guarantees that all your
 environment variables and binary files match up with the hardware you are running on.
 
@@ -105,7 +105,7 @@ in the top level directory while in the interactive session. This will create a
 all program executables, makefiles and test directories. In addition to
 building ExaGO, the script will also run the test suite. If you wish to rerun
 the test suite after running the <code>build.sh</code> script you can do so by
-ommitting the `--build-only` argument to the build script, or by going
+omitting the `--build-only` argument to the build script, or by going
 into the <code>build</code> directory and typing either
 ```
 ctest
@@ -117,7 +117,7 @@ make test
 
 ### Environment variables
 
-Currently, runing OpenMPI on Newell requires some nonstandard flags to be
+Currently, running OpenMPI on Newell requires some nonstandard flags to be
 passed to the `mpirun` script. The MPI run command
 ```
 mpirun -n 4
