@@ -75,24 +75,16 @@ PetscErrorCode SCOPFLOWCreate(MPI_Comm mpicomm, SCOPFLOW *scopflowout) {
   scopflow->gicfileset = PETSC_FALSE;
 
   /* Default subproblem model and solver */
-#if 0
-  (void)std::strncpy(scopflow->subproblem_model,
-                     SCOPFLOWOptions::subproblem_model.default_value.c_str(),
-                     sizeof(scopflow->subproblem_model));
-  (void)std::strncpy(scopflow->subproblem_solver,
-                     SCOPFLOWOptions::subproblem_solver.default_value.c_str(),
-                     sizeof(scopflow->subproblem_solver));
-#endif
-  scopflow->subproblem_model = SCOPFLOWOptions::subproblem_model.default_value;
-  scopflow->subproblem_solver =
-      SCOPFLOWOptions::subproblem_solver.default_value;
+  ierr = PetscStrcpy(scopflow->subproblem_model,
+                     SCOPFLOWOptions::subproblem_model.default_value.c_str());
+  CHKERRQ(ierr);
+  ierr = PetscStrcpy(scopflow->subproblem_solver,
+                     SCOPFLOWOptions::subproblem_solver.default_value.c_str());
+  CHKERRQ(ierr);
 #ifdef EXAGO_ENABLE_HIOP
-#if 0
-  (void)std::strncpy(scopflow->compute_mode,
-                     SCOPFLOWOptions::compute_mode.default_value.c_str(),
-                     sizeof(scopflow->compute_mode));
-#endif
-  scopflow->compute_mode = SCOPFLOWOptions::compute_mode.default_value.c_str();
+  ierr = PetscStrcpy(scopflow->compute_mode,
+                     SCOPFLOWOptions::compute_mode.default_value.c_str());
+  CHKERRQ(ierr);
   scopflow->verbosity_level = SCOPFLOWOptions::verbosity_level.default_value;
 #endif
 
@@ -293,7 +285,9 @@ PetscErrorCode SCOPFLOWSetModel(SCOPFLOW scopflow,
   scopflow->modelops.computetotalobjective = 0;
   scopflow->modelops.computegradient = 0;
 
-  scopflow->modelname = modelname;
+  ierr = PetscStrcpy(scopflow->modelname, modelname.c_str());
+  CHKERRQ(ierr);
+
   /* Call the underlying implementation constructor */
   ierr = (*r)(scopflow);
   CHKERRQ(ierr);
@@ -332,7 +326,9 @@ PetscErrorCode SCOPFLOWSetSolver(SCOPFLOW scopflow,
   scopflow->solverops.solve = 0;
   scopflow->solverops.setup = 0;
 
-  scopflow->solvername = solvername;
+  ierr = PetscStrcpy(scopflow->solvername, solvername.c_str());
+  CHKERRQ(ierr);
+
   /* Call the underlying implementation constructor */
   ierr = (*r)(scopflow);
   CHKERRQ(ierr);
@@ -525,27 +521,34 @@ PetscErrorCode SCOPFLOWSetUp(SCOPFLOW scopflow) {
   ierr =
       PetscOptionsString(SCOPFLOWOptions::subproblem_model.opt.c_str(),
                          SCOPFLOWOptions::subproblem_model.desc.c_str(), "",
-                         scopflow->subproblem_model.c_str(),
+                         scopflow->subproblem_model,
                          scopflowsubproblemmodelname, max_model_name_len, &flg);
   CHKERRQ(ierr);
-  if (flg)
-    scopflow->subproblem_model = scopflowsubproblemmodelname;
+  if (flg) {
+    ierr = PetscStrcpy(scopflow->subproblem_model, scopflowsubproblemmodelname);
+    CHKERRQ(ierr);
+  }
   ierr = PetscOptionsString(SCOPFLOWOptions::subproblem_solver.opt.c_str(),
                             SCOPFLOWOptions::subproblem_solver.desc.c_str(), "",
-                            scopflow->subproblem_solver.c_str(),
+                            scopflow->subproblem_solver,
                             scopflowsubproblemsolvername, max_solver_name_len,
                             NULL);
   CHKERRQ(ierr);
-  if (flg)
-    scopflow->subproblem_solver = scopflowsubproblemsolvername;
+  if (flg) {
+    ierr =
+        PetscStrcpy(scopflow->subproblem_solver, scopflowsubproblemsolvername);
+    CHKERRQ(ierr);
+  }
 #ifdef EXAGO_ENABLE_HIOP
   ierr = PetscOptionsString(SCOPFLOWOptions::compute_mode.opt.c_str(),
                             SCOPFLOWOptions::compute_mode.desc.c_str(), "",
-                            scopflow->compute_mode.c_str(), computemodename,
+                            scopflow->compute_mode, computemodename,
                             max_model_name_len, &flg);
   CHKERRQ(ierr);
-  if (flg)
-    scopflow->compute_mode = computemodename;
+  if (flg) {
+    ierr = PetscStrcpy(scopflow->compute_mode, computemodename);
+    CHKERRQ(ierr);
+  }
   ierr = PetscOptionsInt(SCOPFLOWOptions::verbosity_level.opt.c_str(),
                          SCOPFLOWOptions::verbosity_level.desc.c_str(), "",
                          scopflow->verbosity_level, &scopflow->verbosity_level,
@@ -603,12 +606,13 @@ PetscErrorCode SCOPFLOWSetUp(SCOPFLOW scopflow) {
 #ifdef EXAGO_ENABLE_HIOP
   ierr = PetscOptionsString(SCOPFLOWOptions::hiop_mem_space.opt.c_str(),
                             SCOPFLOWOptions::hiop_mem_space.desc.c_str(), "",
-                            scopflow->mem_space.c_str(),
-                            scopflowsubproblemmemspacename, max_model_name_len,
-                            &flg);
+                            scopflow->mem_space, scopflowsubproblemmemspacename,
+                            max_model_name_len, &flg);
   CHKERRQ(ierr);
-  if (flg)
-    scopflow->mem_space = scopflowsubproblemmemspacename;
+  if (flg) {
+    ierr = PetscStrcpy(scopflow->mem_space, scopflowsubproblemmemspacename);
+    CHKERRQ(ierr);
+  }
 #endif
   PetscOptionsEnd();
 
@@ -1031,7 +1035,7 @@ PetscErrorCode SCOPFLOWSolve(SCOPFLOW scopflow) {
     ierr = SCOPFLOWSetUp(scopflow);
   }
 
-  ierr = PetscStrcmp(scopflow->solvername.c_str(), "IPOPT", &issolver_ipopt);
+  ierr = PetscStrcmp(scopflow->solvername, "IPOPT", &issolver_ipopt);
   CHKERRQ(ierr);
 
   if (issolver_ipopt) { /* Don't need to do this if solver is not ipopt */
@@ -1411,7 +1415,9 @@ PetscErrorCode SCOPFLOWSetGICData(SCOPFLOW scopflow, const char gicfile[]) {
 PetscErrorCode SCOPFLOWSetSubproblemModel(SCOPFLOW scopflow,
                                           const std::string modelname) {
   PetscFunctionBegin;
-  scopflow->subproblem_model = modelname;
+  PetscErrorCode ierr;
+  ierr = PetscStrcpy(scopflow->subproblem_model, modelname.c_str());
+  CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -1429,7 +1435,9 @@ PetscErrorCode SCOPFLOWSetSubproblemModel(SCOPFLOW scopflow,
 PetscErrorCode SCOPFLOWSetSubproblemSolver(SCOPFLOW scopflow,
                                            const std::string solvername) {
   PetscFunctionBegin;
-  scopflow->subproblem_solver = solvername;
+  PetscErrorCode ierr;
+  ierr = PetscStrcpy(scopflow->subproblem_solver, solvername.c_str());
+  CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -1447,7 +1455,9 @@ PetscErrorCode SCOPFLOWSetSubproblemSolver(SCOPFLOW scopflow,
 PetscErrorCode SCOPFLOWSetSubproblemComputeMode(SCOPFLOW scopflow,
                                                 const std::string mode) {
   PetscFunctionBegin;
-  scopflow->compute_mode = mode;
+  PetscErrorCode ierr;
+  ierr = PetscStrcpy(scopflow->compute_mode, mode.c_str());
+  CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -1483,6 +1493,8 @@ PetscErrorCode SCOPFLOWSetSubproblemVerbosityLevel(SCOPFLOW scopflow,
 PetscErrorCode SCOPFLOWSetSubproblemMemSpace(SCOPFLOW scopflow,
                                              const std::string mem_space) {
   PetscFunctionBegin;
-  scopflow->mem_space = mem_space;
+  PetscErrorCode ierr;
+  ierr = PetscStrcpy(scopflow->mem_space, mem_space.c_str());
+  CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }

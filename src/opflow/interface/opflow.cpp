@@ -313,7 +313,9 @@ PetscErrorCode OPFLOWGetBusPowerImbalancePenalty(OPFLOW opflow,
 */
 PetscErrorCode OPFLOWSetHIOPComputeMode(OPFLOW opflow, const std::string mode) {
   PetscFunctionBegin;
-  opflow->_p_hiop_compute_mode = mode;
+  PetscErrorCode ierr;
+  ierr = PetscStrcpy(opflow->_p_hiop_compute_mode, mode.c_str());
+  CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -802,8 +804,11 @@ PetscErrorCode OPFLOWCreate(MPI_Comm mpicomm, OPFLOW *opflowout) {
   ierr = PSSetApplication(opflow->ps, opflow, APP_ACOPF);
   CHKERRQ(ierr);
 
-  opflow->modelname = OPFLOWOptions::model.opt;
-  opflow->solvername = OPFLOWOptions::solver.opt;
+  ierr = PetscStrcpy(opflow->modelname, OPFLOWOptions::model.opt.c_str());
+  CHKERRQ(ierr);
+
+  ierr = PetscStrcpy(opflow->solvername, OPFLOWOptions::solver.opt.c_str());
+  CHKERRQ(ierr);
 
   opflow->Nconeq = opflow->nconeq = -1;
   opflow->Nconineq = opflow->nconineq = -1;
@@ -876,7 +881,9 @@ PetscErrorCode OPFLOWCreate(MPI_Comm mpicomm, OPFLOW *opflowout) {
   opflow->nlinesmon = 0;
   opflow->linesmon = NULL;
 
-  opflow->_p_hiop_compute_mode = "auto";
+  ierr = PetscStrcpy(opflow->_p_hiop_compute_mode, "auto");
+  CHKERRQ(ierr);
+
   opflow->_p_hiop_verbosity_level = 0;
 
   opflow->skip_options = PETSC_FALSE;
@@ -1103,7 +1110,9 @@ PetscErrorCode OPFLOWSetSolver(OPFLOW opflow, const std::string solvername) {
   opflow->solverops.solve = 0;
   opflow->solverops.setup = 0;
 
-  opflow->solvername = solvername;
+  ierr = PetscStrcpy(opflow->solvername, solvername.c_str());
+  CHKERRQ(ierr);
+
   /* Call the underlying implementation constructor */
   ierr = (*r)(opflow);
   CHKERRQ(ierr);
@@ -1196,7 +1205,9 @@ PetscErrorCode OPFLOWSetModel(OPFLOW opflow, const std::string modelname) {
   opflow->modelops.computeauxgradient = 0;
   opflow->modelops.computeauxhessian = 0;
 
-  opflow->modelname = modelname;
+  ierr = PetscStrcpy(opflow->modelname, modelname.c_str());
+  CHKERRQ(ierr);
+
   /* Call the underlying implementation constructor */
   ierr = (*r)(opflow);
   CHKERRQ(ierr);
@@ -3209,67 +3220,76 @@ PetscErrorCode OPFLOWSetSummaryStats(OPFLOW opflow) {
  */
 PetscErrorCode OPFLOWCheckModelSolverCompatibility(OPFLOW opflow) {
   PetscFunctionBegin;
+  PetscErrorCode ierr;
 #if defined(EXAGO_ENABLE_IPOPT)
   PetscBool ipopt, ipopt_pbpol, ipopt_pbcar, ipopt_ibcar, ipopt_ibcar2,
       ipopt_dcopf;
-  ipopt = static_cast<PetscBool>(opflow->solvername == OPFLOWSOLVER_IPOPT);
-  ipopt_pbpol = static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_PBPOL);
-  ipopt_pbcar = static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_PBCAR);
-  ipopt_ibcar = static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_IBCAR);
-  ipopt_ibcar2 =
-      static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_IBCAR2);
-  ipopt_dcopf = static_cast<PetscBool>(opflow->modelname == "DCOPF");
+  ierr = PetscStrcmp(opflow->solvername, OPFLOWSOLVER_IPOPT, &ipopt);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOL, &ipopt_pbpol);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBCAR, &ipopt_pbcar);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_IBCAR, &ipopt_ibcar);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_IBCAR2, &ipopt_ibcar2);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, "DCOPF", &ipopt_dcopf);
+  CHKERRQ(ierr);
   if (ipopt && !(ipopt_pbpol || ipopt_pbcar || ipopt_ibcar || ipopt_ibcar2 ||
                  ipopt_dcopf)) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
             "OPFLOW solver IPOPT incompatible with model %s",
-            opflow->modelname.c_str());
+            opflow->modelname);
   }
 #endif
 #if defined(EXAGO_ENABLE_HIOP)
   PetscBool hiop, hiop_pbpol;
-  hiop = static_cast<PetscBool>(opflow->solvername == OPFLOWSOLVER_HIOP);
-  hiop_pbpol =
-      static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_PBPOLHIOP);
+  ierr = PetscStrcmp(opflow->solvername, OPFLOWSOLVER_HIOP, &hiop);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOLHIOP, &hiop_pbpol);
+  CHKERRQ(ierr);
 #if defined(EXAGO_ENABLE_RAJA)
   PetscBool rajahiop_pbpol;
-  rajahiop_pbpol =
-      static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_PBPOLRAJAHIOP);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOLRAJAHIOP,
+                     &rajahiop_pbpol);
+  CHKERRQ(ierr);
 #else
   PetscBool rajahiop_pbpol = PETSC_FALSE;
 #endif // RAJA
   if (hiop && !(hiop_pbpol || rajahiop_pbpol)) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
-            "OPFLOW solver HIOP incompatible with model %s",
-            (opflow->modelname).c_str());
+            "OPFLOW solver HIOP incompatible with model %s", opflow->modelname);
   }
 #if defined(EXAGO_ENABLE_HIOP_SPARSE)
   PetscBool hiop_sparse;
   PetscBool hiop_sparse_pbpol;
   PetscBool hiop_sparse_dcopf;
-  hiop_sparse =
-      static_cast<PetscBool>(opflow->solvername == OPFLOWSOLVER_HIOPSPARSE);
-  hiop_sparse_pbpol =
-      static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_PBPOL);
-  hiop_sparse_dcopf = static_cast<PetscBool>(opflow->modelname == "DCOPF");
+  ierr = PetscStrcmp(opflow->solvername, OPFLOWSOLVER_HIOPSPARSE, &hiop_sparse);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOL, &hiop_sparse_pbpol);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, "DCOPF", &hiop_sparse_dcopf);
+  CHKERRQ(ierr);
   if (hiop_sparse && !(hiop_sparse_pbpol || hiop_sparse_dcopf)) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
             "OPFLOW solver HIOPSPARSE incompatible with model %s",
-            (opflow->modelname).c_str());
+            opflow->modelname);
   }
 #if defined(EXAGO_ENABLE_RAJA)
   PetscBool hiop_sparsegpu;
   PetscBool pbpolrajahiopsparse;
-
-  hiop_sparsegpu =
-      static_cast<PetscBool>(opflow->solvername == OPFLOWSOLVER_HIOPSPARSEGPU);
-  pbpolrajahiopsparse = static_cast<PetscBool>(opflow->modelname ==
-                                               OPFLOWMODEL_PBPOLRAJAHIOPSPARSE);
+  ierr = PetscStrcmp(opflow->solvername, OPFLOWSOLVER_HIOPSPARSEGPU,
+                     &hiop_sparsegpu);
+  CHKERRQ(ierr);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOLRAJAHIOPSPARSE,
+                     &pbpolrajahiopsparse);
+  CHKERRQ(ierr);
 
   if (hiop_sparsegpu && !pbpolrajahiopsparse) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
             "OPFLOW solver HIOPSPARSE incompatible with model %s",
-            (opflow->modelname).c_str());
+            opflow->modelname);
   }
 #endif // EXAGO_ENABLE_RAJA
 #endif // HIOP_SPARSE
@@ -3279,7 +3299,7 @@ PetscErrorCode OPFLOWCheckModelSolverCompatibility(OPFLOW opflow) {
     if (rajahiop_pbpol) {
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
               "OPFLOW load shedding incompatible with model %s",
-              (opflow->modelname).c_str());
+              opflow->modelname);
     }
   }
 #endif // HIOP
