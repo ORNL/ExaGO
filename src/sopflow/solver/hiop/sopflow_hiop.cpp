@@ -190,7 +190,8 @@ bool SOPFLOWHIOPInterface::eval_f_rterm(hiop::size_type idx, const int &n,
   CHKERRQ(ierr);
   ierr = OPFLOWSetSolver(opflowscen, sopflow->subproblem_solver);
   CHKERRQ(ierr);
-  ierr = PetscStrcmp(sopflow->subproblem_solver, "HIOP", &issubproblemsolver_hiop);
+  ierr =
+      PetscStrcmp(sopflow->subproblem_solver, "HIOP", &issubproblemsolver_hiop);
   CHKERRQ(ierr);
   if (issubproblemsolver_hiop) {
     ierr = OPFLOWSetHIOPComputeMode(opflowscen, sopflow->compute_mode);
