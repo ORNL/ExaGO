@@ -529,30 +529,8 @@ int main(int argc, char **argv) {
     fail += test.computeConstraintBounds(opflowtest, gl_ref, gu_ref, resmgr);
     fail += test.computeConstraintJacobian(opflowtest, x_ref_dev, Jeq, Jineq,
                                            resmgr);
-
-#ifndef EXAGO_ENABLE_HIOP_SPARSE // skip hessian test for now with HIOP_SPARSE
-    int nxdense = 2 * opflowtest->ps->nbus;
-    double *hess_dense, *hess_dense_dev;
-
-    hess_dense = static_cast<double *>(
-        h_allocator.allocate(nxdense * nxdense * sizeof(double *)));
-#ifdef EXAGO_ENABLE_GPU
-    hess_dense_dev = static_cast<double *>(
-        d_allocator.allocate(nxdense * nxdense * sizeof(double *)));
-#else
-    hess_dense_dev = hess_dense;
-#endif
-
-    fail +=
-        test.computeHessian(opflowtest, x_ref_dev, lambda_ref_dev, obj_factor,
-                            Hess, resmgr, hess_dense, hess_dense_dev);
-
-    // Cleanup hessians
-    h_allocator.deallocate(hess_dense);
-#ifdef EXAGO_ENABLE_GPU
-    d_allocator.deallocate(hess_dense_dev);
-#endif
-#endif // EXAGO_ENABLE_HIOP_SPARSE
+    fail += test.computeHessian(opflowtest, x_ref_dev, lambda_ref_dev, 
+                                obj_factor, Hess, resmgr);
 
     // Cleanup x_ref and lambda_ref on device
 #ifdef EXAGO_ENABLE_GPU
