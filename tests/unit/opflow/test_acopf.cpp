@@ -547,13 +547,17 @@ int main(int argc, char **argv) {
         test.computeHessian(opflowtest, x_ref_dev, lambda_ref_dev, obj_factor,
                             Hess, resmgr, hess_dense, hess_dense_dev);
 
-    // Cleanup
+    // Cleanup hessians
     h_allocator.deallocate(hess_dense);
+#ifdef EXAGO_ENABLE_GPU
+    d_allocator.deallocate(hess_dense_dev);
+#endif
+#endif // EXAGO_ENABLE_HIOP_SPARSE
+
+    // Cleanup x_ref and lambda_ref on device
 #ifdef EXAGO_ENABLE_GPU
     d_allocator.deallocate(x_ref_dev);
     d_allocator.deallocate(lambda_ref_dev);
-    d_allocator.deallocate(hess_dense_dev);
-#endif
 #endif
 
     ierr = PetscFree(x_ref);
