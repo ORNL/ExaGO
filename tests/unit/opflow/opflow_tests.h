@@ -1181,6 +1181,50 @@ public:
                                   umpire::ResourceManager &resmgr) {
     PetscErrorCode ierr;
     LocalOrdinalType fail = 0;
+
+    // Get allocator
+    umpire::Allocator h_allocator = resmgr.getAllocator("HOST");
+
+    // Test sparse Hessian
+    int *iRow, *jCol, *iRow_dev, *jCol_dev;
+    double *values, *values_dev;
+    int nnz = opflow->nnz_hesssp;
+
+    iRow = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+    jCol = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+    values = static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
+#ifdef EXAGO_ENABLE_GPU
+    umpire::Allocator d_allocator = resmgr.getAllocator("DEVICE");
+    iRow_dev = static_cast<int *>(d_allocator.allocate(nnz * sizeof(int)));
+    jCol_dev = static_cast<int *>(d_allocator.allocate(nnz * sizeof(int)));
+    values_dev =
+        static_cast<double *>(d_allocator.allocate(nnz * sizeof(double)));
+#else
+    iRow_dev = iRow;
+    jCol_dev = jCol;
+    values_dev = values;
+#endif
+
+    opflow->obj_factor = obj_factor;
+    ierr = (*opflow->modelops.computesparsehessianhiop)(
+        opflow, x_ref_dev, lambda_ref_dev, iRow_dev, jCol_dev, values_dev);
+    CHKERRQ(ierr);
+
+    // Copy back from the device
+    resmgr.copy(iRow, iRow_dev);
+    resmgr.copy(jCol, jCol_dev);
+    resmgr.copy(values, values_dev);
+
+    fail += verifyAnswer(Hessref, nnz, iRow, jCol, values);
+
+    h_allocator.deallocate(iRow);
+    h_allocator.deallocate(jCol);
+    h_allocator.deallocate(values);
+#ifdef EXAGO_ENABLE_GPU
+    d_allocator.deallocate(iRow_dev);
+    d_allocator.deallocate(jCol_dev);
+    d_allocator.deallocate(values_dev);
+#endif
     cleanup(fail, opflow);
   }
 #else // EXAGO_ENABLE_HIOP_SPARSE
