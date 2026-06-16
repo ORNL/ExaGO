@@ -1,3 +1,4 @@
+#include "common.h"
 #include <private/opflowimpl.h>
 #include <private/scopflowimpl.h>
 #include <private/sopflowimpl.h>
@@ -198,24 +199,27 @@ PetscErrorCode SOPFLOWDestroy(SOPFLOW *sopflow) {
 
   /* Destroy scenario list */
   if ((*sopflow)->scenlist.scen != NULL) {
-    for (s = 0; s < (*sopflow)->Ns; s++) {
-      for (i = 0; i < (*sopflow)->scenlist.scen[s].nforecast; i++) {
-        ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].buses);
-        CHKERRQ(ierr);
-        for (int j = 0; j < (*sopflow)->scenlist.scen[s].forecastlist[i].nele;
-             j++) {
-          ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].id[j]);
+    if ((*sopflow)->scenfileformat != SOPFLOW_NATIVE_SINGLEPERIOD_V2){
+      for (s = 0; s < (*sopflow)->Ns; s++) {
+        for (i = 0; i < (*sopflow)->scenlist.scen[s].nforecast; i++) {
+          ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].buses);
+          CHKERRQ(ierr);
+          for (int j = 0; j < (*sopflow)->scenlist.scen[s].forecastlist[i].nele;
+               j++) {
+            ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].id[j]);
+            CHKERRQ(ierr);
+          }
+          ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].id);
+          CHKERRQ(ierr);
+          ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].val);
           CHKERRQ(ierr);
         }
-        ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].id);
-        CHKERRQ(ierr);
-        ierr = PetscFree((*sopflow)->scenlist.scen[s].forecastlist[i].val);
-        CHKERRQ(ierr);
       }
     }
 
     ierr = PetscFree((*sopflow)->scenlist.scen);
     CHKERRQ(ierr);
+    
   }
 
   MPI_Comm_free(&(*sopflow)->subcomm);
@@ -713,15 +717,25 @@ PetscErrorCode SOPFLOWSetUp(SOPFLOW sopflow) {
       CHKERRQ(ierr);
     }
 
-    ierr = PetscCalloc1(sopflow->Ns, &sopflow->scenlist.scen);
-    CHKERRQ(ierr);
+    if (sopflow->scenfileformat == SOPFLOW_NATIVE_SINGLEPERIOD_V2){
+      ierr = PetscCalloc1(sopflow->Ns, &sopflow->scenlist_v2.scen);
+    } else {
+      ierr = PetscCalloc1(sopflow->Ns, &sopflow->scenlist.scen);
+      CHKERRQ(ierr);
+    };
 
     for (s = 0; s < sopflow->Ns; s++)
-      sopflow->scenlist.scen->nforecast = 0;
+      if (sopflow->scenfileformat != SOPFLOW_NATIVE_SINGLEPERIOD_V2){
+        sopflow->scenlist.scen->nforecast = 0;
+      }
     ierr = SOPFLOWReadScenarioData(sopflow, sopflow->scenfileformat,
                                    sopflow->scenfile);
     CHKERRQ(ierr);
-    sopflow->Ns = sopflow->scenlist.Nscen;
+    if(sopflow->scenfileformat == SOPFLOW_NATIVE_SINGLEPERIOD_V2){
+      sopflow->Ns = sopflow->scenlist_v2.Nscen;
+    } else {
+        sopflow->Ns = sopflow->scenlist.Nscen;
+    }
   } else {
     if (sopflow->Ns == -1)
       sopflow->Ns = 1;
@@ -929,7 +943,11 @@ PetscErrorCode SOPFLOWSetUp(SOPFLOW sopflow) {
     ierr = PSSetUp(sopflow->opflow0->ps);
     CHKERRQ(ierr);
     if (sopflow->scenfileset) {
-      ierr = PSApplyScenario(sopflow->opflow0->ps, sopflow->scenlist.scen[0]);
+      if (sopflow->scenfileformat == SOPFLOW_NATIVE_SINGLEPERIOD_V2){
+        ierr = PSApplyScenario(sopflow->opflow0->ps, sopflow->scenlist_v2.scen[0]);
+      } else {
+        ierr = PSApplyScenario(sopflow->opflow0->ps, sopflow->scenlist.scen[0]);
+      }
       CHKERRQ(ierr);
     }
     ierr = OPFLOWHasGenSetPoint(sopflow->opflow0, PETSC_TRUE);
@@ -970,13 +988,23 @@ PetscErrorCode SOPFLOWSetUp(SOPFLOW sopflow) {
 
       if (sopflow->scenfileset) {
         /* Apply scenario */
-        ierr =
-            PSApplyScenario(ps, sopflow->scenlist.scen[sopflow->scen_num[s]]);
-        CHKERRQ(ierr);
-        /* Set scenario probability */
-        ierr =
-            OPFLOWSetWeight(sopflow->opflows[s],
-                            sopflow->scenlist.scen[sopflow->scen_num[s]].prob);
+        if (sopflow->scenfileformat == SOPFLOW_NATIVE_SINGLEPERIOD_V2){
+          ierr =
+              PSApplyScenario(ps, sopflow->scenlist_v2.scen[sopflow->scen_num[s]]);
+          CHKERRQ(ierr);
+          /* Set scenario probability */
+          ierr =
+              OPFLOWSetWeight(sopflow->opflows[s],
+                              sopflow->scenlist_v2.scen[sopflow->scen_num[s]].prob);
+        } else {
+          ierr =
+              PSApplyScenario(ps, sopflow->scenlist.scen[sopflow->scen_num[s]]);
+          CHKERRQ(ierr);
+          /* Set scenario probability */
+          ierr =
+              OPFLOWSetWeight(sopflow->opflows[s],
+                              sopflow->scenlist.scen[sopflow->scen_num[s]].prob);
+        }
       }
 
       if (flgctgc && sopflow->flatten_contingencies && sopflow->Nc > 1) {

@@ -136,6 +136,20 @@ if(EXAGO_RUN_TESTS)
     -opflow_ignore_lineflow_constraints
   )
 
+  exago_add_test(
+    NAME
+    FUNCTIONALITY_TEST_SOPFLOW_SCENARIO4_TOML
+    DEPENDS
+    IPOPT
+    COMMAND
+    ${RUNCMD}
+    $<TARGET_FILE:test_sopflow_functionality>
+    ${CMAKE_CURRENT_SOURCE_DIR}/sopflow_multiscenario4.toml
+    HOST
+  )
+
+
+
   foreach(fmt "MATPOWER" "CSV" "JSON" "MINIMAL")
     foreach(flat 1 0)
       if(flat)

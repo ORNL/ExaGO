@@ -1,3 +1,7 @@
+#include "ps.h"
+#include "common.h"
+#include "petscsys.h"
+#include "scenariolist.h"
 #include <private/psimpl.h>
 
 const char *const PSGENFuelTypes[] = {"COAL",      "WIND",         "SOLAR",
@@ -1642,6 +1646,75 @@ PetscErrorCode PSApplyScenario(PS ps, Scenario scenario) {
     }
   }
 
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode PSApplyScenario(PS ps, ScenarioV2 scenario) {
+  PetscInt i, j;
+  ModElement *element;
+  Modification *mod;
+  PSGEN gen;
+  PSLOAD load;
+  PetscErrorCode ierr;
+
+  PetscFunctionBegin;
+  for (i = 0; i < scenario.nelements; i++) {
+    element = &scenario.elementlist[i];
+    switch(element->type){
+      case ELEMENT_GEN:
+        ierr = PSGetGen(ps, element->fr_bus, element->id, &gen);
+        CHKERRQ(ierr);
+        if (gen){
+          for (j = 0; j < element->nmods; j++){
+            mod = &element->modlist[j];
+            switch(mod->type){
+              case PARAM_P:
+                gen->pg = gen->pt = (mod->val / ps->MVAbase);
+                gen->pgs = gen->pb;
+                break;
+              case PARAM_Q:
+                gen->qg = gen->qt = (mod->val / ps->MVAbase);
+                break;
+              default:
+                printf("Unsupported parameter for gen type. Cannot apply "
+                    "the requested scenario.\n");
+                break;
+            }
+          }
+        } else {
+          printf("No generator on bus %d with id %s. Cannot apply the "
+                 "requested scenario.\n", element->fr_bus, element->id);
+        }
+        break;
+      case ELEMENT_LOAD:
+        ierr = PSGetLoad(ps, element->fr_bus, element->id, &load);
+        CHKERRQ(ierr);
+        if(load){
+          for (j = 0; j < element->nmods; j++){
+            mod = &element->modlist[j];
+            switch(mod->type){
+              case PARAM_P:
+                load->pl = (mod->val / ps->MVAbase);
+                break;
+              case PARAM_Q:
+                load->ql = (mod->val / ps->MVAbase);
+                break;
+              default:
+                printf("Unsupported parameter for load type. Cannot apply "
+                    "the requested scenario.\n");
+                break;
+            }
+          }
+        }
+        break;
+      case ELEMENT_LINE:
+        break;
+      case ELEMENT_XFRMR:
+        break;
+      default:
+        break;
+    }
+  }
   PetscFunctionReturn(0);
 }
 

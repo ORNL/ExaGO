@@ -1,0 +1,18 @@
+testsuite_name = "SOPFLOW Multiscenario Functionality tests 4"
+
+[presets]
+tolerance = 1e-3
+network = 'datafiles/case9/case9mod.m'
+scenfile = 'datafiles/case9/scenarios_v2.scen'
+multicontingency = false
+multiperiod = false
+flatten = true
+
+[[testcase]]
+description = 'datafiles/case9/case9mod.m IPOPT CPU 1scen SOPFLOW'
+solver = 'IPOPT'
+num_scenarios = 1
+num_iters = 0
+iter_range = 0
+obj_value = 0.0
+

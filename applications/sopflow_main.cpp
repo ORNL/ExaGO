@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
   PetscLogStage stages[3];
   char appname[] = "sopflow";
   MPI_Comm comm = MPI_COMM_WORLD;
+  ScenarioFileInputFormat scenFileFormat;
 
   /** Use `ExaGOLogSetLoggingFileName("opflow-logfile");` to log the output. */
   ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);
@@ -73,7 +74,9 @@ int main(int argc, char **argv) {
 
   /* Set Scenario Data file */
   if (flgscen) {
-    ierr = SOPFLOWSetScenarioData(sopflow, SOPFLOW_NATIVE_SINGLEPERIOD, WIND,
+    ierr = SOPFLOWGetScenarioFileVersion(&scenFileFormat, scenfile);
+    CHKERRQ(ierr);
+    ierr = SOPFLOWSetScenarioData(sopflow, scenFileFormat, WIND,
                                   scenfile);
     CHKERRQ(ierr);
   }

@@ -194,6 +194,7 @@ struct _p_SOPFLOW {
 
   /* Data for scenarios */
   ScenarioList scenlist;
+  ScenarioListV2 scenlist_v2;
   PetscBool scenfileset;             /* Is the scenario file set ? */
   char scenfile[PETSC_MAX_PATH_LEN]; /* Scenario file */
   ScenarioFileInputFormat scenfileformat;

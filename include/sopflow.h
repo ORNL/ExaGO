@@ -109,6 +109,8 @@ PETSC_EXTERN PetscErrorCode SOPFLOWSetScenarioData(SOPFLOW,
                                                    ScenarioFileInputFormat,
                                                    ScenarioUncertaintyType,
                                                    const char[]);
+PETSC_EXTERN PetscErrorCode SOPFLOWGetScenarioFileVersion(ScenarioFileInputFormat *,
+                                                          const char[]);
 PETSC_EXTERN PetscErrorCode
 SOPFLOWSetContingencyData(SOPFLOW, ContingencyFileInputFormat, const char[]);
 PETSC_EXTERN PetscErrorCode SOPFLOWSetUp(SOPFLOW);

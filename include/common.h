@@ -15,7 +15,8 @@ typedef enum { NATIVE = 0, PSSE = 1 } ContingencyFileInputFormat;
 
 typedef enum {
   SOPFLOW_NATIVE_SINGLEPERIOD,
-  SOPFLOW_NATIVE_MULTIPERIOD
+  SOPFLOW_NATIVE_MULTIPERIOD,
+  SOPFLOW_NATIVE_SINGLEPERIOD_V2
 } ScenarioFileInputFormat;
 
 typedef enum {
@@ -23,6 +24,21 @@ typedef enum {
   FORECAST_LOAD_P = 2,
   FORECAST_LOAD_Q = 3
 } ForecastType;
+
+typedef enum {
+  ELEMENT_GEN = 1,
+  ELEMENT_LOAD = 2,
+  ELEMENT_LINE = 3,
+  ELEMENT_XFRMR = 4
+} ElementType;
+
+typedef enum {
+  PARAM_P = 1,
+  PARAM_Q = 2,
+  PARAM_R = 3,
+  PARAM_X = 4,
+  PARAM_B = 5
+} ParamType;
 
 /**
  * The communicator context

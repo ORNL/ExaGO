@@ -1,0 +1,10 @@
+version,2
+# scenario number, weight
+1,.1
+# mod type, bus, id, parameter type 0 , value 0, ... , parameter type n, value n
+GEN,3,1 ,P,62.0,Q,15.0
+LOAD,5,1 ,P,25.0,Q,10.0
+# mod type, fr_bus, to_bus, id, value type 0 , value 0, ... , value type n, value n
+# LINE,0,1,0,R,1.0,X,1.0,B,0.5
+END
+
