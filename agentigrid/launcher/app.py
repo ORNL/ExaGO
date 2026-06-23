@@ -104,7 +104,7 @@ def start_search(base_case_path, goal, backend, model, temperature,
                    tcopflow_duration=1.0, tcopflow_dT=60.0, tcopflow_iscoupling=1,
                    scenario_file=None, sopflow_solver="IPOPT", sopflow_iscoupling=0,
                    benchmark_opflow=False, concurrent_pflow=False, max_variants=8,
-                   load_factor=None):
+                   sweep_max_workers=0, load_factor=None):
     """Initialize and start a new search."""
     # Validate base case still exists
     if not Path(base_case_path).exists():
@@ -142,6 +142,7 @@ def start_search(base_case_path, goal, backend, model, temperature,
         benchmark_opflow=benchmark_opflow,
         concurrent_pflow=concurrent_pflow,
         max_variants=max_variants,
+        sweep_max_workers=sweep_max_workers,
         load_factor=load_factor,
     )
 
@@ -438,6 +439,30 @@ def render_sidebar() -> dict:
             concurrent_pflow = False
             max_variants = 8
 
+        parallel_sweep = st.checkbox(
+            "Run sweep in parallel",
+            value=True,
+            disabled=disabled or application != "opflow",
+            help="Solve sweep candidate buses concurrently. Disable for sequential "
+                 "(serial) execution — useful for debugging or reproducibility.",
+        )
+        _default_workers = min(os.cpu_count() or 4, 16)
+        sweep_workers = st.number_input(
+            "Concurrent solves",
+            min_value=1,
+            max_value=128,
+            value=_default_workers,
+            step=1,
+            disabled=disabled or application != "opflow" or not parallel_sweep,
+            help="Number of OPFLOW solves to run at once. Set near your physical core "
+                 "count. Each solve is pinned to a single BLAS/OpenMP thread to avoid "
+                 "oversubscription.",
+        )
+        if application == "opflow":
+            sweep_max_workers = int(sweep_workers) if parallel_sweep else 1
+        else:
+            sweep_max_workers = 0
+
         load_factor_input = st.number_input(
             "Session load factor",
             min_value=0.1,
@@ -519,6 +544,7 @@ def render_sidebar() -> dict:
                 benchmark_opflow=benchmark_opflow,
                 concurrent_pflow=concurrent_pflow,
                 max_variants=max_variants,
+                sweep_max_workers=sweep_max_workers,
                 load_factor=load_factor,
             )
             st.rerun()
@@ -1087,6 +1113,9 @@ def _render_overview_tab(session):
         goal_type=goal_type,
     )
 
+    sweep_entry = session.journal.get_sweep_entry()
+    is_sweep = sweep_entry is not None
+
     # Goal
     st.markdown(f"**Goal:** {session.goal}")
 
@@ -1113,8 +1142,14 @@ def _render_overview_tab(session):
                 break
     is_pflow = session.application == "pflow"
 
-    # Best objective with goal-type-aware framing
-    if stats["best_objective"] is not None and not is_pflow:
+    # Sweep summary replaces scalar-objective metrics
+    if is_sweep:
+        n_cand = sweep_entry.candidate_count or 0
+        n_feas = len(sweep_entry.feasible_buses or [])
+        st.metric("Feasible buses", f"{n_feas} / {n_cand}")
+        mut_desc = (sweep_entry.description or "").replace("[sweep] ", "")
+        st.markdown(f"**Mutation:** {mut_desc}")
+    elif stats["best_objective"] is not None and not is_pflow:
         if base_entry and base_entry.objective_value is not None and base_entry.objective_value != 0:
             pct = (stats["best_objective"] - base_entry.objective_value) / base_entry.objective_value * 100
             if goal_type in (None, "cost_minimization"):
@@ -1214,16 +1249,6 @@ def _render_overview_tab(session):
                     if loadability.get("gap_pct") is not None:
                         lc3.metric("Boundary Gap", f"{loadability['gap_pct']:+.2f}%")
 
-    # Base Case vs Best Solution comparison table
-    comparison_label = "Base Case vs Best Solution"
-    if goal_type == "feasibility_boundary":
-        comparison_label = "Base Case vs Maximum Feasible Configuration"
-    elif goal_type == "constraint_satisfaction":
-        comparison_label = "Base Case vs Best Constraint-Satisfying Configuration"
-    elif goal_type == "parameter_exploration":
-        comparison_label = "Base Case vs Selected Exploration Result"
-    st.subheader(comparison_label)
-
     def _fmt_cost(v):
         return f"${v:,.2f}" if v is not None else "—"
 
@@ -1243,70 +1268,124 @@ def _render_overview_tab(session):
         diff = best_v - base_v
         return f"{diff:+{fmt}}{suffix}"
 
-    rows = []
-    b = base_entry
-    s = best_entry
-    if b:
-        cost_label = "Cost (computed)" if is_pflow else "Objective (cost)"
-        rows.append({
-            "Metric": cost_label,
-            "Base Case": _fmt_obj(b.objective_value, is_pflow),
-            "Best Solution": _fmt_obj(s.objective_value, is_pflow) if s else "N/A",
-            "Change": _change(b.objective_value, s.objective_value, ",.2f") if s else "—",
-        })
-        rows.append({
-            "Metric": "Total Generation (MW)",
-            "Base Case": _fmt_f(b.total_gen_mw),
-            "Best Solution": _fmt_f(s.total_gen_mw) if s else "N/A",
-            "Change": _change(b.total_gen_mw, s.total_gen_mw, ".1f", " MW") if s else "—",
-        })
-        rows.append({
-            "Metric": "Voltage Min (p.u.)",
-            "Base Case": _fmt_f(b.voltage_min, ".4f"),
-            "Best Solution": _fmt_f(s.voltage_min, ".4f") if s else "N/A",
-            "Change": _change(b.voltage_min, s.voltage_min, ".4f") if s else "—",
-        })
-        rows.append({
-            "Metric": "Voltage Max (p.u.)",
-            "Base Case": _fmt_f(b.voltage_max, ".4f"),
-            "Best Solution": _fmt_f(s.voltage_max, ".4f") if s else "N/A",
-            "Change": _change(b.voltage_max, s.voltage_max, ".4f") if s else "—",
-        })
-        rows.append({
-            "Metric": "Max Line Loading (%)",
-            "Base Case": _fmt_f(b.max_line_loading_pct),
-            "Best Solution": _fmt_f(s.max_line_loading_pct) if s else "N/A",
-            "Change": _change(b.max_line_loading_pct, s.max_line_loading_pct, ".1f", " pp") if s else "—",
-        })
-        rows.append({
-            "Metric": "Violations",
-            "Base Case": str(b.violations_count),
-            "Best Solution": str(s.violations_count) if s else "N/A",
-            "Change": str(s.violations_count - b.violations_count) if s else "—",
-        })
-        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    if not is_sweep:
+        # Base Case vs Best Solution comparison table
+        comparison_label = "Base Case vs Best Solution"
+        if goal_type == "feasibility_boundary":
+            comparison_label = "Base Case vs Maximum Feasible Configuration"
+        elif goal_type == "constraint_satisfaction":
+            comparison_label = "Base Case vs Best Constraint-Satisfying Configuration"
+        elif goal_type == "parameter_exploration":
+            comparison_label = "Base Case vs Selected Exploration Result"
+        st.subheader(comparison_label)
+
+        rows = []
+        b = base_entry
+        s = best_entry
+        if b:
+            cost_label = "Cost (computed)" if is_pflow else "Objective (cost)"
+            rows.append({
+                "Metric": cost_label,
+                "Base Case": _fmt_obj(b.objective_value, is_pflow),
+                "Best Solution": _fmt_obj(s.objective_value, is_pflow) if s else "N/A",
+                "Change": _change(b.objective_value, s.objective_value, ",.2f") if s else "—",
+            })
+            rows.append({
+                "Metric": "Total Generation (MW)",
+                "Base Case": _fmt_f(b.total_gen_mw),
+                "Best Solution": _fmt_f(s.total_gen_mw) if s else "N/A",
+                "Change": _change(b.total_gen_mw, s.total_gen_mw, ".1f", " MW") if s else "—",
+            })
+            rows.append({
+                "Metric": "Voltage Min (p.u.)",
+                "Base Case": _fmt_f(b.voltage_min, ".4f"),
+                "Best Solution": _fmt_f(s.voltage_min, ".4f") if s else "N/A",
+                "Change": _change(b.voltage_min, s.voltage_min, ".4f") if s else "—",
+            })
+            rows.append({
+                "Metric": "Voltage Max (p.u.)",
+                "Base Case": _fmt_f(b.voltage_max, ".4f"),
+                "Best Solution": _fmt_f(s.voltage_max, ".4f") if s else "N/A",
+                "Change": _change(b.voltage_max, s.voltage_max, ".4f") if s else "—",
+            })
+            rows.append({
+                "Metric": "Max Line Loading (%)",
+                "Base Case": _fmt_f(b.max_line_loading_pct),
+                "Best Solution": _fmt_f(s.max_line_loading_pct) if s else "N/A",
+                "Change": _change(b.max_line_loading_pct, s.max_line_loading_pct, ".1f", " pp") if s else "—",
+            })
+            rows.append({
+                "Metric": "Violations",
+                "Base Case": str(b.violations_count),
+                "Best Solution": str(s.violations_count) if s else "N/A",
+                "Change": str(s.violations_count - b.violations_count) if s else "—",
+            })
+            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        else:
+            st.info("No iteration data available for comparison.")
+
+        if not best_entry and stats["best_objective"] is None:
+            st.warning("No feasible solution was found during the search.")
     else:
-        st.info("No iteration data available for comparison.")
+        # Sweep: show feasible-bus table and infeasible expander
+        variants = sweep_entry.explored_variants or []
+        feasible_rows = sorted(
+            [v for v in variants if v.get("feasible")],
+            key=lambda v: v["bus"],
+        )
+        infeasible_rows = sorted(
+            [v for v in variants if not v.get("feasible")],
+            key=lambda v: v["bus"],
+        )
+        if feasible_rows:
+            st.subheader(f"Feasible buses ({len(feasible_rows)})")
+            df_feas = pd.DataFrame([{
+                "Bus": v["bus"],
+                "V_min (pu)": round(v.get("voltage_min", 0), 3),
+                "V_max (pu)": round(v.get("voltage_max", 0), 3),
+                "Max Line Loading (%)": round(v.get("max_line_loading_pct", 0), 1),
+                "Violations": v.get("violations", 0),
+                "System Cost ($)": v.get("cost"),
+            } for v in feasible_rows])
+            st.dataframe(df_feas, width="stretch", hide_index=True)
+        else:
+            st.warning("No feasible buses found in this sweep.")
+        if infeasible_rows:
+            st.subheader(f"Infeasible buses ({len(infeasible_rows)})")
+            df_infeas = pd.DataFrame([{
+                "Bus": v["bus"],
+                "Reason": (v.get("reason") or v.get("status") or "infeasible").capitalize(),
+                "V_min (pu)": round(v.get("voltage_min", 0), 3),
+                "V_max (pu)": round(v.get("voltage_max", 0), 3),
+                "Max Line Loading (%)": round(v.get("max_line_loading_pct", 0), 1),
+                "Violations": v.get("violations", 0),
+            } for v in infeasible_rows])
+            st.dataframe(df_infeas, width="stretch", hide_index=True)
+            st.caption(
+                "Metrics are taken from the solver’s last iterate. For buses marked "
+                "“Did not converge”, that iterate was not certified and may appear within "
+                "limits even though no feasible operating point was found (these rows usually "
+                "show 0 violations). For “Line overload” / “Voltage low” buses, the listed "
+                "value is the binding violation."
+            )
 
-    if not best_entry and stats["best_objective"] is None:
-        st.warning("No feasible solution was found during the search.")
+    if not is_sweep:
+        # Convergence chart
+        st.subheader("Convergence")
+        fig = convergence_chart(
+            session.journal, highlight_best=True, height=450,
+            best_iteration=best_iter_override,
+        )
+        st.plotly_chart(fig, width="stretch")
 
-    # Convergence chart
-    st.subheader("Convergence")
-    fig = convergence_chart(
-        session.journal, highlight_best=True, height=450,
-        best_iteration=best_iter_override,
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    # Voltage range chart
-    fig_v = voltage_range_chart(
-        session.journal,
-        v_min_limit=session.enforced_vmin if session.enforced_vmin is not None else 0.95,
-        v_max_limit=session.enforced_vmax if session.enforced_vmax is not None else 1.05,
-        height=350,
-    )
-    st.plotly_chart(fig_v, width="stretch")
+        # Voltage range chart
+        fig_v = voltage_range_chart(
+            session.journal,
+            v_min_limit=session.enforced_vmin if session.enforced_vmin is not None else 0.95,
+            v_max_limit=session.enforced_vmax if session.enforced_vmax is not None else 1.05,
+            height=350,
+        )
+        st.plotly_chart(fig_v, width="stretch")
 
     # Multi-objective section (only when applicable)
     if session.journal.objective_registry.is_multi_objective:
@@ -1347,50 +1426,60 @@ def _render_detailed_tab(session):
     base_opflow = st.session_state.base_opflow
     best_opflow = st.session_state.best_opflow
     is_pflow = session.application == "pflow"
+    sweep_entry = session.journal.get_sweep_entry()
+    is_sweep = sweep_entry is not None
+
+    _NON_SIM = {"SWEEP", "EXPLORE", "ANALYSIS", "COMPLETE"}
 
     def _fmt_obj(v, is_pf=False):
         if is_pf:
             return "N/A (no optimization)" if (v is None or v == 0.0) else f"${v:,.2f}"
         return f"${v:,.2f}" if v is not None else "—"
 
-    # Voltage Profile
-    fig_vp = voltage_profile_chart(
-        base_opflow, best_opflow,
-        v_min_limit=session.enforced_vmin if session.enforced_vmin is not None else 0.95,
-        v_max_limit=session.enforced_vmax if session.enforced_vmax is not None else 1.05,
-    )
-    if fig_vp is not None:
-        st.plotly_chart(fig_vp, width="stretch")
-    else:
-        st.info("Voltage profile comparison not available (missing simulation results).")
-
-    # Generator Dispatch and Line Loading side by side
-    col1, col2 = st.columns(2)
-    with col1:
-        fig_gen = generator_dispatch_chart(base_opflow, best_opflow)
-        if fig_gen:
-            st.plotly_chart(fig_gen, width="stretch")
+    if not is_sweep:
+        # Voltage Profile
+        fig_vp = voltage_profile_chart(
+            base_opflow, best_opflow,
+            v_min_limit=session.enforced_vmin if session.enforced_vmin is not None else 0.95,
+            v_max_limit=session.enforced_vmax if session.enforced_vmax is not None else 1.05,
+        )
+        if fig_vp is not None:
+            st.plotly_chart(fig_vp, width="stretch")
         else:
-            st.info("Generator dispatch comparison not available.")
+            st.info("Voltage profile comparison not available (missing simulation results).")
 
-    with col2:
-        fig_ll = line_loading_chart(base_opflow, best_opflow)
-        if fig_ll:
-            st.plotly_chart(fig_ll, width="stretch")
-        else:
-            st.info("Line loading comparison not available.")
+        # Generator Dispatch and Line Loading side by side
+        col1, col2 = st.columns(2)
+        with col1:
+            fig_gen = generator_dispatch_chart(base_opflow, best_opflow)
+            if fig_gen:
+                st.plotly_chart(fig_gen, width="stretch")
+            else:
+                st.info("Generator dispatch comparison not available.")
+
+        with col2:
+            fig_ll = line_loading_chart(base_opflow, best_opflow)
+            if fig_ll:
+                st.plotly_chart(fig_ll, width="stretch")
+            else:
+                st.info("Line loading comparison not available.")
 
     # Iteration History Table
     st.subheader("📋 Iteration History")
     rows = []
     cost_col = "Cost" if is_pflow else "Cost ($)"
     for e in session.journal.entries:
-        cost_val = _fmt_obj(e.objective_value, is_pflow) if e.objective_value is not None else "FAILED"
+        if e.convergence_status in _NON_SIM:
+            cost_val = e.convergence_status
+            feas_icon = "—"
+        else:
+            cost_val = _fmt_obj(e.objective_value, is_pflow) if e.objective_value is not None else "FAILED"
+            feas_icon = "✅" if e.feasible else "❌"
         rows.append({
             "Iteration": e.iteration,
             "Description": e.description[:50],
             cost_col: cost_val,
-            "Feasible": "✅" if e.feasible else "❌",
+            "Feasible": feas_icon,
             "V_min (p.u.)": f"{e.voltage_min:.3f}" if e.voltage_min > 0 else "—",
             "V_max (p.u.)": f"{e.voltage_max:.3f}" if e.voltage_max > 0 else "—",
             "Max Load (%)": f"{e.max_line_loading_pct:.1f}" if e.max_line_loading_pct > 0 else "—",

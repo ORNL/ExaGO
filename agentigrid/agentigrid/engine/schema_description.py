@@ -115,6 +115,20 @@ Available modification commands (JSON format):
       Only applies to branches that are phase shifters (angle ≠ 0 in the base
       network). Setting angle on a non-phase-shifter branch (angle=0) is rejected.
 
+  17. add_load_at_bus — ADD a load (additively) to an existing bus
+      Required: bus (int)
+      Optional: Pd (float, MW), Qd (float, MVAr)
+      Example: {"action": "add_load_at_bus", "bus": 42, "Pd": 100.0, "Qd": 10.0}
+      Adds to the bus's existing load. Use this to test connecting a NEW load.
+
+  18. add_generator_at_bus — Append a NEW generator to a bus
+      Required: bus (int), capacity_mw (float, MW)
+      Optional: dispatchable (bool, default false), Qmax, Qmin (float, MVAr), Vg (float, pu)
+      Example: {"action": "add_generator_at_bus", "bus": 42, "capacity_mw": 100.0}
+      By default the generator is FORCED to inject capacity_mw (Pmin=Pmax=capacity_mw),
+      which tests whether the bus can host that generation. Set dispatchable=true to
+      let the OPF choose the output between 0 and capacity_mw.
+
 Return your commands as a JSON object with a "commands" key containing a list:
 {"commands": [{"action": "...", ...}, {"action": "...", ...}]}
 """

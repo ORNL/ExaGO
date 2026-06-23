@@ -492,24 +492,56 @@ class TestSOPFLOWSummary:
         summary = sopflow_results_summary(result)
         assert "UNPHYSICAL" in summary or "negative losses" in summary.lower()
 
-    def test_per_scenario_disclaimer_with_scenarios(self, sopflow_result):
+    def test_stale_per_scenario_disclaimer_removed(self, sopflow_result):
+        # The old "per-scenario data not available" disclaimer is obsolete:
+        # per-scenario second-stage dispatch IS now available.
         summary = sopflow_results_summary(sopflow_result, num_scenarios=10)
-        assert "Per-scenario" in summary or "not available" in summary.lower()
+        assert "not available" not in summary.lower()
 
-    def test_no_disclaimer_without_scenarios(self, sopflow_result):
+    def test_wind_absorption_block_rendered(self, sopflow_result):
+        wind_absorption = {
+            "num_scenarios": 10,
+            "total_available_mw": 27574.0,
+            "total_dispatched_mw": 7534.5,
+            "total_curtailment_mw": 20039.5,
+            "curtailment_pct": 72.7,
+            "avg_dispatched_mw": 753.45,
+        }
+        summary = sopflow_results_summary(
+            sopflow_result, num_scenarios=10, wind_absorption=wind_absorption
+        )
+        assert "Wind absorption" in summary
+        assert "Offered" in summary and "Dispatched" in summary and "Curtailed" in summary
+        assert "Curtailment is active" in summary
+
+    def test_wind_absorption_all_absorbed_message(self, sopflow_result):
+        wind_absorption = {
+            "num_scenarios": 10,
+            "total_available_mw": 5514.8,
+            "total_dispatched_mw": 5501.8,
+            "total_curtailment_mw": 13.0,
+            "curtailment_pct": 0.2,
+            "avg_dispatched_mw": 550.18,
+        }
+        summary = sopflow_results_summary(
+            sopflow_result, num_scenarios=10, wind_absorption=wind_absorption
+        )
+        assert "All offered wind is absorbed" in summary
+
+    def test_no_absorption_block_without_data(self, sopflow_result):
         summary = sopflow_results_summary(sopflow_result, num_scenarios=0)
-        assert "Per-scenario" not in summary
+        assert "Wind absorption" not in summary
 
     def test_wind_capacity_utilization(self, sopflow_result):
         summary = sopflow_results_summary(sopflow_result, num_scenarios=10)
         assert "utilization" in summary.lower() or "capacity" in summary.lower()
 
-    def test_wind_at_pmax_warning(self, sopflow_result):
+    def test_stale_wind_at_pmax_warning_removed(self, sopflow_result):
+        # The old "wind at maximum capacity / scale_wind_scenario won't change
+        # dispatch" WARNING is obsolete and must no longer be emitted.
         summary = sopflow_results_summary(sopflow_result, num_scenarios=10)
-        if sopflow_result.generators:
-            wind = [g for g in sopflow_result.generators if "wind" in g.fuel.lower() and g.status == 1]
-            if wind and all(g.Pg >= g.Pmax * 0.995 for g in wind):
-                assert "WARNING" in summary or "maximum capacity" in summary
+        assert "scale_wind_scenario alone will NOT" not in summary
+        assert "maximum capacity in the base-case" not in summary
 
 
 class TestSOPFLOWDispatch:
@@ -824,21 +856,25 @@ class TestSOPFLOWSystemPrompt:
         assert "wind" in prompt.lower()
         assert "scenario" in prompt.lower()
 
-    def test_sopflow_prompt_includes_analysis_limitations(self):
+    def test_sopflow_prompt_includes_absorption_guidance(self):
         prompt = build_system_prompt(
             command_schema=command_schema_text(),
             network_summary="Network: 9 buses",
             application="sopflow",
         )
-        assert "per-scenario" in prompt.lower() or "Analysis Limitations" in prompt
+        # Post-fix guidance: absorption/curtailment is the primary signal,
+        # and "max feasible wind scale" is ill-posed.
+        assert "curtail" in prompt.lower()
+        assert "absorb" in prompt.lower()
 
-    def test_sopflow_prompt_includes_wind_capacity_section(self):
+    def test_sopflow_prompt_uses_scenfile_not_windgen(self):
         prompt = build_system_prompt(
             command_schema=command_schema_text(),
             network_summary="Network: 9 buses",
             application="sopflow",
         )
-        assert "Capacity Constraint" in prompt or "Pmax" in prompt
+        assert "-windgen" not in prompt
+        assert "-scenfile" in prompt
 
     def test_opflow_prompt_unchanged(self):
         prompt = build_system_prompt(

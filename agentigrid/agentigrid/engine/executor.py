@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shlex
 import subprocess
 import time
@@ -17,6 +18,11 @@ from agentigrid.parsers.matpower_model import MATNetwork
 from agentigrid.parsers.matpower_writer import write_matpower
 
 logger = logging.getLogger("agentigrid.engine.executor")
+
+_THREAD_ENV_VARS = (
+    "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+)
 
 
 @dataclass
@@ -58,13 +64,23 @@ def _tcopflow_cmd_builder(
     return cmd
 
 
+def _sopflow_cmd_builder(
+    binary: Path, input_file: Path, extra_args: list[str] | None,
+) -> list[str]:
+    """Build command for SOPFLOW (includes -save_output for per-scenario results)."""
+    cmd = [str(binary), "-netfile", str(input_file), "-print_output", "-save_output"]
+    if extra_args:
+        cmd.extend(extra_args)
+    return cmd
+
+
 _CMD_BUILDERS: dict[str, Callable] = {
     "opflow": _default_cmd_builder,
     "dcopflow": _default_cmd_builder,
     "pflow": _default_cmd_builder,
     "scopflow": _default_cmd_builder,
     "tcopflow": _tcopflow_cmd_builder,
-    "sopflow": _default_cmd_builder,
+    "sopflow": _sopflow_cmd_builder,
 }
 
 
@@ -138,6 +154,7 @@ class SimulationExecutor:
         application: str = "opflow",
         iteration: int = 0,
         extra_args: list[str] | None = None,
+        thread_limit: int | None = None,
     ) -> SimulationResult:
         """Run an ExaGO application with the given network.
 
@@ -188,7 +205,14 @@ class SimulationExecutor:
 
         try:
             if self._env_script:
-                shell_cmd = f"source {shlex.quote(str(self._env_script))} && {' '.join(shlex.quote(c) for c in cmd)}"
+                base = f"source {shlex.quote(str(self._env_script))} && "
+                joined = " ".join(shlex.quote(c) for c in cmd)
+                if thread_limit and thread_limit > 0:
+                    n = thread_limit
+                    exports = "export " + " ".join(f"{v}={n}" for v in _THREAD_ENV_VARS) + " && "
+                    shell_cmd = base + exports + joined
+                else:
+                    shell_cmd = base + joined
                 proc = subprocess.run(
                     shell_cmd,
                     shell=True,
@@ -199,12 +223,16 @@ class SimulationExecutor:
                     cwd=run_dir,
                 )
             else:
+                run_env = None
+                if thread_limit and thread_limit > 0:
+                    run_env = {**os.environ, **{v: str(thread_limit) for v in _THREAD_ENV_VARS}}
                 proc = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=self._exago.timeout,
                     cwd=run_dir,
+                    env=run_env,
                 )
         except subprocess.TimeoutExpired:
             elapsed = time.monotonic() - t0
@@ -265,6 +293,8 @@ class SimulationExecutor:
         self,
         tasks: list[tuple[MATNetwork, str, int, list[str] | None]],
         max_workers: int = 4,
+        thread_limit: int | None = None,
+        on_progress: "Callable[[int, int], None] | None" = None,
     ) -> dict[int, SimulationResult]:
         """Run multiple simulations concurrently via thread pool.
 
@@ -277,6 +307,10 @@ class SimulationExecutor:
                 directory collisions (e.g., pass negative iteration numbers or
                 offset them so each variant gets its own workdir).
             max_workers: Maximum number of concurrent simulations.
+            thread_limit: If a positive int, pin each solve to that many
+                BLAS/OpenMP threads so N concurrent workers map to ~N cores.
+            on_progress: Optional callback invoked after each task completes
+                with (done, total). Exceptions from the callback are silenced.
 
         Returns:
             Dict mapping task index (0-based) to SimulationResult,
@@ -291,12 +325,13 @@ class SimulationExecutor:
         )
 
         results: dict[int, SimulationResult] = {}
+        done = 0
 
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             future_to_idx: dict = {}
             for idx, (network, application, iteration, extra_args) in enumerate(tasks):
                 future = pool.submit(
-                    self.run, network, application, iteration, extra_args,
+                    self.run, network, application, iteration, extra_args, thread_limit,
                 )
                 future_to_idx[future] = idx
 
@@ -317,6 +352,12 @@ class SimulationExecutor:
                         error_message=f"Parallel task {idx} failed: {exc}",
                         workdir=Path("."),
                     )
+                done += 1
+                if on_progress is not None:
+                    try:
+                        on_progress(done, len(tasks))
+                    except Exception:
+                        pass
 
         return results
 

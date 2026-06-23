@@ -22,14 +22,9 @@ data:
 
 # LLM backend settings
 llm:
-  #backend: "anthropic"          # openai | anthropic | ollama | ollama-cloud
-  #model: "claude-sonnet-4-20250514"
-  #api_key_env: "ANTHROPIC_API_KEY"  # env var name containing the API key
-  backend: "openai"
-  model: "gpt-5.4-2026-03-05"
-  api_key_env: "OPENAI_API_KEY"
-  #backend: "ollama-cloud"
-  #model: "gpt-5.1:coud"
+  backend: "anthropic"          # openai | anthropic | ollama | ollama-cloud
+  model: "claude-sonnet-4-20250514"
+  api_key_env: "ANTHROPIC_API_KEY"  # env var name containing the API key
   # OpenAI-specific
   openai_base_url: null
   # Ollama-specific

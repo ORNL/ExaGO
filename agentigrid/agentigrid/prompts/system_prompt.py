@@ -251,93 +251,60 @@ _TCOPFLOW_SECTION = (
 _SOPFLOW_SECTION = (
     "=== Stochastic OPF Characteristics ===\n\n"
     "SOPFLOW (Stochastic Optimal Power Flow) solves a two-stage optimization:\n"
-    "- **First stage (here-and-now):** Finds a base-case dispatch that must satisfy "
-    "network constraints across ALL wind generation scenarios simultaneously.\n"
-    "- **Second stage (wait-and-see):** For each wind scenario, the solver adjusts "
-    "generation to accommodate the specific wind realization while respecting "
-    "system limits.\n"
-    "- The objective value is the expected cost (weighted across scenarios) or the "
-    "base-case cost depending on the formulation.\n"
-    "- If SOPFLOW is infeasible, it means NO dispatch exists that can handle all "
-    "wind scenarios within network constraints at the current operating point.\n\n"
+    "- **First stage (here-and-now):** a base-case dispatch committed to BEFORE "
+    "the wind realization is known.\n"
+    "- **Second stage (wait-and-see):** for each wind scenario, the solver adjusts "
+    "generation to that scenario while respecting system limits.\n"
+    "- Scenarios are read from a wind CSV file (loaded via the -scenfile flag), "
+    "NOT from the .m case file.\n\n"
+    "=== Wind Is a Zero-Cost, Curtailable Upper Bound ===\n\n"
+    "Scenario wind enters the model as a ZERO-COST, CURTAILABLE upper bound on "
+    "generation: the solver absorbs (dispatches) wind up to whatever the network "
+    "can physically take — an absorption capacity P* — and curtails the surplus.\n"
+    "- scale_wind_scenario raises the OFFERED wind. ABSORBED (dispatched) wind "
+    "rises with offered wind and then SATURATES at P*, with the excess curtailed.\n"
+    "- Because surplus wind is simply curtailed at zero cost, feasibility "
+    "essentially does NOT break by scaling wind alone. 'Maximum feasible wind "
+    "scale' is therefore ILL-POSED — do not search for it.\n"
+    "- The meaningful signal is curtailment: how much offered wind the network "
+    "absorbs versus spills.\n\n"
     "=== Wind Scenario File ===\n\n"
-    "SOPFLOW reads wind generation scenarios from a CSV file (via -windgen flag), "
-    "NOT from the .m case file.\n"
-    "- Each scenario specifies a different possible wind generation level for "
-    "each wind generator in the network.\n"
-    "- Standard load commands (scale_all_loads, set_load) modify the .m file but "
-    "do NOT change the wind scenario data.\n"
     "- To change the wind generation level across all scenarios, use "
     "scale_wind_scenario (command 13): "
     '{"action": "scale_wind_scenario", "factor": 1.5}\n'
     "  This multiplies all wind generation values in the scenario CSV by the "
-    "factor. Factor > 1.0 increases wind penetration; factor < 1.0 reduces it.\n"
+    "factor. Factor > 1.0 raises offered wind; factor < 1.0 lowers it.\n"
+    "- Standard load commands (scale_all_loads, set_load) modify the .m file but "
+    "do NOT change the wind scenario data.\n"
     "- The scenario file has two possible formats:\n"
     "  - Single-period: scenario_nr, <bus>_Wind_<id>..., weight\n"
     "  - Multi-period: sim_timestamp, scenario_nr, <bus>_Wind_<id>...\n"
     "- Non-numeric columns (scenario_nr, timestamp, weight) are preserved when "
     "scaling.\n\n"
-    "=== Useful Modifications for SOPFLOW ===\n\n"
-    "- scale_wind_scenario: Change wind penetration level (primary lever for "
-    "SOPFLOW analysis).\n"
-    "- set_all_bus_vlimits / set_bus_vlimits: Tighten or relax voltage constraints.\n"
-    "- scale_all_loads / scale_load: Change demand level in the .m file (affects "
-    "base-case constraints but not wind scenario data).\n"
-    "- set_gen_status / set_gen_dispatch: Change generator commitment/dispatch.\n"
-    "- set_branch_status / set_branch_rate: Modify network topology/capacity.\n"
-    "- set_cost_coeffs: Change generation cost curves.\n\n"
-    "=== Wind Generator Capacity Constraint ===\n\n"
-    "Wind generators in the .m file have a maximum output (Pmax). In the "
-    "first-stage dispatch, wind generators are often dispatched AT their Pmax. "
-    "When this happens:\n"
-    "- scale_wind_scenario with factor > 1.0 may NOT change the first-stage "
-    "dispatch, because the wind generator is already at its capacity limit.\n"
-    "- To increase wind's effective contribution, also increase the wind "
-    "generator's Pmax using set_gen_dispatch (e.g., set Pmax to a higher value).\n"
-    "- To test system robustness more effectively, combine scale_wind_scenario "
-    "with scale_all_loads to increase demand while increasing wind.\n"
-    "- Check the results summary for 'Pg/Pmax' utilization. If wind generators "
-    "are at 100% capacity, scaling wind scenarios alone will not move the dispatch.\n\n"
     "=== SOPFLOW Results Interpretation ===\n\n"
-    "- The results show the FIRST-STAGE (base-case) dispatch — the operating "
-    "point that the system must commit to BEFORE knowing which wind scenario "
-    "will materialise.\n"
-    "- Wind generator output shown in results is the first-stage dispatch value, "
-    "not the scenario values.\n"
-    "- If the base case is feasible, all wind scenarios can be handled through "
-    "second-stage adjustments.\n"
-    "- If the base case is infeasible, no single dispatch can accommodate all "
-    "scenarios — you may need to reduce wind penetration (scale_wind_scenario "
-    "with factor < 1.0) or relax constraints.\n\n"
-    "=== SOPFLOW Analysis Limitations ===\n\n"
-    "SOPFLOW output only contains the first-stage (base-case) dispatch. "
-    "Per-scenario voltage, loading, or generation data is NOT available through "
-    "the `analyze` command — the solver only prints the base-case solution.\n"
-    "Do NOT attempt to query per-scenario voltage or loading profiles.\n"
-    "To explore how different wind levels affect feasibility:\n"
-    "- Use `scale_wind_scenario` (factor > 1.0) to increase wind penetration "
-    "and observe whether the base case becomes infeasible.\n"
-    "- Use `scale_all_loads` combined with `scale_wind_scenario` to push the "
-    "system toward its feasibility boundary.\n"
-    "- The `analyze` command can report base-case voltage, line loading, and "
-    "generator data (same as OPFLOW), but NOT per-scenario breakdowns.\n\n"
-    "=== SOPFLOW Solver and Feasibility ===\n\n"
-    "- SOPFLOW supports two solvers:\n"
-    "  - IPOPT (single-core): Solves the full stochastic problem. Reports "
-    "DID NOT CONVERGE when no dispatch satisfies all scenarios.\n"
-    "  - EMPAR (multi-core): Decomposes the problem by scenario. Faster for "
-    "large systems but may miss coupling constraints between scenarios.\n"
-    "- Feasibility classification:\n"
-    "  - feasible: Converged with no violations across all scenarios.\n"
-    "  - infeasible: Did not converge and metrics are far from limits, or "
-    "generation < load.\n"
-    "  - marginal: Did not fully converge BUT metrics are near their limits "
-    "(e.g., voltage within 0.01 pu of a bound, line loading within 5% of 100%). "
-    "This indicates the operating point is at or near the feasibility boundary — "
-    "treat as a boundary marker.\n"
-    "- When a binary search produces consecutive 'marginal' or "
-    "'feasible/infeasible' oscillations with a gap < 1%, declare 'complete' — "
-    "you have found the boundary."
+    "The results summary now reports, aggregated across scenarios:\n"
+    "- Offered (available) wind, Dispatched (absorbed) wind, and Curtailed wind "
+    "(MW and %). These are the PRIMARY signal for SOPFLOW.\n"
+    "- At low offered wind, curtailment is ~0 (all wind absorbed). As you scale "
+    "wind up, absorbed wind plateaus at P* and curtailment grows.\n\n"
+    "=== Recommended Search: Absorption Capacity and Saturation Onset ===\n\n"
+    "To characterize how much wind the network can absorb:\n"
+    "1. Estimate P* by applying a large scale_wind_scenario factor (e.g. 10x): "
+    "dispatched (absorbed) wind plateaus at P* (the absorption capacity).\n"
+    "2. Binary-search the factor to find the smallest k where "
+    "dispatched >= (1 - epsilon) * P* (epsilon ~ 1%) — the saturation onset, k*. "
+    "Curtailment jumps from ~0 to positive at this knee.\n"
+    "3. Report P* (absorption capacity, MW) and k* (saturation factor). Both "
+    "depend on the load level, so state the load condition you used.\n\n"
+    "=== SOPFLOW Solver ===\n\n"
+    "- Use IPOPT for the coupled stochastic solve:\n"
+    "  - IPOPT (single-core): solves the full stochastic problem.\n"
+    "  - EMPAR (multi-core): decomposes by scenario; faster for large systems but "
+    "may miss coupling constraints between scenarios.\n"
+    "- With wind scaling, the operative signal is CURTAILMENT, not "
+    "non-convergence: scaling wind raises curtailment rather than breaking "
+    "feasibility. Read absorbed/curtailed wind from the results summary to drive "
+    "the search."
 )
 
 _PFLOW_SECTION_CORE = (
@@ -654,7 +621,7 @@ def _build_standard_prompt(
 }}
 """
     else:
-        _action_header = "You MUST respond with a single JSON object. Choose one of three actions:"
+        _action_header = "You MUST respond with a single JSON object. Choose one of four actions:"
         _action_section = """
 1. MODIFY the network — apply changes and run a simulation:
 {{
@@ -680,6 +647,20 @@ def _build_standard_prompt(
   "action": "analyze",
   "reasoning": "What information is needed and why.",
   "query": "e.g. buses with voltage below 0.95"
+}}
+
+4. SWEEP over a candidate set — test the SAME mutation at every bus (or a subset) in ONE action.
+   Use this for any goal of the form "find all buses that can ..." or "for each bus ...".
+   The system loops over the candidates in code (in parallel), solves each, enforces the
+   feasibility voltage band you specify, and returns a table of per-bus feasibility. You then
+   read the table and report the answer with a "complete" action.
+{{
+  "action": "sweep",
+  "reasoning": "Why this sweep answers the goal.",
+  "description": "Short one-line description for the journal",
+  "candidate_set": {{"type": "all_buses"}},
+  "mutation": {{"action": "add_generator_at_bus", "capacity_mw": 100.0}},
+  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
 }}
 """
 
@@ -716,6 +697,9 @@ network and run {application.upper()} simulations to achieve a user-specified go
 - Use "accumulative" mode to build on top of the previous iteration's network.
 - Fresh mode is best for binary-search or parameter-sweep approaches.
 - Accumulative mode is best for incremental refinement.
+- For "find all buses that can host a load/generator" goals, use the `sweep` action with \
+`add_load_at_bus` or `add_generator_at_bus` as the mutation — do NOT use `scale_all_loads`, \
+which changes the whole network uniformly and does not answer a per-bus question.
 - Declare "complete" when you have a clear answer, when further iterations \
 cannot improve the result, or when the goal is provably infeasible.
 - When performing a binary search (e.g., finding a maximum scaling factor), \

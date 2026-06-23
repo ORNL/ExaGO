@@ -285,6 +285,7 @@ def build_config_overrides(
     benchmark_opflow: bool = False,
     concurrent_pflow: bool = False,
     max_variants: int = 8,
+    sweep_max_workers: int = 0,
     load_factor: float | None = None,
 ) -> dict[str, Any]:
     """Build a CLI-style overrides dict from GUI widget values.
@@ -372,6 +373,9 @@ def build_config_overrides(
 
     if max_variants != 8:
         overrides["search.max_variants"] = max_variants
+
+    if sweep_max_workers != 0:
+        overrides["search.sweep_max_workers"] = sweep_max_workers
 
     if load_factor is not None:
         overrides["search.load_factor"] = load_factor

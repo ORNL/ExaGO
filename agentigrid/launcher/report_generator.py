@@ -235,6 +235,9 @@ class ReportGenerator:
         best_iter_override = gc.get("best_iteration") if gc else None
         goal_type = gc.get("goal_type") if gc else None
 
+        sweep_entry = session.journal.get_sweep_entry()
+        is_sweep = sweep_entry is not None
+
         v_min = session.enforced_vmin if session.enforced_vmin is not None else 0.95
         v_max = session.enforced_vmax if session.enforced_vmax is not None else 1.05
 
@@ -252,16 +255,19 @@ class ReportGenerator:
             session, summary_text, goal_classification=gc,
         ))
         story.append(PageBreak())
-        story.extend(self._build_convergence_section(
-            session, best_iteration=best_iter_override, goal_type=goal_type,
-            v_min=v_min, v_max=v_max,
-        ))
-        story.append(PageBreak())
-        story.extend(self._build_comparison_section(
-            session, base_result, best_result, goal_type=goal_type,
-            best_iteration_override=best_iter_override,
-            v_min=v_min, v_max=v_max,
-        ))
+        if is_sweep:
+            story.extend(self._build_sweep_results_section(session, sweep_entry))
+        else:
+            story.extend(self._build_convergence_section(
+                session, best_iteration=best_iter_override, goal_type=goal_type,
+                v_min=v_min, v_max=v_max,
+            ))
+            story.append(PageBreak())
+            story.extend(self._build_comparison_section(
+                session, base_result, best_result, goal_type=goal_type,
+                best_iteration_override=best_iter_override,
+                v_min=v_min, v_max=v_max,
+            ))
         story.append(PageBreak())
         story.extend(self._build_iteration_log(session))
 
@@ -529,6 +535,26 @@ class ReportGenerator:
         duration = end - start
         total_tokens = session.total_prompt_tokens + session.total_completion_tokens
 
+        # Sweep shortcut: replace the scalar-objective block with sweep summary
+        sweep_entry = session.journal.get_sweep_entry()
+        if sweep_entry is not None:
+            n_cand = sweep_entry.candidate_count or 0
+            n_feas = len(sweep_entry.feasible_buses or [])
+            sweep_lines = [
+                f"Sweep complete: {n_feas} of {n_cand} candidate buses are feasible.",
+                f"Total iterations: {stats['total_iterations']}",
+                f"Duration: {duration.total_seconds():.0f}s",
+                f"Termination: {session.termination_reason}",
+                f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A",
+            ]
+            for line in sweep_lines:
+                elements.append(Paragraph(self._escape_xml(line), s["body"]))
+            if summary_text:
+                elements.append(Spacer(1, 0.5 * cm))
+                elements.append(Paragraph("Analysis", s["heading2"]))
+                elements.extend(self._render_summary_text(summary_text))
+            return elements
+
         # Key results
         marginal_count = sum(
             1 for e in session.journal.entries if e.feasibility_detail == "marginal"
@@ -589,6 +615,113 @@ class ReportGenerator:
             elements.append(Spacer(1, 0.5 * cm))
             elements.append(Paragraph("Analysis", s["heading2"]))
             elements.extend(self._render_summary_text(summary_text))
+
+        return elements
+
+    # ── Sweep Results Section ────────────────────────────────────────────
+
+    def _build_sweep_results_section(self, session, sweep_entry) -> list:
+        """Build the sweep-results section: feasible-bus table + infeasible list."""
+        s = self._styles
+        elements: list = []
+        elements.append(Paragraph("Sweep Results", s["heading1"]))
+
+        variants = sweep_entry.explored_variants or []
+        n_cand = sweep_entry.candidate_count or len(variants)
+        feasible = [v for v in variants if v.get("feasible")]
+        infeasible = [v for v in variants if not v.get("feasible")]
+        feasible.sort(key=lambda v: v["bus"])
+        infeasible.sort(key=lambda v: v["bus"])
+
+        elements.append(Paragraph(
+            f"The mutation described as “{self._escape_xml(sweep_entry.description)}” "
+            f"was tested at {n_cand} candidate buses. "
+            f"{len(feasible)} are feasible; {len(infeasible)} are infeasible "
+            f"under the stated criteria.",
+            s["body"],
+        ))
+        elements.append(Spacer(1, 0.5 * cm))
+
+        # Feasible-bus table (primary result)
+        elements.append(Paragraph(f"Feasible buses ({len(feasible)})", s["heading2"]))
+        if feasible:
+            header = ["Bus", "V_min (pu)", "V_max (pu)", "Max Line Loading (%)", "Violations", "System Cost ($)"]
+            rows = [header]
+            for v in feasible:
+                cost = v.get("cost")
+                rows.append([
+                    str(v["bus"]),
+                    f"{v.get('voltage_min', 0):.3f}",
+                    f"{v.get('voltage_max', 0):.3f}",
+                    f"{v.get('max_line_loading_pct', 0):.1f}",
+                    str(v.get("violations", 0)),
+                    f"{cost:,.2f}" if isinstance(cost, (int, float)) and cost else "—",
+                ])
+            col_widths = [2 * cm, 2.8 * cm, 2.8 * cm, 4 * cm, 2.4 * cm, 3 * cm]
+            table = Table(rows, colWidths=col_widths, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3498db")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("FONTNAME", (0, 1), (-1, -1), self._font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8f9fa")]),
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("ALIGN", (0, 0), (0, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(table)
+        else:
+            elements.append(Paragraph("No buses were found to be feasible.", s["body"]))
+        elements.append(Spacer(1, 0.5 * cm))
+
+        elements.append(Spacer(1, 0.5 * cm))
+        elements.append(Paragraph(f"Infeasible buses ({len(infeasible)})", s["heading2"]))
+        if infeasible:
+            header = ["Bus", "Reason", "V_min (pu)", "V_max (pu)",
+                      "Max Line Loading (%)", "Violations"]
+            rows = [header]
+            for v in infeasible:
+                rows.append([
+                    str(v["bus"]),
+                    (v.get("reason") or "infeasible").capitalize(),
+                    f"{v.get('voltage_min', 0):.3f}",
+                    f"{v.get('voltage_max', 0):.3f}",
+                    f"{v.get('max_line_loading_pct', 0):.1f}",
+                    str(v.get("violations", 0)),
+                ])
+            col_widths = [1.8 * cm, 3.6 * cm, 2.6 * cm, 2.6 * cm, 3.6 * cm, 2.4 * cm]
+            table = Table(rows, colWidths=col_widths, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c0392b")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("FONTNAME", (0, 1), (-1, -1), self._font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fdf2f1")]),
+                ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+                ("ALIGN", (0, 0), (0, -1), "CENTER"),
+                ("ALIGN", (1, 0), (1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 0.3 * cm))
+            elements.append(Paragraph(
+                "Metrics are taken from the solver’s last iterate. For buses marked "
+                "“Did not converge”, that iterate was not certified as a solution and may "
+                "appear to satisfy the limits even though no feasible operating point was "
+                "found (these rows typically show 0 violations). For “Line overload” and "
+                "“Voltage low” buses, the listed value is the binding violation.",
+                s["caption"],
+            ))
+        else:
+            elements.append(Paragraph("None — all candidate buses are feasible.", s["body"]))
 
         return elements
 
@@ -782,17 +915,29 @@ class ReportGenerator:
             header = ["Iter", "Description", "Cost ($)", "Feas.", "V_min", "V_max", "Load%", "Time(s)"]
         rows = [header]
 
+        _NON_SIM = {"SWEEP", "EXPLORE", "ANALYSIS", "COMPLETE"}
+
         for e in session.journal.entries:
-            if e.feasibility_detail == "marginal":
-                feas_text = "Marg"
-            elif e.feasible:
-                feas_text = "Y"
+            if e.convergence_status in _NON_SIM:
+                cost_cell = e.convergence_status
+                feas_text = "—"
+                desc = e.description[:40]
+                if e.convergence_status == "SWEEP" and e.candidate_count:
+                    n_feas = len(e.feasible_buses or [])
+                    desc = f"{e.description[:22]} — {n_feas}/{e.candidate_count} feasible"[:40]
             else:
-                feas_text = "N"
+                if e.feasibility_detail == "marginal":
+                    feas_text = "Marg"
+                elif e.feasible:
+                    feas_text = "Y"
+                else:
+                    feas_text = "N"
+                cost_cell = f"${e.objective_value:,.2f}" if e.objective_value is not None else "FAILED"
+                desc = e.description[:40]
             row = [
                 str(e.iteration),
-                e.description[:40],
-                f"${e.objective_value:,.2f}" if e.objective_value is not None else "FAILED",
+                desc,
+                cost_cell,
                 feas_text,
             ]
             if is_tcopflow:

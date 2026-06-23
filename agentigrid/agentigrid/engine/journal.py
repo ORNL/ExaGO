@@ -42,6 +42,8 @@ class JournalEntry:
     num_steps: int = 0  # TCOPFLOW: number of time periods
     num_scenarios: int = 0  # SOPFLOW: number of wind scenarios
     explored_variants: Optional[list[dict]] = None  # Explore/select: companion variants
+    candidate_count: int = 0  # Sweep: total number of candidates tested
+    feasible_buses: Optional[list[int]] = None  # Sweep: list of feasible bus ids
 
 
 @dataclass
@@ -353,6 +355,46 @@ class SearchJournal:
         self._entries.append(entry)
         return entry
 
+    def add_sweep(
+        self,
+        iteration: int,
+        description: str,
+        candidate_count: int,
+        candidate_summaries: list[dict],
+        feasible_buses: list[int],
+        llm_reasoning: str = "",
+        steering_directive: Optional[str] = None,
+    ) -> JournalEntry:
+        """Record a 'sweep' action in the journal.
+
+        Creates a lightweight entry (no single simulation result) with
+        per-candidate summaries stored in explored_variants.
+        """
+        entry = JournalEntry(
+            iteration=iteration,
+            description=description,
+            commands=[],
+            objective_value=None,
+            feasible=len(feasible_buses) > 0,
+            convergence_status="SWEEP",
+            violations_count=0,
+            voltage_min=0.0,
+            voltage_max=0.0,
+            max_line_loading_pct=0.0,
+            total_gen_mw=0.0,
+            total_load_mw=0.0,
+            llm_reasoning=llm_reasoning,
+            mode="sweep",
+            elapsed_seconds=0.0,
+            steering_directive=steering_directive,
+            feasibility_detail="",
+            explored_variants=candidate_summaries,
+            candidate_count=candidate_count,
+            feasible_buses=feasible_buses,
+        )
+        self._entries.append(entry)
+        return entry
+
     def add_analysis(
         self,
         iteration: int,
@@ -416,6 +458,13 @@ class SearchJournal:
         self._entries.append(entry)
         return entry
 
+    def get_sweep_entry(self) -> Optional[JournalEntry]:
+        """Return the most recent sweep entry (mode='sweep'), or None."""
+        for e in reversed(self._entries):
+            if e.mode == "sweep":
+                return e
+        return None
+
     @property
     def entries(self) -> list[JournalEntry]:
         """All journal entries (read-only copy)."""
@@ -451,6 +500,15 @@ class SearchJournal:
             return (
                 f"{e.iteration:>4} | {desc} | {'EXPLORE':>14} |  N/A  | "
                 f"{n_var} variants{pareto:<13} |      N/A"
+            )
+        elif e.convergence_status == "SWEEP":
+            desc = desc_text[:35].ljust(35)
+            n_feas = len(e.feasible_buses) if e.feasible_buses is not None else 0
+            n_cand = e.candidate_count or 0
+            feas_summary = f"{n_feas}/{n_cand} feasible"
+            return (
+                f"{e.iteration:>4} | {desc} | {'SWEEP':>14} |  N/A  | "
+                f"{feas_summary:<13} |      N/A"
             )
         elif e.feasible and e.objective_value is not None:
             cost = f"{e.objective_value:>12,.2f}"
@@ -539,6 +597,12 @@ class SearchJournal:
                 parts.append(f"Time periods: {e.num_steps}")
             if e.num_scenarios > 0:
                 parts.append(f"Wind scenarios: {e.num_scenarios}")
+            if e.candidate_count > 0:
+                parts.append(f"Sweep candidates: {e.candidate_count}")
+            if e.feasible_buses is not None:
+                n_feas = len(e.feasible_buses)
+                parts.append(f"Feasible buses ({n_feas}): {e.feasible_buses[:20]}"
+                             + ("..." if n_feas > 20 else ""))
             if e.objective_value is not None:
                 parts.append(f"Objective value: ${e.objective_value:,.2f}")
             else:
@@ -671,7 +735,7 @@ class SearchJournal:
             "total_gen_mw", "total_load_mw", "llm_reasoning",
             "mode", "elapsed_seconds", "timestamp", "steering_directive",
             "tracked_metrics", "feasibility_detail", "solver", "num_steps", "num_scenarios",
-            "explored_variants",
+            "explored_variants", "candidate_count", "feasible_buses",
         ]
 
         with open(path, "w", newline="", encoding="utf-8") as f:
@@ -682,6 +746,7 @@ class SearchJournal:
                 row["commands"] = json.dumps(row["commands"])
                 row["tracked_metrics"] = json.dumps(row.get("tracked_metrics") or {})
                 row["explored_variants"] = json.dumps(row.get("explored_variants") or [])
+                row["feasible_buses"] = json.dumps(row.get("feasible_buses") or [])
                 writer.writerow(row)
 
         logger.info("Journal CSV exported to %s (%d entries)", path, len(self._entries))

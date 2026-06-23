@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass, field
 
 from agentigrid.engine.commands import (
+    AddGeneratorAtBus,
+    AddLoadAtBus,
     ModCommand,
     ScaleAllLoads,
     ScaleLoad,
@@ -217,6 +219,19 @@ def validate_command(cmd: ModCommand, net: MATNetwork) -> ValidationResult:
             if abs(cmd.angle) > 90:
                 warnings.append(
                     f"Phase shift angle {cmd.angle} degrees is very large (typical range: -60 to 60)"
+                )
+
+    elif isinstance(cmd, AddLoadAtBus):
+        _validate_bus_exists(net, cmd.bus, errors)
+
+    elif isinstance(cmd, AddGeneratorAtBus):
+        _validate_bus_exists(net, cmd.bus, errors)
+        if cmd.capacity_mw <= 0:
+            errors.append(f"capacity_mw must be > 0, got {cmd.capacity_mw}")
+        if cmd.dispatchable and cmd.Qmax is not None and cmd.Qmin is not None:
+            if cmd.Qmax < cmd.Qmin:
+                errors.append(
+                    f"Qmax={cmd.Qmax} must be >= Qmin={cmd.Qmin} for dispatchable generator"
                 )
 
     return ValidationResult(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import re
 import threading
@@ -62,6 +63,46 @@ _MAX_CONSECUTIVE_PARSE_FAILURES = 3
 def _bus_limits_from_network(net) -> dict[int, tuple[float, float]]:
     """Extract per-bus (Vmin, Vmax) from a MATNetwork for violation checking."""
     return {b.bus_i: (b.Vmin, b.Vmax) for b in net.buses}
+
+
+def _infeasible_reason(
+    voltage_min, voltage_max, max_line_loading_pct,
+    violations, vmin_band, vmax_band, loading_limit=100.0,
+):
+    """Dominant binding constraint for an infeasible sweep candidate.
+
+    Works from per-candidate summary scalars, not the raw OPFLOWResult.
+    Priority: voltage out of band → thermal overload → thermal at limit →
+    did-not-converge (last, because every infeasible candidate in this system
+    is reported DID NOT CONVERGE regardless of the actual cause).
+
+    Two important calibration points from real ACTIVSg200 data:
+    - voltage_min == vmin_band exactly (e.g. 0.9) means the OPF hit the lower
+      voltage bound; use <= (inclusive) so these are labelled "voltage low".
+    - loading == 100.0 exactly with violations == 0 means the thermal limit was
+      just touched but no branch formally exceeded its rating; require violations > 0
+      for both thermal checks so such cases fall through to "did not converge".
+    """
+    v_low = voltage_min is not None and voltage_min > 0 and voltage_min <= vmin_band
+    v_high = voltage_max is not None and voltage_max > vmax_band + 1e-6
+    over_thermal = max_line_loading_pct is not None and max_line_loading_pct > loading_limit + 1e-6
+    at_thermal = max_line_loading_pct is not None and max_line_loading_pct >= loading_limit - 1e-6
+    nviol = violations or 0
+    # 1. Voltage at or below the lower bound (checked first — a bus can be
+    #    both at the voltage floor AND thermally overloaded; voltage binds first)
+    if v_low:
+        return "voltage low"
+    if v_high:
+        return "voltage high"
+    # 2. Thermal overload with at least one recorded violation
+    if over_thermal and nviol > 0:
+        return "line overload"
+    # 3. Thermal at the limit, also requiring a recorded violation
+    #    (loading == 100.0 exactly with viol == 0 is a solver-limit artefact)
+    if at_thermal and nviol > 0:
+        return "line overload"
+    # 4. Residual: solver could not find a strictly feasible point
+    return "did not converge"
 
 
 def _benchmark_to_dict(bresult) -> dict:
@@ -270,7 +311,7 @@ class AgentLoopController:
         if app == "sopflow":
             scenario = self._sopflow_scenario_override or self._config.search.scenario_file
             if scenario:
-                args.extend(["-windgen", str(scenario)])
+                args.extend(["-scenfile", str(scenario)])
                 num_scenarios = _count_scenario_rows(Path(str(scenario)))
                 args.extend(["-sopflow_Ns", str(num_scenarios)])
             solver = self._config.search.sopflow_solver
@@ -422,6 +463,14 @@ class AgentLoopController:
             if meta:
                 self._sopflow_num_scenarios = meta.get("num_scenarios", 0)
 
+        # Compute second-stage wind absorption (offered/dispatched/curtailed)
+        wind_absorption = None
+        if self._config.search.application == "sopflow" and sim_result.success:
+            from agentigrid.parsers import compute_wind_absorption
+            active_scenario = self._sopflow_scenario_override or self._config.search.scenario_file
+            if active_scenario:
+                wind_absorption = compute_wind_absorption(sim_result.workdir, Path(str(active_scenario)))
+
         opflow = parse_simulation_result_for_app(
             sim_result,
             application=self._config.search.application,
@@ -440,6 +489,7 @@ class AgentLoopController:
                 is_coupling=self._tcopflow_is_coupling,
                 period_data=self._tcopflow_period_data if self._tcopflow_period_data else None,
                 num_scenarios=self._sopflow_num_scenarios,
+                wind_absorption=wind_absorption,
                 gencost=self._base_network.gencost if self._config.search.application == "pflow" else None,
             )
             self._base_opflow_result = opflow
@@ -655,6 +705,8 @@ class AgentLoopController:
             return self._handle_complete(iteration, data)
         elif action == "analyze":
             return self._handle_analyze(iteration, data)
+        elif action == "sweep":
+            return self._handle_sweep(iteration, data)
         elif action == "set_load_factor":
             return self._handle_set_load_factor(iteration, data)
         else:
@@ -662,6 +714,8 @@ class AgentLoopController:
             valid = "modify, explore, select, complete, analyze"
             if self._config.search.concurrent_pflow and self._config.search.application == "pflow":
                 self._error_feedback = f"Unknown action '{action}'. Valid actions: {valid}."
+            elif self._config.search.application == "opflow":
+                self._error_feedback = f"Unknown action '{action}'. Valid actions: modify, sweep, complete, analyze."
             else:
                 self._error_feedback = f"Unknown action '{action}'. Valid actions: modify, complete, analyze."
             return "error", True
@@ -797,6 +851,14 @@ class AgentLoopController:
             from agentigrid.parsers import parse_tcopflow_period_files
             self._tcopflow_period_data = parse_tcopflow_period_files(sim_result.workdir)
 
+        # Compute second-stage wind absorption (offered/dispatched/curtailed)
+        wind_absorption = None
+        if self._config.search.application == "sopflow" and sim_result.success:
+            from agentigrid.parsers import compute_wind_absorption
+            active_scenario = self._sopflow_scenario_override or self._config.search.scenario_file
+            if active_scenario:
+                wind_absorption = compute_wind_absorption(sim_result.workdir, Path(str(active_scenario)))
+
         if opflow is not None:
             self._latest_results_text = results_summary_for_app(
                 opflow,
@@ -808,6 +870,7 @@ class AgentLoopController:
                 is_coupling=self._tcopflow_is_coupling,
                 period_data=self._tcopflow_period_data if self._tcopflow_period_data else None,
                 num_scenarios=self._sopflow_num_scenarios,
+                wind_absorption=wind_absorption,
                 gencost=self._current_network.gencost if self._config.search.application == "pflow" else None,
             )
             self._current_network = modified_net
@@ -1288,6 +1351,278 @@ class AgentLoopController:
 
         return "explore", True
 
+    def _resolve_sweep_workers(self, n_tasks: int) -> int:
+        """Resolve the sweep concurrency from config (0 = auto)."""
+        raw = self._config.search.sweep_max_workers
+        workers = raw if (raw and raw > 0) else min(os.cpu_count() or 4, 16)
+        return max(1, min(workers, n_tasks))
+
+    def _handle_sweep(
+        self, iteration: int, data: dict
+    ) -> tuple[str, bool]:
+        """Handle a 'sweep' action — test one mutation across a candidate bus set in parallel."""
+        if self._config.search.application != "opflow":
+            self._print(f"[Iter {iteration}] 'sweep' is only supported for OPFLOW")
+            self._error_feedback = (
+                "The 'sweep' action is only supported for the OPFLOW application. "
+                "Use 'modify' for other applications."
+            )
+            return "error", True
+
+        description = data.get("description", "Parametric sweep")
+        reasoning = data.get("reasoning", "")
+        candidate_set_spec = data.get("candidate_set", {})
+        mutation_template = data.get("mutation", {})
+        feasibility_spec = data.get("feasibility", {})
+
+        if not mutation_template or "action" not in mutation_template:
+            self._error_feedback = "sweep requires a 'mutation' dict with an 'action' key."
+            return "error", True
+
+        # 1. Resolve candidate buses
+        ctype = candidate_set_spec.get("type", "")
+        if ctype == "all_buses":
+            candidates = [b.bus_i for b in self._base_network.buses]
+        elif ctype == "load_buses":
+            candidates = [b.bus_i for b in self._base_network.buses if b.Pd != 0]
+        elif ctype == "bus_list":
+            raw_buses = candidate_set_spec.get("buses", [])
+            if not isinstance(raw_buses, list) or not raw_buses:
+                self._error_feedback = (
+                    "sweep candidate_set type='bus_list' requires a non-empty 'buses' list."
+                )
+                return "error", True
+            candidates = [int(b) for b in raw_buses]
+        else:
+            self._error_feedback = (
+                f"Unknown candidate_set type '{ctype}'. "
+                "Supported: 'all_buses', 'load_buses', 'bus_list'."
+            )
+            return "error", True
+
+        candidates = sorted(candidates)  # deterministic order by bus id
+
+        if not candidates:
+            self._error_feedback = "Sweep resolved to an empty candidate set."
+            return "error", True
+
+        self._print(
+            f'[Iter {iteration}] LLM action: sweep — "{description}" '
+            f"({len(candidates)} candidates, mutation: {mutation_template.get('action', '?')})"
+        )
+
+        vmin = feasibility_spec.get("Vmin", 0.9)
+        vmax = feasibility_spec.get("Vmax", 1.1)
+
+        if self._on_phase:
+            self._on_phase(iteration, "applying_commands")
+
+        # Pre-compute bus limits after applying the vlimits command (same for all candidates)
+        try:
+            _vlimits_parsed = parse_command(
+                {"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax}
+            )
+            _vlimits_net, _ = apply_modifications(
+                self._base_network, [_vlimits_parsed], application="opflow",
+            )
+            bus_limits_for_sweep = _bus_limits_from_network(_vlimits_net)
+        except Exception:
+            bus_limits_for_sweep = _bus_limits_from_network(self._base_network)
+
+        # 2. Build per-candidate sim tasks
+        sim_tasks: list[tuple[MATNetwork, str, int, list[str] | None]] = []
+        cand_indices_for_tasks: list[int] = []  # task_idx → candidate_idx
+        skipped_cand_indices: set[int] = set()
+        build_errors: list[str] = []
+
+        for cand_idx, bus_id in enumerate(candidates):
+            raw_cmds = [
+                {"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax},
+                dict(mutation_template, bus=bus_id),
+            ]
+            commands = []
+            parse_ok = True
+            for raw in raw_cmds:
+                try:
+                    commands.append(parse_command(raw))
+                except ValueError as exc:
+                    build_errors.append(f"Bus {bus_id}: {exc}")
+                    parse_ok = False
+                    break
+
+            if not parse_ok:
+                skipped_cand_indices.add(cand_idx)
+                continue
+
+            modified_net, _ = apply_modifications(
+                self._base_network, commands, application="opflow",
+            )
+            cand_iter = -(iteration * 10000 + cand_idx)
+            sim_tasks.append((modified_net, "opflow", cand_iter, self._build_extra_args()))
+            cand_indices_for_tasks.append(cand_idx)
+
+        if not sim_tasks:
+            self._error_feedback = (
+                "All sweep candidates failed to build commands. Errors:\n"
+                + "\n".join(build_errors[:5])
+            )
+            return "error", True
+
+        # 3. Run in parallel
+        workers = self._resolve_sweep_workers(len(sim_tasks))
+        thread_limit = 1 if workers > 1 else None
+
+        if self._on_phase:
+            self._on_phase(
+                iteration, f"running_simulation ({len(sim_tasks)} sweep candidates)"
+            )
+        self._print(
+            f"[Iter {iteration}] Running {len(sim_tasks)} sweep simulations "
+            f"({workers} concurrent)..."
+        )
+
+        def _sweep_progress(done: int, total: int) -> None:
+            if self._on_phase:
+                self._on_phase(iteration, f"running_simulation (sweep {done}/{total} solved)")
+
+        results_map = self._executor.run_parallel(
+            sim_tasks,
+            max_workers=workers,
+            thread_limit=thread_limit,
+            on_progress=_sweep_progress,
+        )
+
+        # Map task index back to candidate index
+        results_by_cand: dict[int, "SimulationResult"] = {}
+        for task_idx, cand_idx in enumerate(cand_indices_for_tasks):
+            r = results_map.get(task_idx)
+            if r is not None:
+                results_by_cand[cand_idx] = r
+
+        # 4. Parse + classify each result (in sorted candidate order)
+        candidate_summaries: list[dict] = []
+        feasible_buses: list[int] = []
+        first_feasible_opflow: "OPFLOWResult | None" = None
+        first_opflow: "OPFLOWResult | None" = None
+
+        for cand_idx, bus_id in enumerate(candidates):
+            if cand_idx in skipped_cand_indices:
+                candidate_summaries.append({
+                    "bus": bus_id,
+                    "feasible": False,
+                    "voltage_min": 0.0,
+                    "voltage_max": 0.0,
+                    "max_line_loading_pct": 0.0,
+                    "violations": 0,
+                    "cost": None,
+                    "status": "BUILD_ERROR",
+                    "reason": "build error",
+                })
+                continue
+
+            sim_result = results_by_cand.get(cand_idx)
+            opflow = None
+            if sim_result is not None:
+                opflow = parse_simulation_result_for_app(
+                    sim_result,
+                    application="opflow",
+                    bus_limits=bus_limits_for_sweep,
+                )
+
+            if first_opflow is None and opflow is not None:
+                first_opflow = opflow
+
+            is_feasible = (
+                opflow is not None
+                and opflow.feasibility_detail == "feasible"
+                and opflow.num_violations == 0
+            )
+
+            if is_feasible:
+                feasible_buses.append(bus_id)
+                if first_feasible_opflow is None:
+                    first_feasible_opflow = opflow
+
+            if is_feasible:
+                reason = ""
+            elif opflow is not None:
+                reason = _infeasible_reason(
+                    opflow.voltage_min, opflow.voltage_max,
+                    opflow.max_line_loading_pct, opflow.num_violations,
+                    vmin, vmax,
+                )
+            else:
+                reason = "did not converge"
+
+            candidate_summaries.append({
+                "bus": bus_id,
+                "feasible": is_feasible,
+                "voltage_min": opflow.voltage_min if opflow else 0.0,
+                "voltage_max": opflow.voltage_max if opflow else 0.0,
+                "max_line_loading_pct": opflow.max_line_loading_pct if opflow else 0.0,
+                "violations": opflow.num_violations if opflow else 0,
+                "cost": opflow.objective_value if opflow else None,
+                "status": opflow.convergence_status if opflow else "FAILED",
+                "reason": reason,
+            })
+
+        self._latest_opflow = first_feasible_opflow or first_opflow
+
+        # 5. Build compact results table
+        mut_action = mutation_template.get("action", "unknown")
+        mut_desc_parts = [mut_action]
+        if "capacity_mw" in mutation_template:
+            mut_desc_parts.append(f"{mutation_template['capacity_mw']} MW")
+            if not mutation_template.get("dispatchable", False):
+                mut_desc_parts.append("forced injection")
+        if "Pd" in mutation_template:
+            mut_desc_parts.append(f"Pd={mutation_template['Pd']} MW")
+
+        mut_desc = " ".join(str(p) for p in mut_desc_parts)
+
+        infeasible_buses = [s["bus"] for s in candidate_summaries if not s["feasible"]]
+        if len(infeasible_buses) > 20:
+            infeasible_str = f"[{', '.join(str(b) for b in infeasible_buses[:20])}, ...]"
+        else:
+            infeasible_str = f"[{', '.join(str(b) for b in infeasible_buses)}]"
+
+        table_lines = [
+            f"Sweep over {len(candidates)} candidate buses (mutation: {mut_desc}):",
+            f"FEASIBLE: {len(feasible_buses)} / {len(candidates)}.  INFEASIBLE buses: {infeasible_str}",
+            f"{'bus':>4} | {'feasible':>8} | {'Vmin':>5} | {'Vmax':>5} | {'maxLoad%':>8} | {'viol':>4} | {'cost':>12}",
+        ]
+        for s in candidate_summaries:
+            feas_str = "yes" if s["feasible"] else "no"
+            cost_val = s["cost"]
+            cost_str = f"{cost_val:>12,.1f}" if cost_val is not None else "           N/A"
+            table_lines.append(
+                f"{s['bus']:>4} | {feas_str:>8} | {s['voltage_min']:>5.3f} | "
+                f"{s['voltage_max']:>5.3f} | {s['max_line_loading_pct']:>8.1f} | "
+                f"{s['violations']:>4} | {cost_str}"
+            )
+        self._latest_results_text = "\n".join(table_lines)
+
+        # 6. Journal
+        active_directive = (
+            self._active_steering_directives[-1]["directive"]
+            if self._active_steering_directives else None
+        )
+        self._journal.add_sweep(
+            iteration=iteration,
+            description=f"[sweep] {description}",
+            candidate_count=len(candidates),
+            candidate_summaries=candidate_summaries,
+            feasible_buses=feasible_buses,
+            llm_reasoning=reasoning,
+            steering_directive=active_directive,
+        )
+
+        self._print(
+            f"[Iter {iteration}] Sweep complete: {len(feasible_buses)}/{len(candidates)} feasible buses"
+        )
+
+        return "sweep", True
+
     def _handle_select(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -1580,21 +1915,12 @@ class AgentLoopController:
                 else:
                     lines.append("All scenarios satisfied network constraints (base case feasible).")
                 lines.append(
-                    "Note: SOPFLOW output only contains the base-case (first-stage) dispatch. "
-                    "Per-scenario voltage/loading data is not available. "
-                    "To explore scenario effects, modify the network (e.g., scale_wind_scenario, "
-                    "scale_all_loads) and observe feasibility changes."
+                    "Note: per-scenario second-stage dispatch IS now available. The results "
+                    "summary reports offered, dispatched (absorbed), and curtailed wind across "
+                    "scenarios. Use scale_wind_scenario to raise offered wind: absorbed wind "
+                    "rises then saturates at the network absorption capacity P*, with the "
+                    "surplus curtailed."
                 )
-                if wind_gens:
-                    wind_pg = sum(g.Pg for g in wind_gens)
-                    wind_pmax = sum(g.Pmax for g in wind_gens)
-                    if wind_pmax > 0 and wind_pg / wind_pmax >= 0.995:
-                        lines.append(
-                            "WARNING: Wind generators are at maximum capacity in the base-case "
-                            "dispatch. scale_wind_scenario alone will NOT change the first-stage "
-                            "dispatch. Increase wind Pmax (set_gen_dispatch) or increase system "
-                            "stress (scale_all_loads) to see feasibility changes."
-                        )
                 return "\n".join(lines)
         m = re.search(r"voltage\s+below\s+([\d.]+)", q)
         if m:

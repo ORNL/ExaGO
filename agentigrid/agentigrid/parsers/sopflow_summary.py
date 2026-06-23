@@ -5,13 +5,17 @@ from __future__ import annotations
 from agentigrid.parsers.opflow_results import OPFLOWResult
 
 
-def sopflow_results_summary(result: OPFLOWResult, num_scenarios: int = 0) -> str:
+def sopflow_results_summary(
+    result: OPFLOWResult, num_scenarios: int = 0, wind_absorption: dict | None = None
+) -> str:
     """Generate a compact text summary of SOPFLOW results for the LLM.
 
     This extends the OPFLOW summary with SOPFLOW-specific context:
     - Header identifies it as stochastic results
     - Notes number of scenarios
     - Explains that this is the expected-cost base-case dispatch
+    - Reports second-stage wind absorption (offered/dispatched/curtailed)
+      when *wind_absorption* is provided
     - All other metrics (voltage, generation, line loading) same as OPFLOW
     """
     lines: list[str] = []
@@ -30,10 +34,6 @@ def sopflow_results_summary(result: OPFLOWResult, num_scenarios: int = 0) -> str
     lines.append(
         "satisfy constraints across all wind generation scenarios simultaneously."
     )
-    if num_scenarios > 0:
-        lines.append(
-            "Per-scenario voltage/loading data is not available in SOPFLOW output."
-        )
     lines.append("")
 
     # Voltage profile
@@ -85,6 +85,34 @@ def sopflow_results_summary(result: OPFLOWResult, num_scenarios: int = 0) -> str
         )
     lines.append("")
 
+    # Wind absorption (second stage, across scenarios) — the primary signal
+    if wind_absorption is not None:
+        ns = wind_absorption["num_scenarios"]
+        lines.append(
+            f"=== Wind absorption (second stage, across {ns} scenarios) ==="
+        )
+        lines.append(
+            f"Offered (available):   {wind_absorption['total_available_mw']:.2f} MW"
+        )
+        lines.append(
+            f"Dispatched (absorbed): {wind_absorption['total_dispatched_mw']:.2f} MW"
+        )
+        lines.append(
+            f"Curtailed:             {wind_absorption['total_curtailment_mw']:.2f} MW "
+            f"({wind_absorption['curtailment_pct']:.1f}%)"
+        )
+        if wind_absorption["curtailment_pct"] < 1.0:
+            lines.append(
+                "All offered wind is absorbed — below the network's absorption "
+                "capacity; increase scale to approach saturation."
+            )
+        else:
+            lines.append(
+                "Curtailment is active — dispatched wind is at/near the network "
+                "absorption capacity P*. Absorbed wind ~ P* at high curtailment."
+            )
+        lines.append("")
+
     # Generators
     online = sum(1 for g in result.generators if g.status == 1)
     offline = sum(1 for g in result.generators if g.status == 0)
@@ -99,13 +127,6 @@ def sopflow_results_summary(result: OPFLOWResult, num_scenarios: int = 0) -> str
             f"  Wind capacity utilization: {wind_pg:.2f} / {wind_pmax:.2f} MW "
             f"({wind_util:.0f}%)"
         )
-        if wind_util >= 99.5:
-            lines.append(
-                "  WARNING: Wind generators are at maximum capacity in the base-case "
-                "dispatch. scale_wind_scenario alone will NOT change the first-stage "
-                "dispatch. Increase wind Pmax (set_gen_dispatch) or increase system "
-                "stress (scale_all_loads) to see feasibility changes."
-            )
     lines.append(f"Violations: {result.num_violations}")
 
     if result.violation_details:

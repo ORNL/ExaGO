@@ -41,6 +41,7 @@ from agentigrid.parsers.sopflow_parser import (
     parse_sopflow_simulation_result,
 )
 from agentigrid.parsers.sopflow_summary import sopflow_results_summary
+from agentigrid.parsers.sopflow_dispatch import compute_wind_absorption
 from agentigrid.parsers.pflow_parser import (
     parse_pflow_output,
     parse_pflow_simulation_result,
@@ -184,7 +185,9 @@ def results_summary_for_app(result: OPFLOWResult, application: str, **kwargs) ->
         )
     if application == "sopflow":
         return sopflow_results_summary(
-            result, num_scenarios=kwargs.get("num_scenarios", 0)
+            result,
+            num_scenarios=kwargs.get("num_scenarios", 0),
+            wind_absorption=kwargs.get("wind_absorption"),
         )
     if application == "pflow":
         return pflow_results_summary(
@@ -225,6 +228,7 @@ __all__ = [
     "parse_sopflow_output",
     "parse_sopflow_simulation_result",
     "parse_sopflow_metadata",
+    "compute_wind_absorption",
     "parse_pflow_output",
     "parse_pflow_simulation_result",
     "parse_pflow_metadata",

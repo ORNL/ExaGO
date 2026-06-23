@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from agentigrid.engine.commands import (
+    AddGeneratorAtBus,
+    AddLoadAtBus,
     ModCommand,
     ScaleAllLoads,
     ScaleLoad,
@@ -28,7 +30,9 @@ from agentigrid.engine.commands import (
     SetTapRatio,
 )
 from agentigrid.engine.validation import validate_command
-from agentigrid.parsers.matpower_model import MATNetwork
+from agentigrid.parsers.matpower_model import GenCost, Generator, MATNetwork
+
+_DEFAULT_PF_TAN = 0.3286  # tan(acos(0.95)) — reactive limit as fraction of MW capacity
 
 logger = logging.getLogger("agentigrid.engine.modifier")
 
@@ -198,6 +202,31 @@ def _apply_one(cmd: ModCommand, net: MATNetwork, application: str | None = None)
         if cmd.Vmax is not None:
             parts.append(f"Vmax={cmd.Vmax}")
         return f"Set voltage limits on all {count} buses: {', '.join(parts)}"
+
+    if isinstance(cmd, AddLoadAtBus):
+        bus = _find_bus(net, cmd.bus)
+        bus.Pd += cmd.Pd
+        bus.Qd += cmd.Qd
+        return f"Added load at bus {cmd.bus}: +{cmd.Pd} MW, +{cmd.Qd} MVAr (now Pd={bus.Pd}, Qd={bus.Qd})"
+
+    if isinstance(cmd, AddGeneratorAtBus):
+        cap = cmd.capacity_mw
+        if cmd.dispatchable:
+            pmin, pmax, pg = 0.0, cap, cap
+        else:
+            pmin, pmax, pg = cap, cap, cap  # forced injection
+        qmax = cmd.Qmax if cmd.Qmax is not None else _DEFAULT_PF_TAN * cap
+        qmin = cmd.Qmin if cmd.Qmin is not None else -_DEFAULT_PF_TAN * cap
+        new_gen = Generator(
+            bus=cmd.bus, Pg=pg, Qg=0.0, Qmax=qmax, Qmin=qmin, Vg=cmd.Vg,
+            mBase=net.baseMVA, status=1, Pmax=pmax, Pmin=pmin, extra=[],
+        )
+        net.generators.append(new_gen)
+        # MANDATORY: keep gencost positionally aligned with generators list.
+        # Zero-cost linear curve; cost is irrelevant to feasibility for forced injection.
+        net.gencost.append(GenCost(model=2, startup=0.0, shutdown=0.0, ncost=2, coeffs=[0.0, 0.0]))
+        kind = "dispatchable" if cmd.dispatchable else "forced-injection"
+        return f"Added {kind} generator at bus {cmd.bus}: {cap} MW (Pmin={pmin}, Pmax={pmax})"
 
     return f"Unknown command type: {type(cmd).__name__}"
 

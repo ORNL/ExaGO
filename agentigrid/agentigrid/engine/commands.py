@@ -176,11 +176,39 @@ class SetPhaseShiftAngle:
     ckt: Optional[int] = None
 
 
+@dataclass
+class AddLoadAtBus:
+    """Add (additively) active/reactive load to an existing bus."""
+
+    bus: int
+    Pd: float = 0.0
+    Qd: float = 0.0
+
+
+@dataclass
+class AddGeneratorAtBus:
+    """Append a NEW generator to a bus.
+
+    Default is a forced-injection unit (Pmin=Pmax=Pg=capacity_mw), used for
+    hosting-capacity / feasibility tests. Set dispatchable=True for an
+    economic-dispatch unit (Pmin=0, Pmax=capacity_mw).
+    """
+
+    bus: int
+    capacity_mw: float
+    Qmax: Optional[float] = None
+    Qmin: Optional[float] = None
+    Vg: float = 1.0
+    dispatchable: bool = False
+    fuel: Optional[str] = None
+
+
 ModCommand = Union[
     SetLoad, ScaleLoad, ScaleAllLoads, SetGenStatus, SetGenDispatch,
     SetGenVoltage, SetBranchStatus, SetBranchRate, SetCostCoeffs,
     SetBusVLimits, SetAllBusVLimits, ScaleLoadProfile, ScaleWindScenario,
     SetTapRatio, SetShuntSusceptance, SetPhaseShiftAngle,
+    AddLoadAtBus, AddGeneratorAtBus,
 ]
 
 # Map action names to command classes and their required fields
@@ -201,6 +229,8 @@ _COMMAND_MAP: dict[str, tuple[type, set[str]]] = {
     "set_tap_ratio": (SetTapRatio, {"fbus", "tbus", "ratio"}),
     "set_shunt_susceptance": (SetShuntSusceptance, {"bus", "Bs"}),
     "set_phase_shift_angle": (SetPhaseShiftAngle, {"fbus", "tbus", "angle"}),
+    "add_load_at_bus": (AddLoadAtBus, {"bus"}),
+    "add_generator_at_bus": (AddGeneratorAtBus, {"bus", "capacity_mw"}),
 }
 
 
