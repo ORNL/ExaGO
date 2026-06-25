@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Transform ieee-118-bus_v1.raw into a v9-equivalent file (v10.raw)
-using the diff map in v1_vs_v9_diff.py.
+Transform ieee-118-bus_v1.raw using the diff map in v1_vs_v9_diff.py.
 
 Usage:
     python v1_to_v9_transform.py [--input <file>] [--output <file>]
@@ -9,6 +8,7 @@ Usage:
 
 import re
 import argparse
+import random
 import sys
 import os
 import tempfile
@@ -16,6 +16,9 @@ from pathlib import Path
 
 import pandas as pd
 from typing import Dict, List, Tuple
+
+# Seed for gencost cost perturbation — change this to get a different random spread.
+GENCOST_SEED = 42
 
 _SECTION_KEYS = ["bus", "load", "shunt", "gen", "branch", "xfmr"]
 
@@ -1886,7 +1889,28 @@ def _write_matrix(fh, name, df, cols):
     fh.write('];\n\n')
 
 
-def write_m(path, func_name, baseMVA, bus_df, gen_df, branch_df):
+def _gencost_coeffs(gen_df, c_quad=0.01, c_lin=20.0, c_const=100.0, noise=0.15, seed=None):
+    """
+    Return (a, b, c) quadratic cost coefficients for each generator.
+    Larger units (higher Pmax) get lower costs: a and b scale as pmax_ref/Pmax.
+    A multiplicative noise in [1-noise, 1+noise] is then applied independently
+    to a, b, and c so all units have slightly different costs.
+    Cost function: f(P) = a*P^2 + b*P + c
+    """
+    _EPS = 1e-4  # hard floor — coefficients must never be zero
+    rng = random.Random(seed)
+    pmax_ref = gen_df['Pmax'].median()
+    coeffs = []
+    for pmax in gen_df['Pmax']:
+        scale = pmax_ref / pmax if pmax > 0 else 1.0
+        a = max(_EPS, c_quad * scale * (1.0 + rng.uniform(-noise, noise)))
+        b = max(_EPS, c_lin  * scale * (1.0 + rng.uniform(-noise, noise)))
+        c = max(_EPS, c_const        * (1.0 + rng.uniform(-noise, noise)))
+        coeffs.append((a, b, c))
+    return coeffs
+
+
+def write_m(path, func_name, baseMVA, bus_df, gen_df, branch_df, seed=None):
     with open(path, 'w') as fh:
         fh.write(f'function mpc = {func_name}\n')
         fh.write("mpc.version = '2';\n")
@@ -1894,9 +1918,11 @@ def write_m(path, func_name, baseMVA, bus_df, gen_df, branch_df):
         _write_matrix(fh, 'bus', bus_df, _BUS_COLS)
         _write_matrix(fh, 'gen', gen_df, _GEN_COLS)
         fh.write('%% generator cost data\n')
+        fh.write('%\t1\tstartup\tshutdown\tn\tx1\ty1\t...\txn\tyn\n')
+        fh.write('%\t2\tstartup\tshutdown\tn\tc(n-1)\t...\tc0\n')
         fh.write('mpc.gencost = [\n')
-        for _, row in gen_df.iterrows():
-            fh.write(f'\t2\t0\t0\t4\t0\t0\t{row["Pmax"]:.4f}\t0\n')
+        for a, b, c in _gencost_coeffs(gen_df, seed=seed):
+            fh.write(f'\t2\t0\t0\t3\t{a:.6g}\t{b:.6g}\t{c:.6g}\n')
         fh.write('];\n\n')
         _write_matrix(fh, 'branch', branch_df, _BRANCH_COLS)
 
@@ -1922,7 +1948,7 @@ def main():
         transform(args.input, tmp_raw, verbose=False)
         sections = split_sections(tmp_raw)
         baseMVA, bus_df, gen_df, branch_df = build_mpc(sections)
-        write_m(m_path, func_name, baseMVA, bus_df, gen_df, branch_df)
+        write_m(m_path, func_name, baseMVA, bus_df, gen_df, branch_df, seed=GENCOST_SEED)
         print(f'Written: {m_path}')
     finally:
         os.unlink(tmp_raw)
