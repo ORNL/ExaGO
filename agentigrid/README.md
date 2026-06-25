@@ -27,11 +27,39 @@ AgentiGrid runs an iterative agent loop:
 3. **Prompt** the LLM with the goal, network summary, and simulation results
 4. **LLM decides** an action:
    - **modify** — apply network changes (load scaling, generator dispatch, branch status, etc.) and run a new simulation
+   - **sweep** — test the SAME mutation at every candidate bus (or a subset) in ONE action, solved in parallel
    - **analyze** — request specific data (voltage profiles, line loading, etc.)
    - **complete** — report findings and terminate
 5. **Repeat** steps 3-4 until the goal is achieved, determined infeasible, or max iterations reached
 
 The search journal tracks every iteration, providing the LLM with a history of what has been tried and the results observed.
+
+### Boundary (Hosting-Capacity) Sweep
+
+For "how much load/generation can each bus host?" or "what is the maximum MW at bus X?" goals, the `sweep` action supports a **boundary mode** (`"mode": "boundary"`). Instead of testing one fixed injection per bus, the engine runs a **per-bus bisection on injection magnitude** (in parallel) and returns the maximum feasible MW per bus together with the binding constraint (thermal / voltage, with the specific line or bus when available). This is **one LLM turn** performing N internal bisections — it does not consume N iterations of the LLM budget.
+
+Two entity modes:
+
+- **`entity: "load"`** — adds active load and scales reactive load along a **constant-power-factor ray** (`ΔQ = ΔP · tan φ`). `power_factor` is `"system_average"` (default; `ΣQd/ΣPd` of the base case), `"unity"`, or a number in `0..1`. `Pd` and `Qd` always move together.
+- **`entity: "generator"`** — adds a generator in **fixed-injection** mode (`Pmin = Pmax = ΔP`); reactive output is left free within `±boundary_gen_q_frac · ΔP`. Fixed injection is mandatory — a dispatchable unit is zeroed by the OPF, making the hosting test vacuous.
+
+The boundary located is the **OPFLOW convergence boundary** (the V-band and Rate A are in-solve hard constraints). Non-convergence is treated as the infeasible signal that caps the bisection; a probe that fails for numerical rather than physical reasons would understate capacity.
+
+Relevant config (`search.*`): `boundary_initial_mw` (50), `boundary_max_mw` (2000, the bracketing cap), `boundary_tol_mw` (1.0), `boundary_max_probes` (24), `boundary_gen_q_frac` (0.4), `boundary_power_factor_default` (`system_average`). The per-candidate result table is journaled in full and rendered in the PDF/Streamlit hosting-capacity table; the LLM-facing text is token-bounded (top-N by capacity) above `search.sweep_full_table_threshold`.
+
+### Generator Mode: Fixed Injection vs Dispatchable
+
+Adding a generator supports two modes, chosen from the goal's wording (and named back in the answer — never defaulted silently, since the wrong mode flips the result):
+
+- **Fixed injection** (`Pmin = Pmax = cap`) — the unit's output is pinned. Use for "hosting capacity / how much can connect / forced output" questions. Cost is irrelevant (the output cannot move).
+- **Dispatchable** (`Pmin = 0, Pmax = cap`, `entity_dispatchable: true`) — the OPF *chooses* the unit's output under economic dispatch, so the unit needs a realistic **cost curve**. Use for "minimum-cost location for a generator" questions. The cost curve defaults to the **case median** (mid-merit, so the unit partially dispatches and locations differentiate) per `search.added_gen_cost_strategy`; pass `entity_cost_coeffs: [c2, c1, c0]` to override. Each location's dispatched Pg is recorded (a unit dispatching ~0 MW is not helping there).
+
+### Custom Sweep Metric / Predicate (named registry)
+
+Beyond the default cost metric and standard V-band/loading feasibility, a sweep can select a **named, verified primitive** (`agentigrid/engine/sweep_metrics.py`) — not free-form code. Selection is by name; the registry is extensible (`register_metric` / `register_predicate`) for later capabilities.
+
+- **`metric: "max_delta_v"`** — ranks buses by the worst *system-wide* voltage step `max_b |V_candidate[b] − V_base[b]|` caused by switching in a load block (`search.switched_load_mw`) at the candidate bus. A power-quality flag; the largest step need not be at the switched bus. Requires (and triggers) a one-time base-case solve for the reference voltages.
+- **`feasibility_predicate: "reactive_adequacy"`** — replaces standard feasibility with a reactive-headroom test: a feasible OPF must exist with the added unit forced to `(P = Pmax, Q = Qmax)` (the sweep pins `Qmin = Qmax`). Returns the limiting quantity when it fails.
 
 ## Search Modes
 

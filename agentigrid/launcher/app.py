@@ -1145,10 +1145,26 @@ def _render_overview_tab(session):
     # Sweep summary replaces scalar-objective metrics
     if is_sweep:
         n_cand = sweep_entry.candidate_count or 0
-        n_feas = len(sweep_entry.feasible_buses or [])
-        st.metric("Feasible buses", f"{n_feas} / {n_cand}")
-        mut_desc = (sweep_entry.description or "").replace("[sweep] ", "")
-        st.markdown(f"**Mutation:** {mut_desc}")
+        _variants_hdr = sweep_entry.explored_variants or []
+        _is_boundary_hdr = any("max_feasible_mw" in v for v in _variants_hdr)
+        if _is_boundary_hdr:
+            _det = [v for v in _variants_hdr if v.get("max_feasible_mw") is not None]
+            st.metric("Boundary determined", f"{len(_det)} / {n_cand} buses")
+            if _det:
+                _best = max(_det, key=lambda v: v.get("max_feasible_mw") or 0.0)
+                st.metric(
+                    "Highest hosting capacity",
+                    f"{_best['max_feasible_mw']:,.1f} MW",
+                    delta=f"at bus {_best['bus']}",
+                    delta_color="off",
+                )
+            mut_desc = (sweep_entry.description or "").replace("[boundary sweep] ", "")
+            st.markdown(f"**Boundary sweep:** {mut_desc}")
+        else:
+            n_feas = len(sweep_entry.feasible_buses or [])
+            st.metric("Feasible buses", f"{n_feas} / {n_cand}")
+            mut_desc = (sweep_entry.description or "").replace("[sweep] ", "")
+            st.markdown(f"**Mutation:** {mut_desc}")
     elif stats["best_objective"] is not None and not is_pflow:
         if base_entry and base_entry.objective_value is not None and base_entry.objective_value != 0:
             pct = (stats["best_objective"] - base_entry.objective_value) / base_entry.objective_value * 100
@@ -1327,47 +1343,176 @@ def _render_overview_tab(session):
         if not best_entry and stats["best_objective"] is None:
             st.warning("No feasible solution was found during the search.")
     else:
-        # Sweep: show feasible-bus table and infeasible expander
+        # Sweep: show feasible-bus table and infeasible table
         variants = sweep_entry.explored_variants or []
-        feasible_rows = sorted(
-            [v for v in variants if v.get("feasible")],
-            key=lambda v: v["bus"],
-        )
-        infeasible_rows = sorted(
-            [v for v in variants if not v.get("feasible")],
-            key=lambda v: v["bus"],
-        )
-        if feasible_rows:
-            st.subheader(f"Feasible buses ({len(feasible_rows)})")
-            df_feas = pd.DataFrame([{
-                "Bus": v["bus"],
-                "V_min (pu)": round(v.get("voltage_min", 0), 3),
-                "V_max (pu)": round(v.get("voltage_max", 0), 3),
-                "Max Line Loading (%)": round(v.get("max_line_loading_pct", 0), 1),
-                "Violations": v.get("violations", 0),
-                "System Cost ($)": v.get("cost"),
-            } for v in feasible_rows])
-            st.dataframe(df_feas, width="stretch", hide_index=True)
-        else:
-            st.warning("No feasible buses found in this sweep.")
-        if infeasible_rows:
-            st.subheader(f"Infeasible buses ({len(infeasible_rows)})")
-            df_infeas = pd.DataFrame([{
-                "Bus": v["bus"],
-                "Reason": (v.get("reason") or v.get("status") or "infeasible").capitalize(),
-                "V_min (pu)": round(v.get("voltage_min", 0), 3),
-                "V_max (pu)": round(v.get("voltage_max", 0), 3),
-                "Max Line Loading (%)": round(v.get("max_line_loading_pct", 0), 1),
-                "Violations": v.get("violations", 0),
-            } for v in infeasible_rows])
-            st.dataframe(df_infeas, width="stretch", hide_index=True)
-            st.caption(
-                "Metrics are taken from the solver’s last iterate. For buses marked "
-                "“Did not converge”, that iterate was not certified and may appear within "
-                "limits even though no feasible operating point was found (these rows usually "
-                "show 0 violations). For “Line overload” / “Voltage low” buses, the listed "
-                "value is the binding violation."
+
+        # Boundary (hosting-capacity) sweep: dedicated table keyed on max_feasible_mw.
+        if any("max_feasible_mw" in v for v in variants):
+            determined = sorted(
+                [v for v in variants if v.get("max_feasible_mw") is not None],
+                key=lambda v: v.get("max_feasible_mw") or 0.0, reverse=True,
             )
+            undetermined = sorted(
+                [v for v in variants if v.get("max_feasible_mw") is None],
+                key=lambda v: v["bus"],
+            )
+            st.caption(
+                "The boundary reported is the OPFLOW convergence boundary: the largest "
+                "injection for which IPOPT converges with the voltage band and thermal "
+                "limits (Rate A) as in-solve hard constraints. Non-convergence is treated "
+                "as the infeasible signal that caps the bisection. The binding constraint "
+                "is identified at the maximum-feasible operating point."
+            )
+            if determined:
+                st.subheader(f"Hosting capacity by bus ({len(determined)})")
+                df_b = pd.DataFrame([{
+                    "Bus": v["bus"],
+                    "Max Feasible (MW)": round(v.get("max_feasible_mw") or 0.0, 1),
+                    "Binding Constraint": v.get("binding_constraint", ""),
+                    "Boundary V_min": round(v.get("voltage_min", 0), 3),
+                    "Boundary V_max": round(v.get("voltage_max", 0), 3),
+                    "Max Load (%)": round(v.get("max_line_loading_pct", 0), 1),
+                    "Probes": v.get("probes_used", 0),
+                } for v in determined])
+                st.dataframe(df_b, width="stretch", hide_index=True)
+            else:
+                st.warning("No boundary could be determined for any candidate bus.")
+            if undetermined:
+                bus_list = ", ".join(str(v["bus"]) for v in undetermined)
+                st.caption(f"Undetermined buses ({len(undetermined)}): {bus_list}")
+        else:
+            # C2/C3 detection: dispatchable siting, custom metric/predicate.
+            is_dispatchable = any(v.get("dispatched_pg") is not None for v in variants)
+            has_dispatched_q = any(v.get("dispatched_q") is not None for v in variants)
+            metric_name = next((v.get("metric_name") for v in variants if v.get("metric_name")), None)
+            predicate_name = next((v.get("predicate_name") for v in variants if v.get("predicate_name")), None)
+
+            if metric_name == "max_delta_v":
+                feasible_rows = sorted(
+                    [v for v in variants if v.get("feasible")],
+                    key=lambda v: v.get("metric_value") or 0.0, reverse=True,
+                )
+            else:
+                feasible_rows = sorted(
+                    [v for v in variants if v.get("feasible")],
+                    key=lambda v: v["bus"],
+                )
+            infeasible_rows = sorted(
+                [v for v in variants if not v.get("feasible")],
+                key=lambda v: v["bus"],
+            )
+
+            def _certified_reason(v: dict) -> str:
+                """Derive displayed reason from solver status, not the stored heuristic label."""
+                status = (v.get("status") or "").upper()
+                return "Did not converge" if not status.startswith("CONVERGED") else "Constraint violation"
+
+            # Fix 3 — voltage-criterion honesty note
+            st.caption(
+                "Note: Under OPFLOW, the voltage band and thermal limits (Rate A) are enforced "
+                "as in-solve hard constraints. The stated voltage criterion is satisfied by "
+                "construction for any converged candidate and is not an independent discriminating "
+                "filter for feasibility."
+            )
+
+            if feasible_rows:
+                if predicate_name == "reactive_adequacy":
+                    st.subheader(f"Reactive-adequate buses ({len(feasible_rows)})")
+                    st.caption(
+                        "A bus is reactive-adequate if a feasible OPF exists with the added unit "
+                        "forced to (P = Pmax, Q = Qmax) — a reactive-headroom test, not the "
+                        "standard voltage/loading criterion."
+                    )
+                elif metric_name == "max_delta_v":
+                    st.subheader(f"Buses by voltage step ({len(feasible_rows)})")
+                    st.caption(
+                        "Max ΔV is the worst system-wide voltage change |V − V_base| from "
+                        "switching in the load block at the candidate bus. Ranked by largest step."
+                    )
+                else:
+                    st.subheader(f"Feasible buses ({len(feasible_rows)})")
+                    if is_dispatchable:
+                        st.caption(
+                            "Generator mode: dispatchable (Pmin = 0, Pmax = cap) under economic "
+                            "dispatch. “Dispatched Pg” is the optimized output at that location."
+                        )
+
+                def _feas_row(v: dict) -> dict:
+                    row = {
+                        "Bus": v["bus"],
+                        "V_min (pu)": round(v.get("voltage_min", 0), 3),
+                        "V_max (pu)": round(v.get("voltage_max", 0), 3),
+                        "Max Line Loading (%)": round(v.get("max_line_loading_pct", 0), 1),
+                        "Violations": v.get("violations", 0),
+                    }
+                    if metric_name == "max_delta_v":
+                        mv = v.get("metric_value")
+                        row["Max ΔV (pu)"] = round(mv, 4) if isinstance(mv, (int, float)) else None
+                    else:
+                        row["System Cost ($)"] = v.get("cost")
+                    if is_dispatchable:
+                        pg = v.get("dispatched_pg")
+                        row["Dispatched Pg (MW)"] = round(pg, 1) if isinstance(pg, (int, float)) else None
+                    if has_dispatched_q:
+                        q = v.get("dispatched_q")
+                        row["Dispatched Q (MVAr)"] = round(q, 1) if isinstance(q, (int, float)) else None
+                    return row
+
+                df_feas = pd.DataFrame([_feas_row(v) for v in feasible_rows])
+                st.dataframe(df_feas, width="stretch", hide_index=True)
+
+                # Fix 2 — cost-minimization near-optimal ranking (cost sweeps only)
+                if goal_type in (None, "cost_minimization") and metric_name != "max_delta_v":
+                    feasible_with_cost = sorted(
+                        [(v, v.get("cost")) for v in feasible_rows
+                         if isinstance(v.get("cost"), (int, float))],
+                        key=lambda x: x[1],
+                    )
+                    if feasible_with_cost:
+                        top_k = getattr(session.config.report, "cost_min_top_k", 10)
+                        abs_tol = getattr(session.config.report, "near_optimal_abs_tol", 5.0)
+                        top_buses = feasible_with_cost[:top_k]
+                        best_cost = top_buses[0][1]
+
+                        st.subheader(f"Cost ranking — top {len(top_buses)} cheapest buses")
+                        df_rank = pd.DataFrame([{
+                            "Rank": rank,
+                            "Bus": v["bus"],
+                            "Cost ($/h)": f"{cost:,.2f}",
+                            "Δ from best ($/h)": f"+{cost - best_cost:.2f}" if cost > best_cost else "0.00",
+                        } for rank, (v, cost) in enumerate(top_buses, 1)])
+                        st.dataframe(df_rank, hide_index=True)
+
+                        if len(top_buses) >= 2:
+                            gap = top_buses[1][1] - best_cost
+                            if gap < abs_tol:
+                                st.caption(
+                                    f"The cost difference between the top candidates (${gap:.2f}/h) "
+                                    f"is below the solver tolerance threshold (${abs_tol:.1f}/h). "
+                                    f"These buses should be treated as equivalently optimal rather "
+                                    f"than strictly ranked."
+                                )
+            else:
+                st.warning("No feasible buses found in this sweep.")
+
+            if infeasible_rows:
+                st.subheader(f"Infeasible buses ({len(infeasible_rows)})")
+                df_infeas = pd.DataFrame([{
+                    "Bus": v["bus"],
+                    "Status": _certified_reason(v),
+                    "V_min pu (last iter.)": round(v.get("voltage_min", 0), 3),
+                    "V_max pu (last iter.)": round(v.get("voltage_max", 0), 3),
+                    "Max Load % (last iter.)": round(v.get("max_line_loading_pct", 0), 1),
+                    "Viol. (last iter.)": v.get("violations", 0),
+                } for v in infeasible_rows])
+                st.dataframe(df_infeas, width="stretch", hide_index=True)
+                st.caption(
+                    "Status reflects solver certification only: a solve either converged to a "
+                    "feasible operating point or it did not. The four rightmost columns are from "
+                    "the solver’s last uncertified iterate and must not be read as the certified "
+                    "cause of infeasibility — they are diagnostic hints only. No certified "
+                    "operating point exists for \"Did not converge\" buses."
+                )
 
     if not is_sweep:
         # Convergence chart

@@ -33,8 +33,44 @@ from agentigrid.engine.validation import validate_command
 from agentigrid.parsers.matpower_model import GenCost, Generator, MATNetwork
 
 _DEFAULT_PF_TAN = 0.3286  # tan(acos(0.95)) — reactive limit as fraction of MW capacity
+# Fallback mid-merit linear cost ($/MWh) when the case has no usable polynomial curves.
+_FALLBACK_GEN_COST = [0.0, 40.0, 0.0]
 
 logger = logging.getLogger("agentigrid.engine.modifier")
+
+
+def _median_existing_cost_coeffs(net: MATNetwork) -> list[float]:
+    """Median model-2 polynomial cost curve [c2, c1, c0] across existing generators.
+
+    Used as the default cost curve for a dispatchable added unit so it is
+    economically mid-merit and actually partially dispatches, revealing
+    location effects. Piecewise-linear (model 1) rows are skipped. Returns a
+    fallback linear curve if no usable polynomial rows exist.
+    """
+    import statistics
+
+    c2s: list[float] = []
+    c1s: list[float] = []
+    c0s: list[float] = []
+    for gc in net.gencost:
+        if gc.model != 2:  # skip piecewise-linear cost models
+            continue
+        co = list(gc.coeffs)
+        if len(co) >= 3:
+            c2, c1, c0 = co[-3], co[-2], co[-1]
+        elif len(co) == 2:
+            c2, c1, c0 = 0.0, co[0], co[1]
+        elif len(co) == 1:
+            c2, c1, c0 = 0.0, 0.0, co[0]
+        else:
+            continue
+        c2s.append(c2)
+        c1s.append(c1)
+        c0s.append(c0)
+
+    if not c1s:
+        return list(_FALLBACK_GEN_COST)
+    return [statistics.median(c2s), statistics.median(c1s), statistics.median(c0s)]
 
 
 @dataclass
@@ -223,8 +259,21 @@ def _apply_one(cmd: ModCommand, net: MATNetwork, application: str | None = None)
         )
         net.generators.append(new_gen)
         # MANDATORY: keep gencost positionally aligned with generators list.
-        # Zero-cost linear curve; cost is irrelevant to feasibility for forced injection.
-        net.gencost.append(GenCost(model=2, startup=0.0, shutdown=0.0, ncost=2, coeffs=[0.0, 0.0]))
+        # Cost curve selection:
+        #   - explicit cost_coeffs            → use as given
+        #   - dispatchable + no coeffs        → case median (mid-merit), so the
+        #                                       OPF partially dispatches it and the
+        #                                       siting comparison is meaningful
+        #   - fixed injection + no coeffs     → zero cost (irrelevant; Pg is pinned)
+        if cmd.cost_coeffs is not None:
+            coeffs = [float(c) for c in cmd.cost_coeffs]
+        elif cmd.dispatchable:
+            coeffs = _median_existing_cost_coeffs(net)
+        else:
+            coeffs = [0.0, 0.0]
+        net.gencost.append(GenCost(
+            model=2, startup=0.0, shutdown=0.0, ncost=len(coeffs), coeffs=coeffs,
+        ))
         kind = "dispatchable" if cmd.dispatchable else "forced-injection"
         return f"Added {kind} generator at bus {cmd.bus}: {cap} MW (Pmin={pmin}, Pmax={pmax})"
 

@@ -46,6 +46,7 @@ Do **not** run `streamlit run app.py` from inside `launcher/` — paths will not
 - Scenario file selector: appears when SOPFLOW is selected, auto-matching wind scenario CSV files to the selected base case (layered fallback: exact prefix → stripped suffix → all scenarios). Supports both single-period and multi-period scenario formats
 - SOPFLOW parameters: appear when SOPFLOW is selected — Solver (IPOPT or EMPAR) and First/second stage coupling toggle. MPI core count (`--np`) is available for EMPAR
 - PFLOW info: when PFLOW is selected, a note explains that PFLOW is analysis (not optimization) and the LLM drives the search directly. No additional configuration files are needed
+- **Sweep concurrency controls** (OPFLOW only): a "Run sweep in parallel" checkbox and a "Concurrent solves" number input (1–128, default = `min(cpu_count, 16)`) control how many OPFLOW subprocesses run at once during a sweep action. When more than one worker is used, each worker's BLAS thread count is pinned to 1 to avoid oversubscription. Set "Concurrent solves" to 1 to force sequential execution (useful for debugging or on resource-constrained hosts). These controls are disabled for non-OPFLOW applications
 - **Concurrent explore/select** (PFLOW only): checkbox enables the LLM to propose multiple simulation variants per iteration. Each explore action runs 2–8 configurations concurrently, computes a Pareto front, and presents non-dominated variants for selection. The "Max variants per explore" input controls the parallelism level (2–16, default 8). When enabled, the live monitor shows an explore status panel with variant feasibility, Pareto markers (★), and key metrics for each variant. The iteration log shows explored variants for `select` entries
 - Preset goal library with common optimization tasks (minimize cost, fix voltage violations, stress testing, multi-objective, PFLOW-specific goals like loadability search and voltage improvement, etc.)
 - Custom goal input via free-text area
@@ -97,6 +98,11 @@ The live search monitor includes a steering panel (right column, below the progr
 - Professional multi-page PDF with title page, executive summary, convergence charts, results comparison tables, full iteration log, steering directive history, and multi-objective tracking section (when applicable)
 - Uses DejaVu Sans font for diacritics support
 - Chart images exported via Plotly/kaleido
+- **Sweep result reporting — solver certification semantics**: the "Status" column in sweep result tables (both in the UI and in the PDF) is derived exclusively from the solver's `convergence_status` field. A candidate is shown as "Did not converge" for any non-CONVERGED status, and "Constraint violation" only when the solver explicitly converged to an infeasible operating point (PFLOW-style post-solve check). Uncertified last-iterate metrics (V_min, V_max, max line loading, violations) are shown in a separately labelled group ("Last iterate — uncertified") and must not be read as the certified cause of infeasibility
+- **Cost-minimization sweep ranking**: when the search goal is cost minimization, the sweep overview shows a ranked table of the top-K cheapest feasible buses (default K=10) with Δ-from-best cost. When the gap between the first- and second-ranked candidate is below `report.near_optimal_abs_tol` (default $5/h), a caveat is displayed noting that the candidates are effectively equivalent within solver tolerance
+- **Boundary (hosting-capacity) sweep table**: when a sweep is run in boundary mode (`"mode": "boundary"`), the overview and PDF show a **hosting-capacity table** — per bus: maximum feasible MW, binding constraint, boundary-point Vmin/Vmax, max line loading, and probe count — sorted by capacity (highest first). A footnote states that the reported boundary is the OPFLOW convergence boundary and that non-convergence is treated as the infeasible signal that caps the bisection. The header metrics show the highest hosting capacity and which bus achieves it
+- **Adaptive sweep columns (C2/C3)**: the feasible-bus table adds columns to match the sweep type. A **dispatchable** generator-siting sweep (`entity_dispatchable: true`) adds a "Dispatched Pg (MW)" column and a mode caption; the cost ranking still applies. A **`max_delta_v`** metric sweep replaces the cost column with "Max ΔV (pu)" and ranks buses by largest voltage step. A **`reactive_adequacy`** predicate sweep relabels the table "Reactive-adequate buses" (a headroom test at forced P=Pmax, Q=Qmax) with the limiting quantity shown in the infeasible table's reason, and adds a **"Dispatched Q (MVAr)"** column auditing the Q-forcing (equals the Qmax target at every adequate bus)
+- **Certified metric gating & corrected summary (C.2/C.3 fixes)**: custom metrics are shown only for converged candidates (a non-converged bus never displays a trusted metric value), and the "lowest-cost feasible" summary line descends into sweep results, so the reported optimum is the best sweep candidate (bus + cost), not the base case
 
 ### Session History
 - Completed sessions are tracked in the sidebar for reference during a browser session
@@ -119,6 +125,25 @@ Key configuration paths:
 - **Data files**: `data/*.m` (MATPOWER format)
 - **Applications**: `applications/` (ExaGO binaries)
 - **Working directory**: `workdir/` (created at runtime)
+
+Key configuration fields added in prompt-#14 reporting fixes:
+
+| Field | Default | Description |
+|---|---|---|
+| `search.sweep_max_workers` | `0` | OPFLOW sweep concurrency; 0 = auto (`min(cpu_count, 16)`), 1 = sequential |
+| `search.sweep_llm_top_n` | `25` | Top-N rows in the token-bounded LLM-facing sweep view |
+| `search.sweep_full_table_threshold` | `250` | Candidate count above which the LLM view switches to summary; 0 = always summarize |
+| `search.boundary_initial_mw` | `50.0` | Boundary sweep: initial probe / exponential-bracketing start (MW) |
+| `search.boundary_max_mw` | `2000.0` | Boundary sweep: bracketing cap; if still feasible, report ≥ cap (MW) |
+| `search.boundary_tol_mw` | `1.0` | Boundary sweep: bisection stop gap (MW) |
+| `search.boundary_max_probes` | `24` | Boundary sweep: max OPFLOW solves per candidate |
+| `search.boundary_gen_q_frac` | `0.4` | Boundary sweep: generator reactive band as a fraction of ΔP |
+| `search.boundary_power_factor_default` | `system_average` | Boundary sweep load PF: `system_average` \| `0..1` \| `unity` |
+| `search.added_gen_cost_strategy` | `median_existing` | Cost curve for a dispatchable added unit: `median_existing` (mid-merit) or `explicit` |
+| `search.added_gen_dispatchable_default` | `false` | Default mode for add_generator_at_bus sweeps (false = fixed injection) |
+| `search.switched_load_mw` | `100.0` | MW load block switched in at a candidate bus for the `max_delta_v` metric |
+| `report.cost_min_top_k` | `10` | Number of cheapest feasible buses shown in cost-min sweep ranking |
+| `report.near_optimal_abs_tol` | `5.0` | $/h gap below which top candidates are flagged as equivalently optimal |
 
 ## Troubleshooting
 

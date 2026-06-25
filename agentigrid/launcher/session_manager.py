@@ -235,6 +235,7 @@ class SessionManager:
                 objective_registry=objective_registry,
                 preference_history=preference_history,
                 application=session.application,
+                near_optimal_abs_tol=session.config.report.near_optimal_abs_tol,
             )
 
             response = backend.complete(system_prompt, user_prompt)

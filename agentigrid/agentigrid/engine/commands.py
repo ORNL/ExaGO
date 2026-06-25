@@ -201,6 +201,9 @@ class AddGeneratorAtBus:
     Vg: float = 1.0
     dispatchable: bool = False
     fuel: Optional[str] = None
+    # Cost curve (MATPOWER model-2 polynomial, highest-order first: [c2, c1, c0]).
+    # None → zero cost for fixed injection, or the case median for a dispatchable unit.
+    cost_coeffs: Optional[list[float]] = None
 
 
 ModCommand = Union[

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 import os
 import queue
 import re
+import statistics
 import threading
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +33,7 @@ from agentigrid.engine.explore import (
 from agentigrid.engine.journal import JournalEntry, ObjectiveEntry, SearchJournal
 from agentigrid.engine.metric_extractor import available_metrics, available_metrics_for_app, extract_all_metrics
 from agentigrid.engine.modifier import apply_modifications
+from agentigrid.engine import sweep_metrics
 from agentigrid.engine.objective_parser import (
     build_objective_extraction_prompt,
     parse_objective_extraction,
@@ -65,44 +70,549 @@ def _bus_limits_from_network(net) -> dict[int, tuple[float, float]]:
     return {b.bus_i: (b.Vmin, b.Vmax) for b in net.buses}
 
 
-def _infeasible_reason(
-    voltage_min, voltage_max, max_line_loading_pct,
-    violations, vmin_band, vmax_band, loading_limit=100.0,
-):
-    """Dominant binding constraint for an infeasible sweep candidate.
+def _build_sweep_llm_view(
+    candidate_summaries: list[dict],
+    feasible_buses: list[int],
+    mut_desc: str,
+    objective_name: str,
+    objective_direction: str,
+    top_n: int,
+    threshold: int,
+    rank_key: str = "cost",
+) -> str:
+    """Build the LLM-facing text for a sweep result.
 
-    Works from per-candidate summary scalars, not the raw OPFLOWResult.
-    Priority: voltage out of band → thermal overload → thermal at limit →
-    did-not-converge (last, because every infeasible candidate in this system
-    is reported DID NOT CONVERGE regardless of the actual cause).
+    When candidate_count <= threshold, returns the full per-candidate table
+    (byte-identical to the pre-B.1 output for the default cost ranking, so
+    small-network baselines are unchanged).  When candidate_count > threshold
+    (or threshold == 0), returns a bounded summary: header + feasible bus list +
+    infeasible grouped by reason + top-N ranked block + aggregate stats +
+    journal pointer.
 
-    Two important calibration points from real ACTIVSg200 data:
-    - voltage_min == vmin_band exactly (e.g. 0.9) means the OPF hit the lower
-      voltage bound; use <= (inclusive) so these are labelled "voltage low".
-    - loading == 100.0 exactly with violations == 0 means the thermal limit was
-      just touched but no branch formally exceeded its rating; require violations > 0
-      for both thermal checks so such cases fall through to "did not converge".
+    ``rank_key`` selects the per-candidate value used for ranking and stats —
+    "cost" (default, the OPF objective) or "metric_value" (a C3 custom metric).
     """
-    v_low = voltage_min is not None and voltage_min > 0 and voltage_min <= vmin_band
-    v_high = voltage_max is not None and voltage_max > vmax_band + 1e-6
-    over_thermal = max_line_loading_pct is not None and max_line_loading_pct > loading_limit + 1e-6
-    at_thermal = max_line_loading_pct is not None and max_line_loading_pct >= loading_limit - 1e-6
-    nviol = violations or 0
-    # 1. Voltage at or below the lower bound (checked first — a bus can be
-    #    both at the voltage floor AND thermally overloaded; voltage binds first)
-    if v_low:
-        return "voltage low"
-    if v_high:
-        return "voltage high"
-    # 2. Thermal overload with at least one recorded violation
-    if over_thermal and nviol > 0:
-        return "line overload"
-    # 3. Thermal at the limit, also requiring a recorded violation
-    #    (loading == 100.0 exactly with viol == 0 is a solver-limit artefact)
-    if at_thermal and nviol > 0:
-        return "line overload"
-    # 4. Residual: solver could not find a strictly feasible point
+    n_total = len(candidate_summaries)
+    n_feasible = len(feasible_buses)
+    n_infeasible = n_total - n_feasible
+    num_label = "cost" if rank_key == "cost" else objective_name[:12]
+
+    def _rank_val(s: dict):
+        return s.get(rank_key)
+
+    def _fmt_val(val) -> str:
+        if not isinstance(val, (int, float)):
+            return "           N/A"
+        # Preserve the exact cost formatting (byte-identical B.1 baseline);
+        # custom metrics use a compact significant-figure format.
+        return f"{val:>12,.1f}" if rank_key == "cost" else f"{val:>12,.4g}"
+
+    def _fmt_stat(val) -> str:
+        return f"{val:,.1f}" if rank_key == "cost" else f"{val:,.4g}"
+
+    # --- full-table branch (preserves byte-identical output for small networks) ---
+    if threshold > 0 and n_total <= threshold:
+        infeasible_buses = [s["bus"] for s in candidate_summaries if not s["feasible"]]
+        if len(infeasible_buses) > 20:
+            infeasible_str = f"[{', '.join(str(b) for b in infeasible_buses[:20])}, ...]"
+        else:
+            infeasible_str = f"[{', '.join(str(b) for b in infeasible_buses)}]"
+        table_lines = [
+            f"Sweep over {n_total} candidate buses (mutation: {mut_desc}):",
+            f"FEASIBLE: {n_feasible} / {n_total}.  INFEASIBLE buses: {infeasible_str}",
+            f"{'bus':>4} | {'feasible':>8} | {'Vmin':>5} | {'Vmax':>5} | {'maxLoad%':>8} | {'viol':>4} | {num_label:>12}",
+        ]
+        for s in candidate_summaries:
+            feas_str = "yes" if s["feasible"] else "no"
+            val_str = _fmt_val(_rank_val(s))
+            table_lines.append(
+                f"{s['bus']:>4} | {feas_str:>8} | {s['voltage_min']:>5.3f} | "
+                f"{s['voltage_max']:>5.3f} | {s['max_line_loading_pct']:>8.1f} | "
+                f"{s['violations']:>4} | {val_str}"
+            )
+        return "\n".join(table_lines)
+
+    # --- summarized view branch ---
+    lines = [
+        f"Sweep over {n_total} candidate buses (mutation: {mut_desc}):",
+        f"FEASIBLE: {n_feasible} / {n_total}   INFEASIBLE: {n_infeasible} / {n_total}",
+        "",
+    ]
+
+    # Feasible bus list (complete — the LLM needs the full set for set-based reductions)
+    feas_list_str = ", ".join(str(b) for b in feasible_buses)
+    lines.append(f"Feasible buses ({n_feasible}): [{feas_list_str}]")
+    lines.append("")
+
+    # Infeasible buses grouped by reason
+    infeas_by_reason: dict[str, list[int]] = defaultdict(list)
+    for s in candidate_summaries:
+        if not s["feasible"]:
+            reason = s.get("reason") or "did not converge"
+            infeas_by_reason[reason].append(s["bus"])
+    if infeas_by_reason:
+        lines.append(f"Infeasible buses grouped by reason ({n_infeasible} total):")
+        for reason in sorted(infeas_by_reason):
+            buses = infeas_by_reason[reason]
+            lines.append(f"  {reason}: {buses}")
+        lines.append("")
+
+    # Top-N ranked by the chosen key (cost by default, or a custom metric)
+    feasible_with_val = [
+        s for s in candidate_summaries
+        if s["feasible"] and isinstance(_rank_val(s), (int, float))
+    ]
+    reverse = (objective_direction == "maximize")
+    ranked = sorted(feasible_with_val, key=lambda s: _rank_val(s), reverse=reverse)
+    top_candidates = ranked[:top_n]
+    n_shown = len(top_candidates)
+    lines.append(
+        f"Top {n_shown} feasible by {objective_name} ({objective_direction}):"
+    )
+    lines.append(
+        f"{'rank':>4} | {'bus':>4} | {'Vmin':>5} | {'Vmax':>5} | {'maxLoad%':>8} | {num_label:>12}"
+    )
+    for rank, s in enumerate(top_candidates, 1):
+        val_str = _fmt_val(_rank_val(s))
+        lines.append(
+            f"{rank:>4} | {s['bus']:>4} | {s['voltage_min']:>5.3f} | "
+            f"{s['voltage_max']:>5.3f} | {s['max_line_loading_pct']:>8.1f} | {val_str}"
+        )
+    lines.append("")
+
+    # Aggregate stats over the full feasible set
+    vals = [_rank_val(s) for s in feasible_with_val]
+    if vals:
+        med = statistics.median(vals)
+        lines.append(
+            f"Feasible {objective_name} stats: "
+            f"min={_fmt_stat(min(vals))}  median={_fmt_stat(med)}  max={_fmt_stat(max(vals))}"
+        )
+        lines.append("")
+
+    # Pointer — tell the LLM that full data is in the journal, nothing is missing
+    lines.append(
+        f"[Note: Full per-candidate table ({n_total} rows) is stored in the journal "
+        "and rendered in the PDF report. Only the summary and top-N are shown here "
+        "to limit token usage — no data is missing from the search record.]"
+    )
+
+    return "\n".join(lines)
+
+
+def _infeasible_reason(convergence_status: str) -> str:
+    """Certified reason for an infeasible sweep candidate.
+
+    Uses solver convergence status as the sole source of truth.
+    A non-converged solve certifies no operating point — the solver's last
+    iterate is an uncertified diagnostic, not a confirmed cause.
+
+    - CONVERGED + infeasible → certified constraint violation (PFLOW style)
+    - anything else          → did not converge
+    """
+    if (convergence_status or "").upper().startswith("CONVERGED"):
+        return "constraint violation"
     return "did not converge"
+
+
+def _is_certified(opflow) -> bool:
+    """Certified-result gate (shared with the C.1 binding-constraint identifier).
+
+    A candidate's solved state is trustworthy only when the solver converged.
+    A non-converged solve certifies no operating point, so any value read from
+    its last iterate (cost, voltages, a custom metric) is uncertified and must
+    not drive a reported answer.
+    """
+    return (
+        opflow is not None
+        and (getattr(opflow, "convergence_status", "") or "").upper().startswith("CONVERGED")
+    )
+
+
+# ---------------------------------------------------------------------------
+# Boundary (hosting-capacity) search primitives — C.1
+#
+# For each candidate bus, a bisection on injection magnitude finds the largest
+# injection that still yields a feasible OPFLOW solve. "Feasible" under OPFLOW
+# means IPOPT converges with the V-band and Rate A as in-solve hard constraints,
+# so the boundary located is the *convergence boundary*. Non-convergence is the
+# infeasible signal that caps the bisection (standard for OPF hosting capacity).
+# ---------------------------------------------------------------------------
+
+def _system_average_tan_phi(net) -> float:
+    """System-average tan(phi) = ΣQd / ΣPd over all buses in the base case.
+
+    Used to scale reactive load along a constant-power-factor ray when adding
+    active load at a candidate bus. Returns 0.0 if total active load is zero.
+    """
+    p_total = sum(b.Pd for b in net.buses)
+    q_total = sum(b.Qd for b in net.buses)
+    if p_total == 0:
+        return 0.0
+    return q_total / p_total
+
+
+def _tan_phi_from_pf_spec(pf_spec, tan_phi_avg: float) -> float:
+    """Resolve tan(phi) from a power-factor spec.
+
+    - "system_average" / None → tan_phi_avg (computed once from the base case)
+    - "unity"                 → 0.0 (no reactive component)
+    - numeric 0..1            → tan(acos(pf))
+    """
+    if pf_spec is None or pf_spec == "system_average":
+        return tan_phi_avg
+    if isinstance(pf_spec, str):
+        if pf_spec == "unity":
+            return 0.0
+        try:
+            pf_spec = float(pf_spec)
+        except ValueError:
+            return tan_phi_avg
+    pf = max(min(float(pf_spec), 1.0), 1e-6)
+    return math.tan(math.acos(pf))
+
+
+def _mutate_candidate_network(
+    base_net, bus: int, entity: str, delta_mw: float,
+    tan_phi: float, vmin: float, vmax: float, q_frac: float,
+):
+    """Return a modified copy of the base network with the candidate injection applied.
+
+    Reuses modifier primitives (parse_command + apply_modifications). The voltage
+    band is applied on every bus first (in-solve hard constraint), then:
+      - load:      add_load_at_bus with Pd=ΔP and Qd=ΔP·tan_phi (constant-PF ray)
+      - generator: add_generator_at_bus (forced injection, Pmin=Pmax=ΔP) with the
+                   reactive output free within ±q_frac·ΔP.
+    """
+    raws = [{"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax}]
+    if entity == "load":
+        raws.append({
+            "action": "add_load_at_bus", "bus": bus,
+            "Pd": delta_mw, "Qd": delta_mw * tan_phi,
+        })
+    else:  # generator
+        raws.append({
+            "action": "add_generator_at_bus", "bus": bus,
+            "capacity_mw": delta_mw,
+            "Qmax": q_frac * delta_mw, "Qmin": -q_frac * delta_mw,
+            "dispatchable": False,
+        })
+    cmds = [parse_command(r) for r in raws]
+    net, _ = apply_modifications(base_net, cmds, application="opflow")
+    return net
+
+
+# Binding-constraint identification tolerances.
+_DUAL_EPS = 1e-6        # |Lagrange multiplier| above this ⇒ constraint genuinely active
+_BINDING_V_EPS = 0.005  # pu margin to a voltage bound at/below which it is "active"
+
+
+def _line_loading_pct(br) -> float:
+    """Line loading from BOTH ends: max(|Sf|, |St|) / Slim · 100."""
+    slim = getattr(br, "Slim", 0.0) or 0.0
+    if slim <= 0:
+        return 0.0
+    return max(abs(getattr(br, "Sf", 0.0)), abs(getattr(br, "St", 0.0))) / slim * 100.0
+
+
+def _line_dual(br) -> float:
+    """Total |line-flow multiplier| (shadow price) on the from/to flow limits."""
+    return abs(getattr(br, "mult_Sf", 0.0) or 0.0) + abs(getattr(br, "mult_St", 0.0) or 0.0)
+
+
+def _thermal_binding(opflow, binding_eps: float) -> str:
+    """Thermal binding label at a solved point.
+
+    Branch A (preferred): if any line carries a non-negligible flow-limit
+    multiplier, the binder is the genuinely-active line with the largest
+    |multiplier| (a line sitting at its rating with a ~zero shadow price is not
+    actually constraining and is ignored).
+
+    Branch B (no usable duals): report the GLOBALLY most-loaded line(s) — every
+    line within ``binding_eps`` of the system max loading — using both-end
+    loading. Never restricted to lines incident to the injection bus.
+    """
+    branches = [
+        b for b in (getattr(opflow, "branches", None) or [])
+        if getattr(b, "status", 1) != 0 and (getattr(b, "Slim", 0.0) or 0.0) > 0
+    ]
+    if not branches:
+        return ""
+
+    # Branch A — duals available.
+    if any(_line_dual(b) > _DUAL_EPS for b in branches):
+        active = [b for b in branches if _line_dual(b) > _DUAL_EPS]
+        active.sort(key=lambda b: (_line_dual(b), _line_loading_pct(b)), reverse=True)
+        labels = [f"line {b.from_bus}->{b.to_bus} @ {_line_loading_pct(b):.1f}%" for b in active[:3]]
+        return "thermal: " + ", ".join(labels)
+
+    # Branch B — value-based, only when something is actually at the limit.
+    max_load = max(_line_loading_pct(b) for b in branches)
+    if max_load < 100.0 - binding_eps:
+        return ""
+    binders = [b for b in branches if _line_loading_pct(b) >= max_load - binding_eps]
+    binders.sort(key=_line_loading_pct, reverse=True)
+    labels = [f"line {b.from_bus}->{b.to_bus} @ {_line_loading_pct(b):.1f}%" for b in binders[:3]]
+    return "thermal: " + ", ".join(labels)
+
+
+def _voltage_binding(opflow, base_opflow, vmin_lim: float, vmax_lim: float, v_eps: float) -> str:
+    """Voltage binding label at a solved point (no voltage-bound duals available).
+
+    A bound is reported only when it is *newly active*: the bus voltage is within
+    ``v_eps`` of the bound at the boundary AND (when the base solve is available)
+    its margin to that bound was clearly positive in the base case. This excludes
+    pinned setpoints (e.g. a PV bus regulating to Vmax=1.10 in every solve), whose
+    margin is already ~0 in the base and therefore does not *limit* the injection.
+    """
+    buses = getattr(opflow, "buses", None) or []
+    if not buses:
+        return ""
+    base_v = {b.bus_id: b.Vm for b in (getattr(base_opflow, "buses", None) or [])}
+
+    best: "tuple[float, str] | None" = None
+    for b in buses:
+        for name, margin, edge in (
+            ("Vmin", b.Vm - vmin_lim, vmin_lim),
+            ("Vmax", vmax_lim - b.Vm, vmax_lim),
+        ):
+            if margin > v_eps:
+                continue  # not active at the boundary
+            if base_v:
+                vb = base_v.get(b.bus_id)
+                if vb is not None:
+                    base_margin = (vb - vmin_lim) if name == "Vmin" else (vmax_lim - vb)
+                    if base_margin <= v_eps:
+                        continue  # pinned / already at the bound in base — not newly binding
+            if best is None or margin < best[0]:
+                best = (margin, f"voltage: bus {b.bus_id} {name} @ {b.Vm:.3f} pu")
+    return best[1] if best else ""
+
+
+def _fallback_binding(opflow, vmin_lim: float, vmax_lim: float) -> str:
+    """Last-resort label when no constraint is clearly active (tightest normalized slack)."""
+    max_load = opflow.max_line_loading_pct or 0.0
+    vmin = opflow.voltage_min or 0.0
+    vmax = opflow.voltage_max or 0.0
+    band = (vmax_lim - vmin_lim) or 1.0
+    thermal_norm = max(0.0, 100.0 - max_load) / 100.0
+    vhi_norm = max(0.0, vmax_lim - vmax) / band
+    vlo_norm = max(0.0, vmin - vmin_lim) / band
+    v_norm = min(vhi_norm, vlo_norm)
+    if thermal_norm <= v_norm:
+        return f"thermal @ {max_load:.1f}%"
+    edge = vmin if vlo_norm <= vhi_norm else vmax
+    return f"voltage @ {edge:.3f} pu"
+
+
+def _identify_binding(
+    opflow, vmin_lim: float, vmax_lim: float,
+    base_opflow=None, binding_eps: float = 0.5,
+) -> str:
+    """Identify the binding constraint(s) at a feasible (max-feasible) point.
+
+    Activity-based, not value-based: thermal binders come from line-flow
+    Lagrange multipliers when available (else the globally most-loaded line),
+    and voltage binders only from bounds whose margin *collapsed* relative to
+    the base case (pinned setpoints are excluded). When both a thermal line and
+    a voltage bound are newly active, both are reported.
+
+    This is a diagnostic label only — it never affects the certified
+    ``max_feasible_mw`` capacity.
+    """
+    if opflow is None:
+        return "convergence"
+
+    parts: list[str] = []
+    thermal = _thermal_binding(opflow, binding_eps)
+    if thermal:
+        parts.append(thermal)
+    voltage = _voltage_binding(opflow, base_opflow, vmin_lim, vmax_lim, _BINDING_V_EPS)
+    if voltage:
+        parts.append(voltage)
+
+    if parts:
+        return "; ".join(parts)
+    return _fallback_binding(opflow, vmin_lim, vmax_lim)
+
+
+@dataclass
+class _ProbeOutcome:
+    """Outcome of one OPFLOW probe inside a candidate bisection."""
+
+    feasible: bool
+    voltage_min: float = 0.0
+    voltage_max: float = 0.0
+    max_line_loading_pct: float = 0.0
+    violations: int = 0
+    status: str = ""
+    binding: str = ""
+
+
+def _boundary_result(max_feasible_mw, outcome, probes_used: int, note: str) -> dict:
+    """Assemble the per-candidate boundary result dict from the last feasible probe."""
+    if outcome is not None:
+        return {
+            "max_feasible_mw": max_feasible_mw,
+            "binding_constraint": outcome.binding or "convergence",
+            "probes_used": probes_used,
+            "voltage_min": outcome.voltage_min,
+            "voltage_max": outcome.voltage_max,
+            "max_line_loading_pct": outcome.max_line_loading_pct,
+            "note": note,
+        }
+    return {
+        "max_feasible_mw": max_feasible_mw,
+        "binding_constraint": "convergence",
+        "probes_used": probes_used,
+        "voltage_min": 0.0,
+        "voltage_max": 0.0,
+        "max_line_loading_pct": 0.0,
+        "note": note or "no feasible injection above base",
+    }
+
+
+def _bisect_boundary(
+    solve_probe: "Callable[[float], _ProbeOutcome]",
+    initial_mw: float,
+    max_mw: float,
+    tol_mw: float,
+    max_probes: int,
+) -> dict:
+    """Bisect the injection magnitude to find the max feasible MW for one candidate.
+
+    `solve_probe(delta_mw)` performs one OPFLOW solve and returns a `_ProbeOutcome`.
+    The base case (ΔP = 0) is assumed feasible (lower bound). The bracket is found
+    by exponential search from `initial_mw`; the boundary is then bisected to
+    `tol_mw` or until `max_probes` solves are spent.
+    """
+    probes_used = 0
+    lo = 0.0
+    last_feasible: "_ProbeOutcome | None" = None
+    note = ""
+
+    # --- exponential bracketing ---
+    delta = float(initial_mw)
+    first_infeasible = None
+    while probes_used < max_probes:
+        probe_delta = min(delta, float(max_mw))
+        outcome = solve_probe(probe_delta)
+        probes_used += 1
+        if outcome.feasible:
+            lo = probe_delta
+            last_feasible = outcome
+            if probe_delta >= max_mw:
+                return _boundary_result(
+                    float(max_mw), last_feasible, probes_used,
+                    "boundary not reached within cap",
+                )
+            delta = probe_delta * 2.0
+        else:
+            first_infeasible = probe_delta
+            break
+
+    if first_infeasible is None:
+        # Ran out of probe budget while still feasible during bracketing.
+        return _boundary_result(
+            lo, last_feasible, probes_used,
+            "probe budget exhausted during bracketing",
+        )
+
+    # --- bisection between lo (feasible) and hi (infeasible) ---
+    hi = first_infeasible
+    while (hi - lo) > tol_mw and probes_used < max_probes:
+        mid = 0.5 * (lo + hi)
+        outcome = solve_probe(mid)
+        probes_used += 1
+        if outcome.feasible:
+            lo = mid
+            last_feasible = outcome
+        else:
+            hi = mid
+
+    return _boundary_result(lo, last_feasible, probes_used, note)
+
+
+def _build_boundary_llm_view(
+    candidate_summaries: list[dict],
+    mut_desc: str,
+    top_n: int,
+    threshold: int,
+) -> str:
+    """Token-bounded LLM-facing text for a boundary sweep (mirrors B.1 gating).
+
+    candidate_count ≤ threshold → full per-candidate hosting-capacity table;
+    above threshold (or threshold == 0) → ranked top-N by capacity + grouped
+    undetermined buses + aggregate stats + journal pointer.
+    """
+    n_total = len(candidate_summaries)
+    determined = [s for s in candidate_summaries if s.get("max_feasible_mw") is not None]
+    undetermined = [s for s in candidate_summaries if s.get("max_feasible_mw") is None]
+    n_det, n_undet = len(determined), len(undetermined)
+
+    header = f"{'bus':>5} | {'maxMW':>10} | {'Vmin':>5} | {'Vmax':>5} | {'binding':<34}"
+
+    def _row(s: dict) -> str:
+        mfm = s.get("max_feasible_mw")
+        mfm_str = f"{mfm:>10,.1f}" if isinstance(mfm, (int, float)) else "       N/A"
+        return (
+            f"{s['bus']:>5} | {mfm_str} | {s.get('voltage_min', 0):>5.3f} | "
+            f"{s.get('voltage_max', 0):>5.3f} | {str(s.get('binding_constraint', ''))[:34]:<34}"
+        )
+
+    def _by_capacity_desc(s: dict):
+        mfm = s.get("max_feasible_mw")
+        return (mfm is None, -(mfm or 0.0))
+
+    # --- full-table branch ---
+    if threshold > 0 and n_total <= threshold:
+        lines = [
+            f"Boundary sweep over {n_total} candidate buses (mutation: {mut_desc}):",
+            f"DETERMINED: {n_det} / {n_total}.",
+            header,
+        ]
+        for s in sorted(candidate_summaries, key=_by_capacity_desc):
+            lines.append(_row(s))
+        return "\n".join(lines)
+
+    # --- summarized view ---
+    ranked = sorted(determined, key=_by_capacity_desc)[:top_n]
+    lines = [
+        f"Boundary sweep over {n_total} candidate buses (mutation: {mut_desc}):",
+        f"DETERMINED: {n_det} / {n_total}   UNDETERMINED: {n_undet} / {n_total}",
+        "",
+        f"Top {len(ranked)} buses by hosting capacity (max feasible MW, descending):",
+        header,
+    ]
+    for s in ranked:
+        lines.append(_row(s))
+    lines.append("")
+
+    if undetermined:
+        groups: dict[str, list[int]] = defaultdict(list)
+        for s in undetermined:
+            groups[s.get("reason") or "undetermined"].append(s["bus"])
+        lines.append(f"Undetermined buses ({n_undet}):")
+        for reason in sorted(groups):
+            lines.append(f"  {reason}: {groups[reason]}")
+        lines.append("")
+
+    caps = [s["max_feasible_mw"] for s in determined
+            if isinstance(s.get("max_feasible_mw"), (int, float))]
+    if caps:
+        med = statistics.median(caps)
+        lines.append(
+            f"Hosting-capacity stats (MW): "
+            f"min={min(caps):,.1f}  median={med:,.1f}  max={max(caps):,.1f}"
+        )
+        lines.append("")
+
+    lines.append(
+        f"[Note: Full per-candidate hosting-capacity table ({n_total} rows) is stored in "
+        "the journal and rendered in the PDF report. Only the top-N and summary are shown "
+        "here to limit token usage — no data is missing from the search record.]"
+    )
+    return "\n".join(lines)
 
 
 def _benchmark_to_dict(bresult) -> dict:
@@ -195,6 +705,10 @@ class AgentLoopController:
         self._steering_queue: queue.Queue = queue.Queue()
         self._active_steering_directives: list[dict] = []
         self._steering_history: list[dict] = []
+
+        # Sweep dedup (Fix 4): cache results by sweep signature within this session
+        # so an identical re-requested sweep is served from cache, not re-solved.
+        self._sweep_signature_cache: dict[str, dict] = {}
 
         # Pause/resume
         self._pause_event = threading.Event()
@@ -1357,6 +1871,128 @@ class AgentLoopController:
         workers = raw if (raw and raw > 0) else min(os.cpu_count() or 4, 16)
         return max(1, min(workers, n_tasks))
 
+    def _resolve_candidate_buses(self, spec: dict) -> tuple[Optional[list[int]], str]:
+        """Resolve a sweep candidate_set spec to a sorted list of bus ids.
+
+        Returns (candidates, "") on success or (None, error_message) on failure.
+        Shared by the feasibility sweep and the boundary sweep.
+        """
+        ctype = spec.get("type", "")
+        if ctype == "all_buses":
+            candidates = [b.bus_i for b in self._base_network.buses]
+        elif ctype == "load_buses":
+            candidates = [b.bus_i for b in self._base_network.buses if b.Pd != 0]
+        elif ctype == "bus_list":
+            raw_buses = spec.get("buses", [])
+            if not isinstance(raw_buses, list) or not raw_buses:
+                return None, "candidate_set type='bus_list' requires a non-empty 'buses' list."
+            candidates = [int(b) for b in raw_buses]
+        else:
+            return None, (
+                f"Unknown candidate_set type '{ctype}'. "
+                "Supported: 'all_buses', 'load_buses', 'bus_list'."
+            )
+        return sorted(candidates), ""
+
+    def _augment_generator_mutation(
+        self, mutation_template: dict, data: dict, predicate_name: "str | None",
+    ) -> "dict | None":
+        """Apply C2 (dispatchable mode + cost curve) and the C3 reactive-adequacy
+        Q-pin to an add_generator_at_bus sweep mutation.
+
+        Returns the (possibly modified) mutation template, or None on a
+        configuration error (with ``self._error_feedback`` set).
+        """
+        if mutation_template.get("action") != "add_generator_at_bus":
+            return mutation_template
+
+        mt = dict(mutation_template)
+        s = self._config.search
+
+        # Dispatchable vs fixed-injection mode. Explicit in the mutation wins;
+        # then the action-level entity_dispatchable; then the config default.
+        if "dispatchable" not in mt:
+            if data.get("entity_dispatchable") is not None:
+                mt["dispatchable"] = bool(data["entity_dispatchable"])
+            else:
+                mt["dispatchable"] = bool(s.added_gen_dispatchable_default)
+
+        # Cost curve. Explicit coeffs (mutation or action) win; otherwise the
+        # "median_existing" strategy lets the modifier default to the case
+        # median; "explicit" requires coeffs for a dispatchable unit.
+        cost_coeffs = mt.get("cost_coeffs", data.get("entity_cost_coeffs"))
+        if cost_coeffs is not None:
+            mt["cost_coeffs"] = cost_coeffs
+        elif mt.get("dispatchable") and s.added_gen_cost_strategy == "explicit":
+            self._error_feedback = (
+                "added_gen_cost_strategy='explicit' requires entity_cost_coeffs "
+                "(or mutation.cost_coeffs) for a dispatchable generator sweep."
+            )
+            return None
+        # else: median strategy — modifier supplies the case-median curve.
+
+        # C3 reactive adequacy: pin reactive output to Qmax (Qmin = Qmax) so the
+        # unit is forced to (P = Pmax, Q = Qmax) for the headroom test.
+        if predicate_name == "reactive_adequacy" and mt.get("Qmax") is not None:
+            mt["Qmin"] = mt["Qmax"]
+
+        return mt
+
+    # Sweep-defining fields: two requests with identical values for these produce
+    # byte-identical results (description/reasoning are excluded — re-phrasing the
+    # same sweep still dedups).
+    _SWEEP_SIGNATURE_KEYS = (
+        "mode", "entity", "power_factor", "mutation", "candidate_set", "feasibility",
+        "metric", "feasibility_predicate", "entity_dispatchable", "entity_cost_coeffs",
+    )
+
+    def _sweep_cache_key(self, data: dict) -> str:
+        """Stable signature for a sweep request (Fix 4 dedup)."""
+        payload = {k: data.get(k) for k in self._SWEEP_SIGNATURE_KEYS}
+        return json.dumps(payload, sort_keys=True, default=str)
+
+    def _store_sweep_cache(
+        self, cache_key: str, description: str, candidate_count: int,
+        candidate_summaries: list[dict], feasible_buses: list[int], results_text: str | None,
+    ) -> None:
+        """Record a completed sweep so an identical re-request is not re-solved."""
+        self._sweep_signature_cache[cache_key] = {
+            "description": description,
+            "candidate_count": candidate_count,
+            "candidate_summaries": candidate_summaries,
+            "feasible_buses": feasible_buses,
+            "results_text": results_text,
+        }
+
+    def _serve_cached_sweep(
+        self, iteration: int, data: dict, cache_key: str
+    ) -> tuple[str, bool]:
+        """Serve a previously-computed identical sweep without re-solving (Fix 4)."""
+        cached = self._sweep_signature_cache[cache_key]
+        note = (
+            "\n\n[Cached: an identical sweep already ran this session — results are "
+            "deterministic and were not re-solved. Proceed to the answer.]"
+        )
+        self._latest_results_text = (cached.get("results_text") or "") + note
+        active_directive = (
+            self._active_steering_directives[-1]["directive"]
+            if self._active_steering_directives else None
+        )
+        self._journal.add_sweep(
+            iteration=iteration,
+            description=f"[sweep] {cached['description']} (cached — identical sweep, not re-solved)",
+            candidate_count=cached["candidate_count"],
+            candidate_summaries=cached["candidate_summaries"],
+            feasible_buses=cached["feasible_buses"],
+            llm_reasoning=data.get("reasoning", ""),
+            steering_directive=active_directive,
+        )
+        self._print(
+            f"[Iter {iteration}] Sweep cache hit — returning prior result, no re-solve "
+            f"({cached['candidate_count']} candidates)"
+        )
+        return "sweep", True
+
     def _handle_sweep(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -1369,6 +2005,17 @@ class AgentLoopController:
             )
             return "error", True
 
+        # Fix 4: a sweep is deterministic — if an identical signature already ran
+        # this session, serve the cached result instead of re-solving. Covers both
+        # the feasibility/metric path and the boundary path (checked before dispatch).
+        cache_key = self._sweep_cache_key(data)
+        if cache_key in self._sweep_signature_cache:
+            return self._serve_cached_sweep(iteration, data, cache_key)
+
+        # Boundary (hosting-capacity) mode: per-candidate bisection on injection magnitude.
+        if data.get("mode") == "boundary":
+            return self._handle_boundary_sweep(iteration, data)
+
         description = data.get("description", "Parametric sweep")
         reasoning = data.get("reasoning", "")
         candidate_set_spec = data.get("candidate_set", {})
@@ -1379,28 +2026,45 @@ class AgentLoopController:
             self._error_feedback = "sweep requires a 'mutation' dict with an 'action' key."
             return "error", True
 
-        # 1. Resolve candidate buses
-        ctype = candidate_set_spec.get("type", "")
-        if ctype == "all_buses":
-            candidates = [b.bus_i for b in self._base_network.buses]
-        elif ctype == "load_buses":
-            candidates = [b.bus_i for b in self._base_network.buses if b.Pd != 0]
-        elif ctype == "bus_list":
-            raw_buses = candidate_set_spec.get("buses", [])
-            if not isinstance(raw_buses, list) or not raw_buses:
-                self._error_feedback = (
-                    "sweep candidate_set type='bus_list' requires a non-empty 'buses' list."
-                )
-                return "error", True
-            candidates = [int(b) for b in raw_buses]
-        else:
+        # C3: resolve the (optional) custom metric and feasibility predicate by name.
+        metric_name = data.get("metric")
+        predicate_name = data.get("feasibility_predicate")
+        if metric_name is not None and metric_name not in sweep_metrics.METRICS:
             self._error_feedback = (
-                f"Unknown candidate_set type '{ctype}'. "
-                "Supported: 'all_buses', 'load_buses', 'bus_list'."
+                f"Unknown sweep metric '{metric_name}'. "
+                f"Available: {sorted(sweep_metrics.METRICS)}"
             )
             return "error", True
+        if predicate_name is not None and predicate_name not in sweep_metrics.PREDICATES:
+            self._error_feedback = (
+                f"Unknown feasibility_predicate '{predicate_name}'. "
+                f"Available: {sorted(sweep_metrics.PREDICATES)}"
+            )
+            return "error", True
+        predicate_fn = sweep_metrics.PREDICATES[predicate_name or "standard"]
+        metric_fn = sweep_metrics.METRICS[metric_name] if metric_name else None
 
-        candidates = sorted(candidates)  # deterministic order by bus id
+        # C2: economic (dispatchable) generator siting + cost curve, plus the C3
+        # reactive-adequacy Q-pin. Augment the mutation template once for all candidates.
+        mutation_template = self._augment_generator_mutation(
+            mutation_template, data, predicate_name,
+        )
+        if mutation_template is None:
+            return "error", True  # _error_feedback already set
+        is_dispatchable_gen = (
+            mutation_template.get("action") == "add_generator_at_bus"
+            and bool(mutation_template.get("dispatchable"))
+        )
+        is_reactive_adequacy_gen = (
+            predicate_name == "reactive_adequacy"
+            and mutation_template.get("action") == "add_generator_at_bus"
+        )
+
+        # 1. Resolve candidate buses
+        candidates, cand_err = self._resolve_candidate_buses(candidate_set_spec)
+        if candidates is None:
+            self._error_feedback = f"sweep {cand_err}"
+            return "error", True
 
         if not candidates:
             self._error_feedback = "Sweep resolved to an empty candidate set."
@@ -1427,7 +2091,24 @@ class AgentLoopController:
             )
             bus_limits_for_sweep = _bus_limits_from_network(_vlimits_net)
         except Exception:
+            _vlimits_net = self._base_network
             bus_limits_for_sweep = _bus_limits_from_network(self._base_network)
+
+        # C3: metrics like max_delta_v need the base-case operating point. Solve it
+        # once (sequentially, before the parallel batch) so every candidate compares
+        # against the same reference.
+        base_result = None
+        if sweep_metrics.metric_needs_base(metric_name):
+            if self._on_phase:
+                self._on_phase(iteration, "running_simulation (base reference solve)")
+            base_sim = self._executor.run(
+                _vlimits_net, "opflow", -(iteration * 10000 + 99999),
+                self._build_extra_args(), None,
+            )
+            if base_sim is not None:
+                base_result = parse_simulation_result_for_app(
+                    base_sim, application="opflow", bus_limits=bus_limits_for_sweep,
+                )
 
         # 2. Build per-candidate sim tasks
         sim_tasks: list[tuple[MATNetwork, str, int, list[str] | None]] = []
@@ -1532,29 +2213,16 @@ class AgentLoopController:
             if first_opflow is None and opflow is not None:
                 first_opflow = opflow
 
-            is_feasible = (
-                opflow is not None
-                and opflow.feasibility_detail == "feasible"
-                and opflow.num_violations == 0
-            )
+            # C3: feasibility is decided by the selected predicate (default "standard").
+            ctx = {"bus": bus_id, "vmin": vmin, "vmax": vmax, "params": data}
+            is_feasible, reason = predicate_fn(opflow, base_result, ctx)
 
             if is_feasible:
                 feasible_buses.append(bus_id)
                 if first_feasible_opflow is None:
                     first_feasible_opflow = opflow
 
-            if is_feasible:
-                reason = ""
-            elif opflow is not None:
-                reason = _infeasible_reason(
-                    opflow.voltage_min, opflow.voltage_max,
-                    opflow.max_line_loading_pct, opflow.num_violations,
-                    vmin, vmax,
-                )
-            else:
-                reason = "did not converge"
-
-            candidate_summaries.append({
+            summary = {
                 "bus": bus_id,
                 "feasible": is_feasible,
                 "voltage_min": opflow.voltage_min if opflow else 0.0,
@@ -1564,43 +2232,76 @@ class AgentLoopController:
                 "cost": opflow.objective_value if opflow else None,
                 "status": opflow.convergence_status if opflow else "FAILED",
                 "reason": reason,
-            })
+            }
+            # C3: custom metric value + the metric/predicate names (only when set,
+            # so the default sweep path journals an unchanged payload).
+            # Fix 1: a metric read from a candidate's solved state is trustworthy
+            # only if that candidate is certified (CONVERGED). For non-converged
+            # candidates metric_value is None, so the LLM reduction and the report
+            # never present an uncertified iterate's metric as the answer.
+            if metric_fn is not None:
+                summary["metric_name"] = metric_name
+                summary["metric_value"] = (
+                    metric_fn(opflow, base_result, ctx) if _is_certified(opflow) else None
+                )
+            if predicate_name is not None:
+                summary["predicate_name"] = predicate_name
+            # C2: record the dispatched Pg of the newly added unit (diagnostic — a
+            # unit dispatching ~0 MW is not helping at that location).
+            if is_dispatchable_gen and opflow is not None:
+                gens_at_bus = [g for g in opflow.generators if g.bus == bus_id]
+                summary["dispatched_pg"] = gens_at_bus[-1].Pg if gens_at_bus else None
+            # Fix 3: reactive-adequacy forces Q = Qmax at P = Pmax; record the
+            # solved reactive output so the forcing is auditable (should equal the
+            # Qmax target at every certified/adequate bus).
+            if is_reactive_adequacy_gen:
+                gens_at_bus = [g for g in opflow.generators if g.bus == bus_id] if opflow else []
+                summary["dispatched_q"] = (
+                    gens_at_bus[-1].Qg if (gens_at_bus and _is_certified(opflow)) else None
+                )
+
+            candidate_summaries.append(summary)
 
         self._latest_opflow = first_feasible_opflow or first_opflow
 
-        # 5. Build compact results table
+        # 5. Build LLM-facing results view (token-bounded for large networks)
         mut_action = mutation_template.get("action", "unknown")
         mut_desc_parts = [mut_action]
         if "capacity_mw" in mutation_template:
             mut_desc_parts.append(f"{mutation_template['capacity_mw']} MW")
-            if not mutation_template.get("dispatchable", False):
-                mut_desc_parts.append("forced injection")
+            mut_desc_parts.append("dispatchable" if is_dispatchable_gen else "forced injection")
         if "Pd" in mutation_template:
             mut_desc_parts.append(f"Pd={mutation_template['Pd']} MW")
 
         mut_desc = " ".join(str(p) for p in mut_desc_parts)
 
-        infeasible_buses = [s["bus"] for s in candidate_summaries if not s["feasible"]]
-        if len(infeasible_buses) > 20:
-            infeasible_str = f"[{', '.join(str(b) for b in infeasible_buses[:20])}, ...]"
+        # Ranking key/label: a custom metric ranks by its own value/direction;
+        # otherwise rank by the primary objective (cost).
+        if metric_name is not None:
+            rank_key = "metric_value"
+            objective_name = metric_name
+            objective_direction = sweep_metrics.metric_direction(metric_name)
         else:
-            infeasible_str = f"[{', '.join(str(b) for b in infeasible_buses)}]"
+            rank_key = "cost"
+            primary_objs = self._journal.objective_registry.get_primary()
+            if primary_objs:
+                _obj = primary_objs[0]
+                objective_name = _obj.name
+                objective_direction = "minimize" if _obj.direction == "constraint" else _obj.direction
+            else:
+                objective_name = "cost"
+                objective_direction = "minimize"
 
-        table_lines = [
-            f"Sweep over {len(candidates)} candidate buses (mutation: {mut_desc}):",
-            f"FEASIBLE: {len(feasible_buses)} / {len(candidates)}.  INFEASIBLE buses: {infeasible_str}",
-            f"{'bus':>4} | {'feasible':>8} | {'Vmin':>5} | {'Vmax':>5} | {'maxLoad%':>8} | {'viol':>4} | {'cost':>12}",
-        ]
-        for s in candidate_summaries:
-            feas_str = "yes" if s["feasible"] else "no"
-            cost_val = s["cost"]
-            cost_str = f"{cost_val:>12,.1f}" if cost_val is not None else "           N/A"
-            table_lines.append(
-                f"{s['bus']:>4} | {feas_str:>8} | {s['voltage_min']:>5.3f} | "
-                f"{s['voltage_max']:>5.3f} | {s['max_line_loading_pct']:>8.1f} | "
-                f"{s['violations']:>4} | {cost_str}"
-            )
-        self._latest_results_text = "\n".join(table_lines)
+        self._latest_results_text = _build_sweep_llm_view(
+            candidate_summaries=candidate_summaries,
+            feasible_buses=feasible_buses,
+            mut_desc=mut_desc,
+            objective_name=objective_name,
+            objective_direction=objective_direction,
+            top_n=self._config.search.sweep_llm_top_n,
+            threshold=self._config.search.sweep_full_table_threshold,
+            rank_key=rank_key,
+        )
 
         # 6. Journal
         active_directive = (
@@ -1616,9 +2317,274 @@ class AgentLoopController:
             llm_reasoning=reasoning,
             steering_directive=active_directive,
         )
+        self._store_sweep_cache(
+            self._sweep_cache_key(data), description, len(candidates),
+            candidate_summaries, feasible_buses, self._latest_results_text,
+        )
 
         self._print(
             f"[Iter {iteration}] Sweep complete: {len(feasible_buses)}/{len(candidates)} feasible buses"
+        )
+
+        return "sweep", True
+
+    # ------------------------------------------------------------------
+    # Boundary (hosting-capacity) sweep — C.1
+    # ------------------------------------------------------------------
+
+    def _bisect_candidate(
+        self,
+        bus: int,
+        entity: str,
+        pf_spec,
+        tan_phi_avg: float,
+        vmin: float,
+        vmax: float,
+        bus_limits: dict,
+        q_frac: float,
+        base_iter_tag: int,
+        thread_limit: int | None,
+        base_opflow=None,
+    ) -> dict:
+        """Find the max feasible injection (MW) at one candidate bus via bisection.
+
+        Each probe mutates the base network (helper) and runs ONE synchronous
+        OPFLOW solve. Feasible iff converged with 0 violations. Returns the
+        boundary result dict (max_feasible_mw, binding_constraint, probes_used,
+        boundary-point metrics).
+        """
+        s = self._config.search
+        tan_phi = _tan_phi_from_pf_spec(pf_spec, tan_phi_avg) if entity == "load" else 0.0
+        probe_counter = {"n": 0}
+
+        def solve_probe(delta_mw: float) -> _ProbeOutcome:
+            probe_counter["n"] += 1
+            net = _mutate_candidate_network(
+                self._base_network, bus, entity, delta_mw, tan_phi, vmin, vmax, q_frac,
+            )
+            cand_iter = -(base_iter_tag + probe_counter["n"])
+            sim_result = self._executor.run(
+                net, "opflow", cand_iter, self._build_extra_args(), thread_limit,
+            )
+            opflow = None
+            if sim_result is not None:
+                opflow = parse_simulation_result_for_app(
+                    sim_result, application="opflow", bus_limits=bus_limits,
+                )
+            if opflow is None:
+                return _ProbeOutcome(feasible=False, status="FAILED")
+            feasible = (
+                opflow.feasibility_detail == "feasible" and opflow.num_violations == 0
+            )
+            return _ProbeOutcome(
+                feasible=feasible,
+                voltage_min=opflow.voltage_min,
+                voltage_max=opflow.voltage_max,
+                max_line_loading_pct=opflow.max_line_loading_pct,
+                violations=opflow.num_violations,
+                status=opflow.convergence_status,
+                binding=_identify_binding(opflow, vmin, vmax, base_opflow) if feasible else "",
+            )
+
+        result = _bisect_boundary(
+            solve_probe,
+            s.boundary_initial_mw,
+            s.boundary_max_mw,
+            s.boundary_tol_mw,
+            s.boundary_max_probes,
+        )
+        result["bus"] = bus
+        result["entity"] = entity
+        if entity == "load":
+            result["pf_tan_phi"] = tan_phi
+        return result
+
+    def _handle_boundary_sweep(
+        self, iteration: int, data: dict
+    ) -> tuple[str, bool]:
+        """Handle a boundary (hosting-capacity) sweep — one bisection per candidate bus.
+
+        The whole boundary sweep is ONE LLM turn performing N internal bisections;
+        it does not consume N iterations of the LLM budget.
+        """
+        s = self._config.search
+        description = data.get("description", "Boundary sweep")
+        reasoning = data.get("reasoning", "")
+        entity = data.get("entity", "load")
+        if entity not in ("load", "generator"):
+            self._error_feedback = "boundary sweep 'entity' must be 'load' or 'generator'."
+            return "error", True
+
+        pf_spec = data.get("power_factor", s.boundary_power_factor_default)
+        candidate_set_spec = data.get("candidate_set", {})
+        feasibility_spec = data.get("feasibility", {})
+        vmin = feasibility_spec.get("Vmin", 0.9)
+        vmax = feasibility_spec.get("Vmax", 1.1)
+        q_frac = s.boundary_gen_q_frac
+
+        candidates, cand_err = self._resolve_candidate_buses(candidate_set_spec)
+        if candidates is None:
+            self._error_feedback = f"boundary sweep {cand_err}"
+            return "error", True
+        if not candidates:
+            self._error_feedback = "Boundary sweep resolved to an empty candidate set."
+            return "error", True
+
+        self._print(
+            f'[Iter {iteration}] LLM action: boundary sweep — "{description}" '
+            f"({len(candidates)} candidates, entity={entity}, PF={pf_spec})"
+        )
+
+        if self._on_phase:
+            self._on_phase(iteration, "applying_commands")
+
+        # Pre-compute bus limits after applying the vlimits command (same for all candidates).
+        try:
+            _vlimits_net, _ = apply_modifications(
+                self._base_network,
+                [parse_command({"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax})],
+                application="opflow",
+            )
+            bus_limits = _bus_limits_from_network(_vlimits_net)
+        except Exception:
+            _vlimits_net = self._base_network
+            bus_limits = _bus_limits_from_network(self._base_network)
+
+        tan_phi_avg = _system_average_tan_phi(self._base_network)
+        workers = self._resolve_sweep_workers(len(candidates))
+        thread_limit = 1 if workers > 1 else None
+
+        # Base-case feasibility check (single solve). If the base case is infeasible
+        # under the stated band, every bisection's lower bound is invalid.
+        if self._on_phase:
+            self._on_phase(iteration, "running_simulation (boundary: base feasibility check)")
+        base_sim = self._executor.run(
+            _vlimits_net, "opflow", -(iteration * 1_000_000),
+            self._build_extra_args(), thread_limit,
+        )
+        base_opflow = None
+        if base_sim is not None:
+            base_opflow = parse_simulation_result_for_app(
+                base_sim, application="opflow", bus_limits=bus_limits,
+            )
+        base_feasible = (
+            base_opflow is not None
+            and base_opflow.feasibility_detail == "feasible"
+            and base_opflow.num_violations == 0
+        )
+        if not base_feasible:
+            self._error_feedback = (
+                "Boundary sweep aborted: the base case is infeasible under the stated "
+                f"voltage band (Vmin={vmin}, Vmax={vmax}). Relax the band or fix the base "
+                "case before searching hosting capacity."
+            )
+            self._print(f"[Iter {iteration}] Boundary sweep aborted — base case infeasible")
+            return "error", True
+
+        # Build one bisection callable per candidate; parallelize across candidates.
+        def _make_fn(bus: int, idx: int):
+            base_tag = iteration * 1_000_000 + idx * 100
+            return lambda: self._bisect_candidate(
+                bus, entity, pf_spec, tan_phi_avg, vmin, vmax,
+                bus_limits, q_frac, base_tag, thread_limit, base_opflow,
+            )
+
+        fns = [_make_fn(bus, idx) for idx, bus in enumerate(candidates)]
+
+        if self._on_phase:
+            self._on_phase(
+                iteration, f"running_simulation ({len(candidates)} boundary bisections)"
+            )
+        self._print(
+            f"[Iter {iteration}] Running {len(candidates)} boundary bisections "
+            f"({workers} concurrent)..."
+        )
+
+        def _boundary_progress(done: int, total: int) -> None:
+            if self._on_phase:
+                self._on_phase(iteration, f"running_simulation (boundary {done}/{total} buses)")
+
+        results_map = self._executor.map_callables(
+            fns, max_workers=workers, on_progress=_boundary_progress,
+        )
+
+        # Assemble per-candidate summaries (in sorted candidate order).
+        candidate_summaries: list[dict] = []
+        determined_buses: list[int] = []
+        for idx, bus in enumerate(candidates):
+            r = results_map.get(idx)
+            if r is None or isinstance(r, Exception):
+                candidate_summaries.append({
+                    "bus": bus,
+                    "feasible": False,
+                    "max_feasible_mw": None,
+                    "binding_constraint": "error",
+                    "probes_used": 0,
+                    "voltage_min": 0.0,
+                    "voltage_max": 0.0,
+                    "max_line_loading_pct": 0.0,
+                    "violations": 0,
+                    "status": "ERROR",
+                    "reason": "bisection error",
+                    "cost": None,
+                    "entity": entity,
+                })
+                continue
+            mfm = r.get("max_feasible_mw")
+            determined = mfm is not None
+            if determined:
+                determined_buses.append(bus)
+            candidate_summaries.append({
+                "bus": bus,
+                "feasible": determined,
+                "max_feasible_mw": mfm,
+                "binding_constraint": r.get("binding_constraint", ""),
+                "probes_used": r.get("probes_used", 0),
+                "voltage_min": r.get("voltage_min", 0.0),
+                "voltage_max": r.get("voltage_max", 0.0),
+                "max_line_loading_pct": r.get("max_line_loading_pct", 0.0),
+                "violations": 0,
+                "status": "BOUNDARY",
+                "reason": "" if determined else r.get("note", "undetermined"),
+                "cost": None,
+                "entity": entity,
+                "note": r.get("note", ""),
+            })
+
+        # LLM-facing text — token-bounded, mirrors the B.1 gating.
+        if entity == "load":
+            mut_desc = f"boundary load injection, PF={pf_spec}"
+        else:
+            mut_desc = f"boundary generator (forced injection, Q±{q_frac:.2f}·ΔP)"
+        self._latest_results_text = _build_boundary_llm_view(
+            candidate_summaries,
+            mut_desc,
+            top_n=s.sweep_llm_top_n,
+            threshold=s.sweep_full_table_threshold,
+        )
+
+        # Journal (full per-candidate data; report reads this).
+        active_directive = (
+            self._active_steering_directives[-1]["directive"]
+            if self._active_steering_directives else None
+        )
+        self._journal.add_sweep(
+            iteration=iteration,
+            description=f"[boundary sweep] {description}",
+            candidate_count=len(candidates),
+            candidate_summaries=candidate_summaries,
+            feasible_buses=determined_buses,
+            llm_reasoning=reasoning,
+            steering_directive=active_directive,
+        )
+        self._store_sweep_cache(
+            self._sweep_cache_key(data), description, len(candidates),
+            candidate_summaries, determined_buses, self._latest_results_text,
+        )
+
+        self._print(
+            f"[Iter {iteration}] Boundary sweep complete: "
+            f"{len(determined_buses)}/{len(candidates)} buses with a determined boundary"
         )
 
         return "sweep", True
@@ -2324,6 +3290,7 @@ class AgentLoopController:
                 objective_registry=self._journal.objective_registry.to_dict_list(),
                 preference_history=self._journal.objective_registry.history,
                 application=self._config.search.application,
+                near_optimal_abs_tol=self._config.report.near_optimal_abs_tol,
             )
             response = self._backend.complete(sys_prompt, user_prompt)
             analysis_text = response.raw_text

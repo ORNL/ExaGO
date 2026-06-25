@@ -885,3 +885,97 @@ The AgentiGrid Launcher transforms the CLI-only search tool into an interactive,
 The only modification to existing code is the addition of optional callback hooks in `AgentLoopController` — a clean, non-breaking change that enables real-time GUI updates without affecting CLI operation.
 
 The implementation is structured as 9 Claude Code tasks across 3 phases, each building on the previous, with clear module boundaries and testable milestones.
+
+---
+
+## 13. Reporting Honesty and Sweep Concurrency (Prompt-#14 Additions)
+
+### 13.1 Solver Certification Semantics
+
+OPFLOW reports `DID NOT CONVERGE` for **all** infeasible candidates regardless of the actual internal cause (voltage violation, line overload, numerical divergence, etc.). The only certified information from a non-converging solve is that **no feasible operating point was found**. The solver's last iterate — voltage magnitudes, line loadings, violation count — is uncertified diagnostic data, not a confirmed constraint cause.
+
+**Implementation rule**: the `_infeasible_reason` function in `engine/agent_loop.py` takes only `convergence_status: str` as input. It returns `"constraint violation"` only when the status starts with `"CONVERGED"` (PFLOW-style post-solve infeasibility), and `"did not converge"` for everything else. Scalar iterate metrics are never used to classify the infeasibility cause.
+
+**Rendering rule**: the `_certified_reason(v: dict)` helper (duplicated in `app.py` and `report_generator.py`) derives the displayed reason from the `status` field in the candidate dict at render time, overriding whatever string is stored in the `reason` field. This ensures historical journals with old heuristic labels (e.g., "line overload") are rendered correctly without a data migration.
+
+**PDF table**: the infeasible candidate table uses a two-row ReportLab header with SPAN commands to visually separate the certified columns (Bus, Status) from the uncertified iterate metrics (V_min, V_max, Max Load %, Violations), which are grouped under a "Last iterate — uncertified" header. `repeatRows=2` ensures the two-row header repeats on page breaks.
+
+### 13.2 Cost-Minimization Near-Optimal Cluster
+
+When `goal_type == "cost_minimization"` (or unspecified), the sweep overview displays a ranked table of the top-K cheapest feasible buses (K = `report.cost_min_top_k`, default 10), with a Δ-from-best column showing the cost difference from the cheapest candidate. When the gap between rank-1 and rank-2 is below `report.near_optimal_abs_tol` (default $5/h), a caveat is shown: the two candidates are within the solver's noise floor and should be treated as equivalent.
+
+This was motivated by a concrete case in prompt #14: bus 189 ($28,228.57) vs bus 187 ($28,230.05) — gap $1.48, well below IPOPT's noise floor of ~$5/h. Without the caveat, the report declared bus 189 the unique optimum.
+
+**Config fields** (new, backward-compatible):
+```yaml
+report:
+  cost_min_top_k: 10
+  near_optimal_abs_tol: 5.0
+```
+
+**ReportConfig dataclass** in `agentigrid/config.py`:
+```python
+@dataclass(frozen=True)
+class ReportConfig:
+    cost_min_top_k: int = 10
+    near_optimal_abs_tol: float = 5.0
+```
+`AppConfig.report` has `field(default_factory=ReportConfig)` for zero-migration compatibility.
+
+### 13.3 Voltage Criterion Honesty Note
+
+Under OPFLOW, the voltage band (`Vmin`/`Vmax`) and thermal limits (Rate A) are enforced as **in-solve hard constraints** — any converged result already satisfies them. This means the voltage criterion is not an independent post-solve filter; a converged candidate inherently passes it. Both the Streamlit UI and the PDF report include a one-sentence note to this effect to prevent readers from inferring that voltage violations caused DID NOT CONVERGE failures.
+
+### 13.4 Token-Bounded LLM-Facing Sweep View (B.1)
+
+The sweep handler builds a string (`self._latest_results_text`) that is injected into the next LLM prompt as the "current results" context. The legacy implementation emitted a full per-candidate table — one row per candidate — which scales O(n_candidates) in tokens. For ACTIVSg200 this was ~18,658 tokens; for ACTIVSg2000 ~100,903 tokens; at 3000+ buses it approaches the context window.
+
+**Threshold gate** (config `search.sweep_full_table_threshold`, default 250):
+- `candidate_count ≤ threshold` → full table (byte-identical to legacy output, preserves ACTIVSg200 baselines).
+- `candidate_count > threshold` (or threshold = 0) → summarized view.
+
+**Summarized view structure:**
+1. Header: total / feasible / infeasible counts
+2. Complete feasible bus list (integers; needed by the LLM for set-based operations like boundary search)
+3. Infeasible buses grouped by reason — O(n_reasons) lines instead of O(n_infeasible)
+4. Top-N ranked block by primary objective (config `search.sweep_llm_top_n`, default 25); objective name and direction come from `objective_registry.get_primary()`, fallback to `cost / minimize`
+5. Aggregate stats (min / median / max of objective over feasible set)
+6. Journal pointer: explicit statement that the full table is in the journal and PDF report
+
+Token cost is then O(top_n + n_feasible_buses + n_reasons) — bounded by network size for bus lists (integers) and by top_n for the ranked block. The journal always receives the complete `candidate_summaries`; the report is unaffected.
+
+**Implementation:** `_build_sweep_llm_view(candidate_summaries, feasible_buses, mut_desc, objective_name, objective_direction, top_n, threshold) -> str` — a module-level pure function in `agent_loop.py`. Called from `_handle_sweep` section 5 after primary-objective lookup; journal call is unchanged.
+
+### 13.5 Boundary (Hosting-Capacity) Sweep — C.1
+
+The `sweep` action gains a boundary mode (`"mode": "boundary"`) that finds, per candidate bus, the maximum injection that still yields a feasible OPFLOW solve. The engine runs an exponential-bracket-then-bisect on injection magnitude per bus; the outer loop over buses is parallelized via `SimulationExecutor.map_callables` (a generalization of `run_parallel` for multi-solve candidate callables), while the inner bisection is sequential. The whole sweep is ONE LLM turn.
+
+**Entity modes:**
+- `entity: "load"` — adds active load and scales reactive load on a constant-power-factor ray (`ΔQ = ΔP · tan φ`); `power_factor` is `system_average` (default), `unity`, or a number `0..1`.
+- `entity: "generator"` — fixed-injection unit (`Pmin = Pmax = ΔP`) with reactive output free within `±boundary_gen_q_frac · ΔP`.
+
+**Reporting:** the per-candidate result (max feasible MW, binding constraint, boundary-point Vmin/Vmax/max-loading, probe count) is journaled in full via `add_sweep` (boundary candidates carry a `max_feasible_mw` key). Both the Streamlit overview and the PDF detect this key and render a dedicated **hosting-capacity table** sorted by capacity, with a footnote that the reported boundary is the OPFLOW convergence boundary and non-convergence is treated as infeasible. The LLM-facing text reuses the B.1 token-bounding (top-N by capacity above `sweep_full_table_threshold`). The PDF uses **DejaVu Sans** (unchanged).
+
+**Config (`search.*`):** `boundary_initial_mw`, `boundary_max_mw`, `boundary_tol_mw`, `boundary_max_probes`, `boundary_gen_q_frac`, `boundary_power_factor_default`.
+
+### 13.6 Dispatchable Siting & Custom Metric/Predicate Sweeps (C2 / C3)
+
+The feasible-bus table in `_build_sweep_results_section` (PDF) and the Streamlit overview adapt their columns to the sweep type, detected from per-candidate keys in the journaled payload:
+
+- **Dispatchable siting (C2):** when candidates carry `dispatched_pg`, a "Dispatched Pg (MW)" column and a dispatchable-mode caption are added; the cost-minimization ranking (and near-optimal-cluster caveat) still applies, since the metric is total system cost.
+- **`max_delta_v` metric (C3):** when candidates carry `metric_name == "max_delta_v"`, the cost column is replaced by "Max ΔV (pu)", buses are sorted by largest step, and the cost ranking block is skipped.
+- **`reactive_adequacy` predicate (C3):** when candidates carry `predicate_name == "reactive_adequacy"`, the feasible table is relabelled "Reactive-adequate buses" with a headroom caption; the infeasible table's reason names the limiting quantity. When candidates carry `dispatched_q`, a **"Dispatched Q (MVAr)"** column is added — it audits the Q-forcing (Qmin = Qmax pinned), and should equal the Qmax target at every adequate bus.
+
+The LLM-facing text reuses the B.1 token-bounded view with a `rank_key` parameter (`"cost"` default, `"metric_value"` for a custom metric); the cost path stays byte-identical. **DejaVu Sans** is preserved for all new tables.
+
+**Certified-gating and summary aggregation (C.2/C.3 corrections):** custom `metric_value` is recorded only for certified (CONVERGED) candidates — non-converged candidates show no trusted metric, so the reported extreme is the max/min over feasible buses. The executive-summary "lowest-cost feasible" line descends into sweep `explored_variants` (via `SearchJournal.summary_stats`, which now returns `best_bus`) so a cost sweep's optimum (e.g. bus 181 / $27,367.73) is reported instead of the base case; boundary and metric sweeps are excluded from that cost descent.
+
+### 13.7 OPFLOW Sweep Concurrency
+
+The `search.sweep_max_workers` config field (default 0 = auto = `min(cpu_count, 16)`) controls how many OPFLOW subprocesses run concurrently during a sweep action. The launcher sidebar exposes this via a "Run sweep in parallel" checkbox and a "Concurrent solves" number input (OPFLOW only).
+
+**BLAS oversubscription prevention**: when `workers > 1`, `SimulationExecutor.run()` sets `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`, `NUMEXPR_NUM_THREADS`, and `VECLIB_MAXIMUM_THREADS` to `1` for each worker process. For env-script runs, these are prepended as shell `export` statements; for direct subprocess runs, they are passed via `env=`. When `workers == 1`, thread-count env vars are left unset (solver uses its own defaults).
+
+**Progress reporting**: `run_parallel()` accepts an optional `on_progress: Callable[[int, int], None]` callback, invoked after each solve completes (success or exception). The `_handle_sweep` method in `agent_loop.py` uses this to update the phase indicator: `"running_simulation (sweep N/M solved)"`.
+
+**Worker resolution**: `AgentLoopController._resolve_sweep_workers(n_tasks)` clamps the configured value to `[1, n_tasks]` — no more workers than tasks.

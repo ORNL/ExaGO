@@ -779,6 +779,7 @@ class SearchJournal:
                 "total_iterations": 0,
                 "best_objective": None,
                 "best_iteration": None,
+                "best_bus": None,
                 "feasible_count": 0,
                 "infeasible_count": 0,
                 "objective_trend": [],
@@ -793,6 +794,7 @@ class SearchJournal:
         marginal_count = sum(1 for e in self._entries if e.feasibility_detail == "marginal")
 
         # Use override if provided and valid
+        best_bus = None
         if best_iteration_override is not None:
             override_entry = None
             for e in self._entries:
@@ -807,11 +809,23 @@ class SearchJournal:
                 best_objective, best_iteration = self._best_by_cost(feasible)
         else:
             best_objective, best_iteration = self._best_by_cost(feasible)
+            # Fix 2: sweep iterations carry no scalar cost (objective_value is None
+            # → "SWEEP"), so the iteration-level minimum collapses to the base case.
+            # For cost-style reductions, descend into the per-candidate variant costs
+            # of cost sweeps (excluding boundary/metric sweeps, whose reduction is not
+            # cost) and take the global minimum.
+            if goal_type in (None, "cost_minimization"):
+                sweep_best = self._best_cost_in_sweeps()
+                if sweep_best is not None:
+                    s_cost, s_iter, s_bus = sweep_best
+                    if best_objective is None or s_cost < best_objective:
+                        best_objective, best_iteration, best_bus = s_cost, s_iter, s_bus
 
         return {
             "total_iterations": len(self._entries),
             "best_objective": best_objective,
             "best_iteration": best_iteration,
+            "best_bus": best_bus,
             "feasible_count": len(feasible),
             "infeasible_count": infeasible_count,
             "marginal_count": marginal_count,
@@ -833,3 +847,29 @@ class SearchJournal:
             best = min(feasible, key=lambda e: e.objective_value)  # type: ignore[arg-type]
             return best.objective_value, best.iteration
         return None, None
+
+    def _best_cost_in_sweeps(self) -> tuple[float, int, int | None] | None:
+        """Lowest feasible per-candidate cost across all *cost* sweep entries.
+
+        Descends into ``explored_variants``. Skips boundary sweeps (variants carry
+        ``max_feasible_mw``, no cost reduction) and custom-metric sweeps (variants
+        carry ``metric_name``, where the reduction is the metric, not cost), so a
+        non-cost sweep's variant costs never hijack the cost-min summary.
+
+        Returns ``(cost, iteration, bus)`` for the global minimum, or ``None``.
+        """
+        best: tuple[float, int, int | None] | None = None
+        for e in self._entries:
+            if e.mode != "sweep" or not e.explored_variants:
+                continue
+            variants = e.explored_variants
+            if any(v.get("metric_name") for v in variants):
+                continue  # custom-metric sweep — cost is not the reduction
+            if any("max_feasible_mw" in v for v in variants):
+                continue  # boundary sweep — capacity, not cost
+            for v in variants:
+                if v.get("feasible") and isinstance(v.get("cost"), (int, float)):
+                    c = float(v["cost"])
+                    if best is None or c < best[0]:
+                        best = (c, e.iteration, v.get("bus"))
+        return best

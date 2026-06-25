@@ -256,7 +256,7 @@ class ReportGenerator:
         ))
         story.append(PageBreak())
         if is_sweep:
-            story.extend(self._build_sweep_results_section(session, sweep_entry))
+            story.extend(self._build_sweep_results_section(session, sweep_entry, goal_type=goal_type))
         else:
             story.extend(self._build_convergence_section(
                 session, best_iteration=best_iter_override, goal_type=goal_type,
@@ -540,8 +540,26 @@ class ReportGenerator:
         if sweep_entry is not None:
             n_cand = sweep_entry.candidate_count or 0
             n_feas = len(sweep_entry.feasible_buses or [])
+            _variants = sweep_entry.explored_variants or []
+            _is_boundary = any("max_feasible_mw" in v for v in _variants)
+            if _is_boundary:
+                _det = [v for v in _variants if v.get("max_feasible_mw") is not None]
+                if _det:
+                    _best = max(_det, key=lambda v: v.get("max_feasible_mw") or 0.0)
+                    _headline = (
+                        f"Boundary sweep complete: hosting capacity determined for "
+                        f"{len(_det)} of {n_cand} buses. Highest: "
+                        f"{_best['max_feasible_mw']:,.1f} MW at bus {_best['bus']}."
+                    )
+                else:
+                    _headline = (
+                        f"Boundary sweep complete: no hosting capacity could be determined "
+                        f"for the {n_cand} candidate buses."
+                    )
+            else:
+                _headline = f"Sweep complete: {n_feas} of {n_cand} candidate buses are feasible."
             sweep_lines = [
-                f"Sweep complete: {n_feas} of {n_cand} candidate buses are feasible.",
+                _headline,
                 f"Total iterations: {stats['total_iterations']}",
                 f"Duration: {duration.total_seconds():.0f}s",
                 f"Termination: {session.termination_reason}",
@@ -620,18 +638,134 @@ class ReportGenerator:
 
     # ── Sweep Results Section ────────────────────────────────────────────
 
-    def _build_sweep_results_section(self, session, sweep_entry) -> list:
-        """Build the sweep-results section: feasible-bus table + infeasible list."""
+    @staticmethod
+    def _certified_reason(v: dict) -> str:
+        """Derive displayed infeasibility reason from solver status (defensive).
+
+        Uses the journaled `status` field as source of truth, so even historical
+        journals that stored old heuristic labels ("line overload", etc.) render
+        honestly.  Only a CONVERGED solve certifies a constraint violation; every
+        other outcome is non-convergence and nothing about the iterate is certified.
+        """
+        status = (v.get("status") or "").upper()
+        if status.startswith("CONVERGED"):
+            return "Constraint violation"
+        return "Did not converge"
+
+    def _build_boundary_table(self, sweep_entry, variants: list, n_cand: int) -> list:
+        """Build the hosting-capacity table for a boundary (max-injection) sweep."""
+        s = self._styles
+        elements: list = []
+
+        determined = [v for v in variants if v.get("max_feasible_mw") is not None]
+        undetermined = [v for v in variants if v.get("max_feasible_mw") is None]
+        determined.sort(key=lambda v: v.get("max_feasible_mw") or 0.0, reverse=True)
+        undetermined.sort(key=lambda v: v["bus"])
+
+        entity = next((v.get("entity") for v in variants if v.get("entity")), "injection")
+
+        elements.append(Paragraph(
+            f"The maximum feasible {self._escape_xml(str(entity))} injection was searched "
+            f"at {n_cand} candidate buses by bisection. A boundary was determined for "
+            f"{len(determined)} of {n_cand} buses.",
+            s["body"],
+        ))
+        elements.append(Spacer(1, 0.4 * cm))
+
+        elements.append(Paragraph(
+            f"Hosting capacity by bus ({len(determined)})", s["heading2"],
+        ))
+        if determined:
+            header = [
+                "Bus", "Max Feasible (MW)", "Binding Constraint",
+                "Boundary V_min", "Boundary V_max", "Max Load (%)", "Probes",
+            ]
+            rows = [header]
+            for v in determined:
+                mfm = v.get("max_feasible_mw")
+                rows.append([
+                    str(v["bus"]),
+                    f"{mfm:,.1f}" if isinstance(mfm, (int, float)) else "—",
+                    self._escape_xml(str(v.get("binding_constraint", ""))),
+                    f"{v.get('voltage_min', 0):.3f}",
+                    f"{v.get('voltage_max', 0):.3f}",
+                    f"{v.get('max_line_loading_pct', 0):.1f}",
+                    str(v.get("probes_used", 0)),
+                ])
+            col_widths = [1.5 * cm, 2.8 * cm, 5.2 * cm, 2.4 * cm, 2.4 * cm, 2.2 * cm, 1.5 * cm]
+            table = Table(rows, colWidths=col_widths, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16a085")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("FONTNAME", (0, 1), (-1, -1), self._font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#eafaf6")]),
+                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
+                ("ALIGN", (0, 0), (0, -1), "CENTER"),
+                ("ALIGN", (2, 0), (2, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(table)
+        else:
+            elements.append(Paragraph("No boundary could be determined for any bus.", s["body"]))
+
+        if undetermined:
+            elements.append(Spacer(1, 0.3 * cm))
+            bus_list = ", ".join(str(v["bus"]) for v in undetermined)
+            elements.append(Paragraph(
+                f"Undetermined buses ({len(undetermined)}): {self._escape_xml(bus_list)}.",
+                s["caption"],
+            ))
+
+        elements.append(Spacer(1, 0.3 * cm))
+        elements.append(Paragraph(
+            "The boundary reported is the OPFLOW convergence boundary: the largest injection "
+            "for which IPOPT converges with the voltage band and thermal limits (Rate A) "
+            "enforced as in-solve hard constraints. Non-convergence is treated as the "
+            "infeasible signal that caps the bisection — a probe that fails for numerical "
+            "rather than physical reasons would understate the true hosting capacity. "
+            "The binding constraint is identified at the maximum-feasible operating point.",
+            s["caption"],
+        ))
+        return elements
+
+    def _build_sweep_results_section(
+        self, session, sweep_entry, goal_type: str | None = None,
+    ) -> list:
+        """Build the sweep-results section: feasible-bus table + infeasible table."""
         s = self._styles
         elements: list = []
         elements.append(Paragraph("Sweep Results", s["heading1"]))
 
         variants = sweep_entry.explored_variants or []
         n_cand = sweep_entry.candidate_count or len(variants)
+
+        # Boundary (hosting-capacity) sweeps carry max_feasible_mw per candidate
+        # and use a dedicated table instead of the feasible/infeasible split.
+        if any("max_feasible_mw" in v for v in variants):
+            elements.extend(
+                self._build_boundary_table(sweep_entry, variants, n_cand)
+            )
+            return elements
+
         feasible = [v for v in variants if v.get("feasible")]
         infeasible = [v for v in variants if not v.get("feasible")]
-        feasible.sort(key=lambda v: v["bus"])
         infeasible.sort(key=lambda v: v["bus"])
+
+        # C2/C3 detection: dispatchable-generator siting and custom metric/predicate sweeps.
+        is_dispatchable = any(v.get("dispatched_pg") is not None for v in variants)
+        has_dispatched_q = any(v.get("dispatched_q") is not None for v in variants)
+        metric_name = next((v.get("metric_name") for v in variants if v.get("metric_name")), None)
+        predicate_name = next((v.get("predicate_name") for v in variants if v.get("predicate_name")), None)
+        if metric_name == "max_delta_v":
+            feasible.sort(key=lambda v: v.get("metric_value") or 0.0, reverse=True)
+        else:
+            feasible.sort(key=lambda v: v["bus"])
 
         elements.append(Paragraph(
             f"The mutation described as “{self._escape_xml(sweep_entry.description)}” "
@@ -640,24 +774,90 @@ class ReportGenerator:
             f"under the stated criteria.",
             s["body"],
         ))
+
+        # Fix 3 — voltage-criterion honesty note
+        elements.append(Paragraph(
+            "Note: Under OPFLOW, the voltage band and thermal limits (Rate A) are enforced "
+            "as in-solve hard constraints, so the stated voltage criterion is satisfied by "
+            "construction for any converged candidate and is not an independent discriminating "
+            "filter for feasibility.",
+            s["caption"],
+        ))
         elements.append(Spacer(1, 0.5 * cm))
 
-        # Feasible-bus table (primary result)
-        elements.append(Paragraph(f"Feasible buses ({len(feasible)})", s["heading2"]))
+        # ── Feasible-bus table ───────────────────────────────────────────
+        if predicate_name == "reactive_adequacy":
+            feas_heading = f"Reactive-adequate buses ({len(feasible)})"
+            elements.append(Paragraph(feas_heading, s["heading2"]))
+            elements.append(Paragraph(
+                "A bus is reactive-adequate if a feasible OPF exists with the added unit "
+                "forced to (P = Pmax, Q = Qmax) — Qmin and Qmax are pinned to the target so "
+                "the reactive output is forced, not merely bounded. This is a reactive-headroom "
+                "test, not the standard voltage/loading criterion. “Dispatched Q” audits the "
+                "forcing: it should equal the Qmax target at every adequate bus.",
+                s["caption"],
+            ))
+        elif metric_name == "max_delta_v":
+            elements.append(Paragraph(f"Buses by voltage step ({len(feasible)})", s["heading2"]))
+            elements.append(Paragraph(
+                "Max ΔV is the worst system-wide voltage change |V − V_base| between the "
+                "base-case OPF solution and the OPF solution with the load block added at the "
+                "candidate bus; both are cost-optimal solutions in which the solver re-dispatches "
+                "reactive support. It is a steady-state sensitivity, not a physical "
+                "switching/energization transient. Because this sweep relaxes the bus voltage "
+                "band, the cost-optimal voltage profile has slack, so small differences between "
+                "the top-ranked buses reflect the optimizer's freedom to redistribute voltage "
+                "setpoints rather than a physically meaningful ranking — read the result as "
+                "identifying the high-sensitivity region, not a single uniquely-worst bus.",
+                s["caption"],
+            ))
+        else:
+            elements.append(Paragraph(f"Feasible buses ({len(feasible)})", s["heading2"]))
+            if is_dispatchable:
+                elements.append(Paragraph(
+                    "Generator mode: dispatchable (Pmin = 0, Pmax = cap) under economic "
+                    "dispatch with a cost curve. The OPF chooses each unit's output; "
+                    "“Dispatched Pg” is the optimized output at that location (a unit "
+                    "dispatching ~0 MW is not helping there).",
+                    s["caption"],
+                ))
         if feasible:
-            header = ["Bus", "V_min (pu)", "V_max (pu)", "Max Line Loading (%)", "Violations", "System Cost ($)"]
-            rows = [header]
-            for v in feasible:
-                cost = v.get("cost")
-                rows.append([
-                    str(v["bus"]),
-                    f"{v.get('voltage_min', 0):.3f}",
-                    f"{v.get('voltage_max', 0):.3f}",
-                    f"{v.get('max_line_loading_pct', 0):.1f}",
-                    str(v.get("violations", 0)),
-                    f"{cost:,.2f}" if isinstance(cost, (int, float)) and cost else "—",
-                ])
-            col_widths = [2 * cm, 2.8 * cm, 2.8 * cm, 4 * cm, 2.4 * cm, 3 * cm]
+            # Column set adapts to the sweep type (C2 dispatched Pg, C3 metric column).
+            col_specs: list = [
+                ("Bus", 1.6 * cm, lambda v: str(v["bus"])),
+                ("V_min (pu)", 2.3 * cm, lambda v: f"{v.get('voltage_min', 0):.3f}"),
+                ("V_max (pu)", 2.3 * cm, lambda v: f"{v.get('voltage_max', 0):.3f}"),
+                ("Max Loading (%)", 2.8 * cm, lambda v: f"{v.get('max_line_loading_pct', 0):.1f}"),
+                ("Violations", 2.0 * cm, lambda v: str(v.get("violations", 0))),
+            ]
+            if metric_name == "max_delta_v":
+                col_specs.append((
+                    "Max ΔV (pu)", 2.6 * cm,
+                    lambda v: f"{v.get('metric_value'):.4f}"
+                    if isinstance(v.get("metric_value"), (int, float)) else "—",
+                ))
+            else:
+                col_specs.append((
+                    "System Cost ($)", 3 * cm,
+                    lambda v: f"{v.get('cost'):,.2f}"
+                    if isinstance(v.get("cost"), (int, float)) and v.get("cost") else "—",
+                ))
+            if is_dispatchable:
+                col_specs.append((
+                    "Dispatched Pg (MW)", 3 * cm,
+                    lambda v: f"{v.get('dispatched_pg'):,.1f}"
+                    if isinstance(v.get("dispatched_pg"), (int, float)) else "—",
+                ))
+            if has_dispatched_q:
+                col_specs.append((
+                    "Dispatched Q (MVAr)", 3 * cm,
+                    lambda v: f"{v.get('dispatched_q'):,.1f}"
+                    if isinstance(v.get("dispatched_q"), (int, float)) else "—",
+                ))
+
+            header = [c[0] for c in col_specs]
+            col_widths = [c[1] for c in col_specs]
+            rows = [header] + [[c[2](v) for c in col_specs] for v in feasible]
             table = Table(rows, colWidths=col_widths, repeatRows=1)
             table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3498db")),
@@ -674,36 +874,106 @@ class ReportGenerator:
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]))
             elements.append(table)
+
+            # Fix 2 — cost-minimization near-optimal ranking (cost sweeps only,
+            # not when a custom non-cost metric drives the ranking)
+            if goal_type in (None, "cost_minimization") and metric_name != "max_delta_v":
+                feasible_with_cost = sorted(
+                    [(v, v.get("cost")) for v in feasible if isinstance(v.get("cost"), (int, float))],
+                    key=lambda x: x[1],
+                )
+                if feasible_with_cost:
+                    top_k = getattr(session.config.report, "cost_min_top_k", 10)
+                    abs_tol = getattr(session.config.report, "near_optimal_abs_tol", 5.0)
+                    top_buses = feasible_with_cost[:top_k]
+                    best_cost = top_buses[0][1]
+
+                    elements.append(Spacer(1, 0.4 * cm))
+                    elements.append(Paragraph(
+                        f"Cost ranking — top {len(top_buses)} cheapest buses", s["heading2"],
+                    ))
+                    rank_header = ["Rank", "Bus", "Cost ($/h)", "Δ from best ($/h)"]
+                    rank_rows = [rank_header]
+                    for rank, (v, cost) in enumerate(top_buses, 1):
+                        delta = cost - best_cost
+                        rank_rows.append([
+                            str(rank),
+                            str(v["bus"]),
+                            f"{cost:,.2f}",
+                            f"+{delta:.2f}" if delta > 0 else "0.00",
+                        ])
+                    rank_col_widths = [1.5 * cm, 2 * cm, 4.5 * cm, 4.5 * cm]
+                    rank_table = Table(rank_rows, colWidths=rank_col_widths, repeatRows=1)
+                    rank_table.setStyle(TableStyle([
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3498db")),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                        ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                        ("FONTSIZE", (0, 0), (-1, -1), 8),
+                        ("FONTNAME", (0, 1), (-1, -1), self._font),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8f9fa")]),
+                        ("ALIGN", (0, 0), (1, -1), "CENTER"),
+                        ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("TOPPADDING", (0, 0), (-1, -1), 3),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                    ]))
+                    elements.append(rank_table)
+
+                    # Near-optimal caveat when gap is below solver tolerance
+                    if len(top_buses) >= 2:
+                        gap = top_buses[1][1] - best_cost
+                        if gap < abs_tol:
+                            elements.append(Spacer(1, 0.2 * cm))
+                            elements.append(Paragraph(
+                                f"Note: The cost difference between the leading candidates "
+                                f"(${gap:.2f}/h) is below the solver tolerance threshold "
+                                f"(${abs_tol:.1f}/h). These buses should be treated as "
+                                f"equivalently optimal rather than strictly ranked.",
+                                s["caption"],
+                            ))
         else:
             elements.append(Paragraph("No buses were found to be feasible.", s["body"]))
         elements.append(Spacer(1, 0.5 * cm))
 
-        elements.append(Spacer(1, 0.5 * cm))
+        # ── Infeasible-bus table (Fix 1b) ────────────────────────────────
         elements.append(Paragraph(f"Infeasible buses ({len(infeasible)})", s["heading2"]))
         if infeasible:
-            header = ["Bus", "Reason", "V_min (pu)", "V_max (pu)",
-                      "Max Line Loading (%)", "Violations"]
-            rows = [header]
+            # Two-row header: Bus + Status span both rows; metric columns grouped
+            # under "Last iterate — uncertified" in the first row.
+            header_row0 = ["Bus", "Status", "Last iterate — uncertified", "", "", ""]
+            header_row1 = ["", "", "V_min (pu)", "V_max (pu)", "Max Load (%)", "Violations"]
+            data_rows = []
             for v in infeasible:
-                rows.append([
+                data_rows.append([
                     str(v["bus"]),
-                    (v.get("reason") or "infeasible").capitalize(),
+                    self._certified_reason(v),
                     f"{v.get('voltage_min', 0):.3f}",
                     f"{v.get('voltage_max', 0):.3f}",
                     f"{v.get('max_line_loading_pct', 0):.1f}",
                     str(v.get("violations", 0)),
                 ])
-            col_widths = [1.8 * cm, 3.6 * cm, 2.6 * cm, 2.6 * cm, 3.6 * cm, 2.4 * cm]
-            table = Table(rows, colWidths=col_widths, repeatRows=1)
+            rows = [header_row0, header_row1] + data_rows
+            col_widths = [1.8 * cm, 3.8 * cm, 2.4 * cm, 2.4 * cm, 3.2 * cm, 2.4 * cm]
+            table = Table(rows, colWidths=col_widths, repeatRows=2)
             table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c0392b")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                # Bus spans rows 0-1; Status spans rows 0-1
+                ("SPAN", (0, 0), (0, 1)),
+                ("SPAN", (1, 0), (1, 1)),
+                # "Last iterate" spans metric columns in row 0 only
+                ("SPAN", (2, 0), (5, 0)),
+                # Header background for both header rows
+                ("BACKGROUND", (0, 0), (-1, 1), colors.HexColor("#c0392b")),
+                ("TEXTCOLOR", (0, 0), (-1, 1), colors.white),
+                ("FONTNAME", (0, 0), (-1, 1), self._font_bold),
+                # Data rows
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("FONTNAME", (0, 1), (-1, -1), self._font),
+                ("FONTNAME", (0, 2), (-1, -1), self._font),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fdf2f1")]),
+                ("ROWBACKGROUNDS", (0, 2), (-1, -1), [colors.white, colors.HexColor("#fdf2f1")]),
+                # Alignment
                 ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+                ("ALIGN", (2, 0), (5, 0), "CENTER"),  # "Last iterate" header centred
                 ("ALIGN", (0, 0), (0, -1), "CENTER"),
                 ("ALIGN", (1, 0), (1, -1), "LEFT"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -713,11 +983,13 @@ class ReportGenerator:
             elements.append(table)
             elements.append(Spacer(1, 0.3 * cm))
             elements.append(Paragraph(
-                "Metrics are taken from the solver’s last iterate. For buses marked "
-                "“Did not converge”, that iterate was not certified as a solution and may "
-                "appear to satisfy the limits even though no feasible operating point was "
-                "found (these rows typically show 0 violations). For “Line overload” and "
-                "“Voltage low” buses, the listed value is the binding violation.",
+                "The “Status” column reflects solver certification only: a solve either "
+                "converged to a feasible operating point or it did not. "
+                "The four rightmost columns are from the solver’s last uncertified iterate "
+                "and must not be read as the certified cause of infeasibility — they are "
+                "diagnostic hints only. No certified operating point exists for “Did not "
+                "converge” buses, so their iterate metrics may appear within limits even "
+                "though no feasible solution was found.",
                 s["caption"],
             ))
         else:

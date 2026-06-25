@@ -662,6 +662,64 @@ def _build_standard_prompt(
   "mutation": {{"action": "add_generator_at_bus", "capacity_mw": 100.0}},
   "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
 }}
+
+5. BOUNDARY SWEEP (max hosting capacity) — for "how much load/generation can each bus take?"
+   or "what is the maximum MW at bus X" goals. Instead of testing ONE fixed injection, the
+   system runs a per-bus bisection on the injection magnitude (in code, in parallel) and
+   returns the maximum feasible MW per bus plus the binding constraint. This is ONE action,
+   not many iterations. Choose the entity:
+     - "load":      adds active load and scales reactive load along a constant-power-factor
+                    ray. "power_factor" is "system_average" (default, the ΣQd/ΣPd of the base
+                    case), "unity", or a number 0..1. Pd and Qd always move together.
+     - "generator": adds a generator in fixed-injection mode (Pmin=Pmax=ΔP); reactive output
+                    is left free within a default band. (A dispatchable unit would be zeroed
+                    by the OPF, making the hosting test vacuous — fixed injection is required.)
+   The boundary located is the OPFLOW convergence boundary (V-band and Rate A are in-solve
+   hard constraints). Read the returned per-bus capacities and answer with "complete".
+{{
+  "action": "sweep",
+  "mode": "boundary",
+  "entity": "load",
+  "power_factor": "system_average",
+  "reasoning": "Find the maximum load each bus can host.",
+  "description": "Short one-line description for the journal",
+  "candidate_set": {{"type": "all_buses"}},
+  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
+}}
+
+6. ECONOMIC (DISPATCHABLE) GENERATOR SITING — for "where is the minimum-cost location for a
+   generator under economic dispatch?" The OPF must CHOOSE the unit's output, so add a
+   dispatchable unit (Pmin=0, Pmax=cap) with a realistic cost curve and rank locations by the
+   resulting total system cost. Set entity_dispatchable=true; the cost curve defaults to the
+   case median (mid-merit) unless you pass entity_cost_coeffs [c2, c1, c0]. The report records
+   each location's dispatched Pg (a unit dispatching ~0 MW is not helping there).
+{{
+  "action": "sweep",
+  "reasoning": "Find the min-cost location for a dispatchable generator.",
+  "description": "Short one-line description for the journal",
+  "candidate_set": {{"type": "all_buses"}},
+  "mutation": {{"action": "add_generator_at_bus", "capacity_mw": 200.0}},
+  "entity_dispatchable": true,
+  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
+}}
+
+7. CUSTOM METRIC / PREDICATE SWEEP — select a NAMED, verified primitive (never invent logic):
+   - metric "max_delta_v": ranks buses by the worst system-wide voltage step |ΔV| caused by
+     switching in a load block at that bus (power-quality flag). Use for "largest voltage step
+     on energizing / switching" goals. Pair with mutation add_load_at_bus.
+   - feasibility_predicate "reactive_adequacy": tests whether a feasible OPF exists with a unit
+     forced to (P=Pmax, Q=Qmax) at the bus (reactive headroom). Use for "which buses have
+     reactive adequacy / can supply Qmax at Pmax" goals. Pair with mutation add_generator_at_bus
+     and set Qmax to the target; the system pins Q=Qmax.
+{{
+  "action": "sweep",
+  "reasoning": "Rank buses by the voltage step when switching in a 100 MW block.",
+  "description": "Short one-line description for the journal",
+  "candidate_set": {{"type": "all_buses"}},
+  "mutation": {{"action": "add_load_at_bus", "Pd": 100.0}},
+  "metric": "max_delta_v",
+  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
+}}
 """
 
     metadata_section = ""
@@ -700,6 +758,31 @@ network and run {application.upper()} simulations to achieve a user-specified go
 - For "find all buses that can host a load/generator" goals, use the `sweep` action with \
 `add_load_at_bus` or `add_generator_at_bus` as the mutation — do NOT use `scale_all_loads`, \
 which changes the whole network uniformly and does not answer a per-bus question.
+- For "what is the MAXIMUM load/generation each bus can host" or "how much can bus X take" \
+goals, use the `sweep` action with `"mode": "boundary"` (set `entity` to "load" or \
+"generator"). The system bisects the injection magnitude per bus in ONE action and returns \
+the maximum feasible MW with the binding constraint — do NOT run a manual binary search across \
+many iterations.
+- GENERATOR MODE — fixed-injection vs dispatchable (choose from the prompt wording, never \
+default silently, and name the chosen mode back in your answer):
+  - "hosting capacity" / "how much can connect" / "forced injection" / "fixed output" → \
+**fixed injection** (Pmin = Pmax = cap). The unit's output is pinned; this is a feasibility / \
+headroom test.
+  - "economic dispatch" / "minimize cost" / "let the unit choose its output" / "dispatchable" → \
+**dispatchable** (Pmin = 0, Pmax = cap) WITH a cost curve, set `entity_dispatchable: true`. \
+The OPF chooses the output; rank locations by total system cost.
+  These are different questions (e.g. a forced 160/40 split vs an optimized 200/200 dispatch) — \
+picking the wrong mode silently flips the answer.
+- SWEEP METRIC / PREDICATE — when a goal needs something other than cost or standard \
+feasibility, select a NAMED primitive from the verified registry; never invent the logic. \
+Available metrics: `max_delta_v` (worst system-wide voltage step on switching). Available \
+predicates: `reactive_adequacy` (feasible OPF at forced P=Pmax, Q=Qmax). Omit both for the \
+default cost metric and standard V-band/loading feasibility.
+- DO NOT RE-RUN AN IDENTICAL SWEEP. A sweep is deterministic: once it returns results for \
+the requested parameters (same mutation/entity/mode/candidate set), trust them and proceed to \
+the answer. Re-running the same sweep yields byte-identical results, gives no new information, \
+and wastes 2-3x the compute (which scales badly to thousands of buses). Only run another sweep \
+if you genuinely change a parameter (a different mutation size, entity, metric, or candidate set).
 - Declare "complete" when you have a clear answer, when further iterations \
 cannot improve the result, or when the goal is provably infeasible.
 - When performing a binary search (e.g., finding a maximum scaling factor), \

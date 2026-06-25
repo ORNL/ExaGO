@@ -361,6 +361,64 @@ class SimulationExecutor:
 
         return results
 
+    def map_callables(
+        self,
+        fns: "list[Callable[[], object]]",
+        max_workers: int = 4,
+        on_progress: "Callable[[int, int], None] | None" = None,
+    ) -> dict[int, object]:
+        """Run arbitrary candidate callables concurrently via a thread pool.
+
+        Generalizes ``run_parallel`` for cases where the parallel unit is not a
+        single solve but a multi-solve routine (e.g. a per-candidate boundary
+        bisection). Thread-pinning is the responsibility of each callable: the
+        callable should invoke ``self.run(..., thread_limit=...)`` so that the N
+        concurrent workers stay single-threaded and the machine is not
+        oversubscribed.
+
+        Args:
+            fns: List of zero-argument callables; each returns a result object.
+            max_workers: Maximum number of concurrent callables.
+            on_progress: Optional callback invoked after each callable completes
+                with (done, total). Exceptions from the callback are silenced.
+
+        Returns:
+            Dict mapping index (0-based) to the callable's result, or to the
+            raised ``Exception`` if the callable failed. Preserves input order
+            by index.
+        """
+        if not fns:
+            return {}
+
+        logger.info(
+            "map_callables: submitting %d candidate task(s) with max_workers=%d",
+            len(fns), max_workers,
+        )
+
+        results: dict[int, object] = {}
+        done = 0
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            future_to_idx = {pool.submit(fn): idx for idx, fn in enumerate(fns)}
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as exc:
+                    logger.error(
+                        "map_callables: task %d raised %s: %s",
+                        idx, type(exc).__name__, exc,
+                    )
+                    results[idx] = exc
+                done += 1
+                if on_progress is not None:
+                    try:
+                        on_progress(done, len(fns))
+                    except Exception:
+                        pass
+
+        return results
+
     def cleanup_workdir(self, result: SimulationResult) -> None:
         """Remove the working directory for a simulation run.
 

@@ -45,6 +45,7 @@ def build_classification_prompts(
     objective_registry: list[dict] | None = None,
     preference_history: list[dict] | None = None,
     application: str = "opflow",
+    near_optimal_abs_tol: float | None = None,
 ) -> tuple[str, str]:
     """Build the (system_prompt, user_prompt) pair for post-search goal classification.
 
@@ -61,6 +62,10 @@ def build_classification_prompts(
         objective_registry: Optional list of tracked objective dicts.
         preference_history: Optional list of preference change dicts.
         application: ExaGO application name (e.g., "opflow", "tcopflow", "sopflow").
+        near_optimal_abs_tol: Optional solver tolerance ($/h) below which sweep
+            candidates ranked by a scalar are statistically tied. Threaded from
+            ``config.report.near_optimal_abs_tol``; when None the guidance refers
+            to "the solver tolerance" generically.
 
     Returns:
         Tuple of (system_prompt, user_prompt) strings.
@@ -115,10 +120,15 @@ def build_classification_prompts(
     )
     if stats.get("marginal_count", 0) > 0:
         user_prompt += f" / Marginal: {stats['marginal_count']}"
+    _best_bus = stats.get("best_bus")
+    _best_loc = (
+        f"iteration {stats['best_iteration']}, bus {_best_bus}"
+        if _best_bus is not None else f"iteration {stats['best_iteration']}"
+    )
     user_prompt += (
         f"\n"
         f"Lowest-cost feasible: {stats['best_objective']} "
-        f"(iteration {stats['best_iteration']})\n"
+        f"({_best_loc})\n"
         f"Tokens used: ~{total_tokens:,}\n"
         f"\n"
         f"=== Detailed Journal ===\n"
@@ -136,6 +146,10 @@ def build_classification_prompts(
             f"{json.dumps(preference_history, indent=2)}\n"
         )
 
+    _tol_phrase = (
+        f"≈ ${near_optimal_abs_tol:g}/h for cost"
+        if near_optimal_abs_tol is not None else "the solver tolerance"
+    )
     user_prompt += (
         f"\n"
         f"Please provide:\n"
@@ -147,6 +161,17 @@ def build_classification_prompts(
         f"   d. Key modifications that had the most impact\n"
         f"   e. Potential further improvements\n"
         f"   f. Recommendations\n"
+        f"\n"
+        f"   Near-optimal ranking guidance: when the search is a sweep that ranks "
+        f"candidates by a scalar value (system cost or a custom metric), treat "
+        f"candidates whose ranking values differ by less than the solver tolerance "
+        f"({_tol_phrase}) as EQUIVALENTLY OPTIMAL. In both the prose analysis and the "
+        f"best_iteration_rationale, describe the equivalently-optimal set or region "
+        f"and avoid asserting that one bus is uniquely or \"clearly\" best. Do not "
+        f"report precision below solver tolerance. For custom metrics that are "
+        f"re-optimized OPF quantities (e.g. a voltage sensitivity computed from two "
+        f"cost-optimal solutions), note that small inter-candidate differences may "
+        f"reflect optimizer freedom rather than a physical ranking.\n"
         f"\n"
         f"2. At the END of your response, include a JSON block wrapped in\n"
         f"   ```json ... ``` with the following structure:\n"
