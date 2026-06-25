@@ -44,6 +44,7 @@ class JournalEntry:
     explored_variants: Optional[list[dict]] = None  # Explore/select: companion variants
     candidate_count: int = 0  # Sweep: total number of candidates tested
     feasible_buses: Optional[list[int]] = None  # Sweep: list of feasible bus ids
+    exago_command: Optional[dict] = None  # Reproducible ExaGO invocation record (JSON journal only; see add_* methods)
 
 
 @dataclass
@@ -202,6 +203,7 @@ class SearchJournal:
         num_scenarios: int = 0,
         explored_variants: Optional[list[dict]] = None,
         gencost: Optional[list] = None,
+        exago_command: Optional[dict] = None,
     ) -> JournalEntry:
         """Create and append a journal entry from OPFLOW results.
 
@@ -289,6 +291,7 @@ class SearchJournal:
                 num_scenarios=num_scenarios,
                 explored_variants=explored_variants,
                 tracked_metrics=tracked_metrics,
+                exago_command=exago_command,
             )
         else:
             entry = JournalEntry(
@@ -312,6 +315,7 @@ class SearchJournal:
                 num_steps=num_steps,
                 num_scenarios=num_scenarios,
                 explored_variants=explored_variants,
+                exago_command=exago_command,
             )
 
         self._entries.append(entry)
@@ -325,6 +329,7 @@ class SearchJournal:
         pareto_labels: list[str] | None = None,
         llm_reasoning: str = "",
         steering_directive: str | None = None,
+        exago_command: Optional[dict] = None,
     ) -> JournalEntry:
         """Record an 'explore' action in the journal.
 
@@ -351,6 +356,7 @@ class SearchJournal:
             steering_directive=steering_directive,
             feasibility_detail="",
             explored_variants=variant_info,
+            exago_command=exago_command,
         )
         self._entries.append(entry)
         return entry
@@ -364,6 +370,7 @@ class SearchJournal:
         feasible_buses: list[int],
         llm_reasoning: str = "",
         steering_directive: Optional[str] = None,
+        exago_command: Optional[dict] = None,
     ) -> JournalEntry:
         """Record a 'sweep' action in the journal.
 
@@ -391,6 +398,7 @@ class SearchJournal:
             explored_variants=candidate_summaries,
             candidate_count=candidate_count,
             feasible_buses=feasible_buses,
+            exago_command=exago_command,
         )
         self._entries.append(entry)
         return entry
@@ -735,7 +743,7 @@ class SearchJournal:
             "total_gen_mw", "total_load_mw", "llm_reasoning",
             "mode", "elapsed_seconds", "timestamp", "steering_directive",
             "tracked_metrics", "feasibility_detail", "solver", "num_steps", "num_scenarios",
-            "explored_variants", "candidate_count", "feasible_buses",
+            "explored_variants", "candidate_count", "feasible_buses", "exago_command",
         ]
 
         with open(path, "w", newline="", encoding="utf-8") as f:
@@ -747,6 +755,7 @@ class SearchJournal:
                 row["tracked_metrics"] = json.dumps(row.get("tracked_metrics") or {})
                 row["explored_variants"] = json.dumps(row.get("explored_variants") or [])
                 row["feasible_buses"] = json.dumps(row.get("feasible_buses") or [])
+                row["exago_command"] = json.dumps(row.get("exago_command") or None)
                 writer.writerow(row)
 
         logger.info("Journal CSV exported to %s (%d entries)", path, len(self._entries))

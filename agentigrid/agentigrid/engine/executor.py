@@ -8,7 +8,7 @@ import shlex
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
@@ -38,6 +38,11 @@ class SimulationResult:
     application: str
     error_message: Optional[str]
     workdir: Path
+    # Reproducible invocation capture (purely diagnostic; does not affect the run)
+    argv: list[str] = field(default_factory=list)          # exact argv (incl. mpirun prefix)
+    shell_command: Optional[str] = None                    # exact shell string when env-wrapped, else None
+    env_overrides: Optional[dict[str, str]] = None         # thread-pinning vars applied, else None
+    cwd: Optional[str] = None                              # working directory of the run
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +195,10 @@ class SimulationExecutor:
                 application=application,
                 error_message=str(exc),
                 workdir=run_dir,
+                argv=[],
+                shell_command=None,
+                env_overrides=None,
+                cwd=str(run_dir),
             )
 
         # 4. Build command
@@ -199,20 +208,32 @@ class SimulationExecutor:
         if self._exago.mpi_np > 1 and application in ("scopflow", "sopflow"):
             cmd = ["mpirun", "-np", str(self._exago.mpi_np)] + cmd
 
+        # Capture the reproducible invocation (diagnostic only; does NOT affect
+        # how the command is built or executed). Computed here so every return
+        # path below can attach the same forms.
+        _argv = list(cmd)
+        _cwd = str(run_dir)
+        _env_overrides = (
+            {v: str(thread_limit) for v in _THREAD_ENV_VARS}
+            if (thread_limit and thread_limit > 0) else None
+        )
+        _shell_command: Optional[str] = None
+        if self._env_script:
+            _base = f"source {shlex.quote(str(self._env_script))} && "
+            _joined = " ".join(shlex.quote(c) for c in cmd)
+            if thread_limit and thread_limit > 0:
+                _exports = "export " + " ".join(f"{v}={thread_limit}" for v in _THREAD_ENV_VARS) + " && "
+                _shell_command = _base + _exports + _joined
+            else:
+                _shell_command = _base + _joined
+
         # 5/6. Execute
         logger.info("Running: %s", " ".join(cmd))
         t0 = time.monotonic()
 
         try:
             if self._env_script:
-                base = f"source {shlex.quote(str(self._env_script))} && "
-                joined = " ".join(shlex.quote(c) for c in cmd)
-                if thread_limit and thread_limit > 0:
-                    n = thread_limit
-                    exports = "export " + " ".join(f"{v}={n}" for v in _THREAD_ENV_VARS) + " && "
-                    shell_cmd = base + exports + joined
-                else:
-                    shell_cmd = base + joined
+                shell_cmd = _shell_command
                 proc = subprocess.run(
                     shell_cmd,
                     shell=True,
@@ -248,6 +269,10 @@ class SimulationExecutor:
                 application=application,
                 error_message=error_msg,
                 workdir=run_dir,
+                argv=_argv,
+                shell_command=_shell_command,
+                env_overrides=_env_overrides,
+                cwd=_cwd,
             )
 
         elapsed = time.monotonic() - t0
@@ -287,6 +312,10 @@ class SimulationExecutor:
             application=application,
             error_message=error_message,
             workdir=run_dir,
+            argv=_argv,
+            shell_command=_shell_command,
+            env_overrides=_env_overrides,
+            cwd=_cwd,
         )
 
     def run_parallel(
@@ -351,6 +380,10 @@ class SimulationExecutor:
                         application="unknown",
                         error_message=f"Parallel task {idx} failed: {exc}",
                         workdir=Path("."),
+                        argv=[],
+                        shell_command=None,
+                        env_overrides=None,
+                        cwd=None,
                     )
                 done += 1
                 if on_progress is not None:

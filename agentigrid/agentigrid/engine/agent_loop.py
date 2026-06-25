@@ -261,6 +261,44 @@ def _is_certified(opflow) -> bool:
     )
 
 
+def _single_call_record(sim) -> Optional[dict]:
+    """Build the reproducible single-call ExaGO invocation record (JSON journal only).
+
+    Returns None when no SimulationResult / no captured argv is available, so a
+    failed or missing solve records ``exago_command = null`` rather than a
+    misleading partial record.
+    """
+    if sim is None or not getattr(sim, "argv", None):
+        return None
+    return {
+        "mode": "single",
+        "application": getattr(sim, "application", None),
+        "command": " ".join(sim.argv),
+        "argv": list(sim.argv),
+        "shell_command": getattr(sim, "shell_command", None),
+        "env_overrides": getattr(sim, "env_overrides", None),
+        "cwd": getattr(sim, "cwd", None),
+    }
+
+
+def _multi_call_record(mode: str, candidate_count: int, representative_sim, note: str) -> Optional[dict]:
+    """Build the multi-call (sweep/explore) ExaGO invocation record (JSON journal only).
+
+    Logs ONE representative invocation plus the candidate count and a note
+    explaining what varied per candidate (rather than every candidate call).
+    Returns None when no representative invocation could be captured.
+    """
+    representative = _single_call_record(representative_sim)
+    if representative is None:
+        return None
+    return {
+        "mode": mode,
+        "candidate_count": candidate_count,
+        "representative": representative,
+        "note": note,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Boundary (hosting-capacity) search primitives — C.1
 #
@@ -1051,6 +1089,7 @@ class AgentLoopController:
                 num_steps=self._tcopflow_num_steps,
                 num_scenarios=self._sopflow_num_scenarios,
                 gencost=self._base_network.gencost if self._config.search.application == "pflow" else None,
+                exago_command=_single_call_record(sim_result),
             )
             if self._config.search.application == "pflow":
                 computed_cost = opflow.compute_generation_cost(self._base_network.gencost)
@@ -1075,6 +1114,7 @@ class AgentLoopController:
                 mode="fresh",
                 num_steps=self._tcopflow_num_steps,
                 num_scenarios=self._sopflow_num_scenarios,
+                exago_command=_single_call_record(sim_result),
             )
             self._error_feedback = (
                 f"Base case simulation failed: {sim_result.error_message or 'unknown error'}"
@@ -1484,6 +1524,7 @@ class AgentLoopController:
             num_steps=self._tcopflow_num_steps,
             num_scenarios=self._sopflow_num_scenarios,
             gencost=modified_net.gencost if self._config.search.application == "pflow" else None,
+            exago_command=_single_call_record(sim_result),
         )
 
         # Extract tracked metrics for multi-objective tracking
@@ -1886,6 +1927,18 @@ class AgentLoopController:
                 info["feasible"] = False
             variant_info.append(info)
 
+        _explore_rep = next(
+            (variant_results[lbl].sim_result for lbl in variant_labels
+             if getattr(variant_results[lbl], "sim_result", None) is not None),
+            None,
+        )
+        _explore_command = _multi_call_record(
+            "explore", len(variant_labels), _explore_rep,
+            "Executed once per explored variant. Each variant's command set is written "
+            "into its own netfile; only the -netfile path differs between variants. The "
+            "selected variant's exact invocation is recorded separately on its own "
+            "iteration entry.",
+        )
         self._journal.add_explore(
             iteration=iteration,
             description=f"[explore] {description}",
@@ -1893,6 +1946,7 @@ class AgentLoopController:
             pareto_labels=pareto_labels,
             llm_reasoning=reasoning,
             steering_directive=active_directive,
+            exago_command=_explore_command,
         )
 
         return "explore", True
@@ -2341,6 +2395,14 @@ class AgentLoopController:
             self._active_steering_directives[-1]["directive"]
             if self._active_steering_directives else None
         )
+        _representative_sim = next(iter(results_by_cand.values()), None)
+        _sweep_command = _multi_call_record(
+            "sweep", len(candidates), _representative_sim,
+            "Executed once per candidate bus. The per-bus modification "
+            "(e.g. +100 MW at the candidate bus) is written into the per-candidate "
+            "netfile, not passed as an ExaGO argument; only the -netfile path differs "
+            "between candidates.",
+        )
         self._journal.add_sweep(
             iteration=iteration,
             description=f"[sweep] {description}",
@@ -2349,6 +2411,7 @@ class AgentLoopController:
             feasible_buses=feasible_buses,
             llm_reasoning=reasoning,
             steering_directive=active_directive,
+            exago_command=_sweep_command,
         )
         self._store_sweep_cache(
             self._sweep_cache_key(data), description, len(candidates),
@@ -2601,6 +2664,15 @@ class AgentLoopController:
             self._active_steering_directives[-1]["directive"]
             if self._active_steering_directives else None
         )
+        _boundary_command = _multi_call_record(
+            "sweep", len(candidates), base_sim,
+            "Executed once per candidate bus. The per-bus modification (the injected "
+            "load/generation at the candidate bus) is written into the per-candidate "
+            "netfile, not passed as an ExaGO argument; only the -netfile path differs "
+            "between candidates. Each candidate runs a bisection of several solves at "
+            "varying injection magnitudes, each with its own netfile. The representative "
+            "shown is the base-case reference solve.",
+        )
         self._journal.add_sweep(
             iteration=iteration,
             description=f"[boundary sweep] {description}",
@@ -2609,6 +2681,7 @@ class AgentLoopController:
             feasible_buses=determined_buses,
             llm_reasoning=reasoning,
             steering_directive=active_directive,
+            exago_command=_boundary_command,
         )
         self._store_sweep_cache(
             self._sweep_cache_key(data), description, len(candidates),
@@ -2727,6 +2800,7 @@ class AgentLoopController:
             num_scenarios=self._sopflow_num_scenarios,
             explored_variants=explored_variants,
             gencost=selected.modified_net.gencost if self._config.search.application == "pflow" else None,
+            exago_command=_single_call_record(selected.sim_result),
         )
 
         # Extract tracked metrics for multi-objective tracking
