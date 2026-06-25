@@ -114,7 +114,10 @@ class TestSmallSweepFullTable:
     def test_exactly_at_threshold_uses_full_table(self):
         """candidate_count == threshold must still use full table."""
         n = 250
-        candidates = [_make_candidate(bus=i, feasible=True, cost=28000.0 + i) for i in range(n)]
+        # Costs spread $10 apart (> $5 tolerance) so the near-optimal advisory does
+        # NOT fire here — this test verifies the threshold-boundary full-table path,
+        # not the tie advisory (which has its own tests).
+        candidates = [_make_candidate(bus=i, feasible=True, cost=28000.0 + i * 10) for i in range(n)]
         feasible = [s["bus"] for s in candidates]
         result = _build_sweep_llm_view(
             candidate_summaries=candidates,
@@ -512,3 +515,68 @@ class TestObjectiveFallback:
         rank1_lines = [l for l in result.splitlines() if l.strip().startswith("1") and "|" in l]
         assert len(rank1_lines) >= 1
         assert "1" in rank1_lines[0].split("|")[1]  # bus column
+
+
+# ---------------------------------------------------------------------------
+# Near-optimal advisory (Task 3) — sub-tolerance cost ties only
+# ---------------------------------------------------------------------------
+
+_ADVISORY = "Near-optimal"
+
+
+class TestNearOptimalAdvisory:
+
+    def test_fires_full_table_on_subtolerance_cost_tie(self):
+        """Full-table branch: two cheapest feasible costs within $5 → advisory."""
+        cands = [_make_candidate(i, True, cost=28000.0 + i) for i in range(10)]  # gap $1
+        txt = _build_sweep_llm_view(
+            candidate_summaries=cands, feasible_buses=[c["bus"] for c in cands],
+            mut_desc="m", objective_name="cost", objective_direction="minimize",
+            top_n=25, threshold=250, near_optimal_abs_tol=5.0,
+        )
+        assert _ADVISORY in txt
+        assert txt.splitlines()[-1].startswith("[Near-optimal")  # final line
+
+    def test_fires_summarized_on_subtolerance_cost_tie(self):
+        """Summarized branch (> threshold) also appends the advisory as the last line."""
+        cands = [_make_candidate(i + 1, True, cost=28000.0 + i) for i in range(60)]
+        cands += [_make_candidate(900 + i, False) for i in range(300)]
+        txt = _build_sweep_llm_view(
+            candidate_summaries=cands, feasible_buses=[c["bus"] for c in cands if c["feasible"]],
+            mut_desc="m", objective_name="cost", objective_direction="minimize",
+            top_n=25, threshold=250, near_optimal_abs_tol=5.0,
+        )
+        assert _ADVISORY in txt
+        assert txt.splitlines()[-1].startswith("[Near-optimal")
+
+    def test_not_fired_when_gap_above_tolerance(self):
+        cands = [_make_candidate(i, True, cost=28000.0 + i * 10) for i in range(10)]  # gap $10
+        txt = _build_sweep_llm_view(
+            candidate_summaries=cands, feasible_buses=[c["bus"] for c in cands],
+            mut_desc="m", objective_name="cost", objective_direction="minimize",
+            top_n=25, threshold=250, near_optimal_abs_tol=5.0,
+        )
+        assert _ADVISORY not in txt
+
+    def test_not_fired_for_custom_metric_ranking(self):
+        """rank_key != 'cost' (a re-optimized metric) must never get the advisory."""
+        cands = [
+            {**_make_candidate(i, True, cost=28000.0 + i), "metric_value": 0.01 + i * 0.0001,
+             "metric_name": "max_delta_v"}
+            for i in range(10)
+        ]
+        txt = _build_sweep_llm_view(
+            candidate_summaries=cands, feasible_buses=[c["bus"] for c in cands],
+            mut_desc="m", objective_name="max_delta_v", objective_direction="maximize",
+            top_n=25, threshold=250, rank_key="metric_value", near_optimal_abs_tol=5.0,
+        )
+        assert _ADVISORY not in txt
+
+    def test_not_fired_with_fewer_than_two_feasible_costs(self):
+        cands = [_make_candidate(1, True, cost=28000.0)] + [_make_candidate(2, False)]
+        txt = _build_sweep_llm_view(
+            candidate_summaries=cands, feasible_buses=[1],
+            mut_desc="m", objective_name="cost", objective_direction="minimize",
+            top_n=25, threshold=250, near_optimal_abs_tol=5.0,
+        )
+        assert _ADVISORY not in txt

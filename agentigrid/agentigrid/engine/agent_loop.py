@@ -79,6 +79,7 @@ def _build_sweep_llm_view(
     top_n: int,
     threshold: int,
     rank_key: str = "cost",
+    near_optimal_abs_tol: float = 5.0,
 ) -> str:
     """Build the LLM-facing text for a sweep result.
 
@@ -91,6 +92,13 @@ def _build_sweep_llm_view(
 
     ``rank_key`` selects the per-candidate value used for ranking and stats —
     "cost" (default, the OPF objective) or "metric_value" (a C3 custom metric).
+
+    Note: for COST sweeps with a sub-tolerance tie (the two cheapest feasible
+    candidates differ by less than ``near_optimal_abs_tol``) a trailing
+    near-optimal advisory line is appended in both branches — this intentionally
+    breaks the byte-identical guarantee only in that specific case. The advisory
+    never appears for non-cost (custom-metric) rankings or when there is no
+    sub-tolerance tie.
     """
     n_total = len(candidate_summaries)
     n_feasible = len(feasible_buses)
@@ -99,6 +107,23 @@ def _build_sweep_llm_view(
 
     def _rank_val(s: dict):
         return s.get(rank_key)
+
+    def _near_optimal_advisory() -> "str | None":
+        """Advisory when the top two feasible COST candidates are within tolerance."""
+        if rank_key != "cost":
+            return None
+        costs = sorted(
+            s["cost"] for s in candidate_summaries
+            if s.get("feasible") and isinstance(s.get("cost"), (int, float))
+        )
+        if len(costs) < 2 or (costs[1] - costs[0]) >= near_optimal_abs_tol:
+            return None
+        return (
+            f"[Near-optimal: the top candidates are within the solver tolerance "
+            f"(${near_optimal_abs_tol:g}/h) of each other and are statistically tied — "
+            f"report them as an equivalently-optimal set, do not single out one bus as "
+            f"uniquely best.]"
+        )
 
     def _fmt_val(val) -> str:
         if not isinstance(val, (int, float)):
@@ -130,6 +155,9 @@ def _build_sweep_llm_view(
                 f"{s['voltage_max']:>5.3f} | {s['max_line_loading_pct']:>8.1f} | "
                 f"{s['violations']:>4} | {val_str}"
             )
+        _adv = _near_optimal_advisory()
+        if _adv:
+            table_lines.append(_adv)
         return "\n".join(table_lines)
 
     # --- summarized view branch ---
@@ -196,6 +224,10 @@ def _build_sweep_llm_view(
         "and rendered in the PDF report. Only the summary and top-N are shown here "
         "to limit token usage — no data is missing from the search record.]"
     )
+
+    _adv = _near_optimal_advisory()
+    if _adv:
+        lines.append(_adv)
 
     return "\n".join(lines)
 
@@ -2301,6 +2333,7 @@ class AgentLoopController:
             top_n=self._config.search.sweep_llm_top_n,
             threshold=self._config.search.sweep_full_table_threshold,
             rank_key=rank_key,
+            near_optimal_abs_tol=self._config.report.near_optimal_abs_tol,
         )
 
         # 6. Journal
