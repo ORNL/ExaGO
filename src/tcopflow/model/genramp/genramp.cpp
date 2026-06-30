@@ -119,6 +119,7 @@ PetscErrorCode TCOPFLOWSetConstraintBounds_GENRAMP(TCOPFLOW tcopflow, Vec Gl,
           /* Ramp constraints */
           gli[opflow->ncon + ctr] = -gen->ramp_rate_min * tcopflow->dT;
           gui[opflow->ncon + ctr] = gen->ramp_rate_min * tcopflow->dT;
+          
           ctr++;
         }
       }
@@ -205,7 +206,7 @@ PetscErrorCode TCOPFLOWComputeJacobian_GENRAMP(TCOPFLOW tcopflow, Vec X,
   PetscInt roffset, coffset;
   PetscInt nrow, ncol;
   PetscScalar *xi, *x;
-  PetscInt i, j, k, loc, loctpre, xtpreloc, xiloc;
+  PetscInt i, j, k, ctr, xtpreloc, xiloc;
   PS ps, pstpre;
   PSBUS bus, bustpre;
   PSGEN gen, gentpre;
@@ -280,47 +281,48 @@ PetscErrorCode TCOPFLOWComputeJacobian_GENRAMP(TCOPFLOW tcopflow, Vec X,
     CHKERRQ(ierr);
 
     if (tcopflow->nconineqcoup[i]) {
+      ctr = 0;
       ps = opflow->ps;
       pstpre = opflowtpre->ps;
+
       for (j = 0; j < ps->nbus; j++) {
         bus = &ps->bus[j];
         bustpre = &pstpre->bus[j];
-        ierr = PSBUSGetVariableLocation(bus, &loc);
-        CHKERRQ(ierr);
-        ierr = PSBUSGetVariableLocation(bustpre, &loctpre);
-        CHKERRQ(ierr);
+
         for (k = 0; k < bus->ngen; k++) {
           ierr = PSBUSGetGen(bus, k, &gen);
           CHKERRQ(ierr);
           ierr = PSBUSGetGen(bustpre, k, &gentpre);
           CHKERRQ(ierr);
 
-          if (!gen->status) {
-            if (gentpre->status)
-              loctpre += 2;
+          if (!gen->status || !gentpre->status)
             continue;
-          } else {
-            loc += 2;
-            if (!gentpre->status)
-              continue;
-            loctpre += 2;
-          }
 
-          xtpreloc = tcopflow->xstarti[i - 1] + loctpre;
-          xiloc = tcopflow->xstarti[i] + loc;
-          row = roffset;
+          row = roffset + ctr;
+
+          xtpreloc = tcopflow->xstarti[i - 1] + gentpre->startxpowlocglob;
+          xiloc    = tcopflow->xstarti[i]     + gen->startxpowlocglob;
+  
           col = xtpreloc;
           val = -1.;
           ierr = MatSetValues(J, 1, &row, 1, &col, &val, INSERT_VALUES);
           CHKERRQ(ierr);
+
           col = xiloc;
           val = 1.;
           ierr = MatSetValues(J, 1, &row, 1, &col, &val, INSERT_VALUES);
           CHKERRQ(ierr);
 
-          roffset += 1;
+          ctr++;
         }
       }
+
+      if (ctr != tcopflow->nconineqcoup[i]) {
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ,
+                "GENRAMP Jacobian coupling constraint count mismatch");
+      }
+
+      roffset += ctr;
     }
 
     opflowtpre = opflow;
@@ -341,7 +343,7 @@ PetscErrorCode TCOPFLOWComputeConstraints_GENRAMP(TCOPFLOW tcopflow, Vec X,
                                                   Vec G) {
   PetscErrorCode ierr;
   OPFLOW opflowtpre, opflow;
-  PetscInt i, j, k, loc, loctpre, ctr;
+  PetscInt i, j, k, ctr;
   PetscScalar *xtpre, *x, *xi, *g, *gi;
   PS ps, pstpre;
   PSBUS bus, bustpre;
@@ -389,13 +391,10 @@ PetscErrorCode TCOPFLOWComputeConstraints_GENRAMP(TCOPFLOW tcopflow, Vec X,
       ctr = 0;
       ps = opflow->ps;
       pstpre = opflowtpre->ps;
+
       for (j = 0; j < ps->nbus; j++) {
         bus = &ps->bus[j];
         bustpre = &pstpre->bus[j];
-        ierr = PSBUSGetVariableLocation(bus, &loc);
-        CHKERRQ(ierr);
-        ierr = PSBUSGetVariableLocation(bustpre, &loctpre);
-        CHKERRQ(ierr);
 
         for (k = 0; k < bus->ngen; k++) {
           ierr = PSBUSGetGen(bus, k, &gen);
@@ -403,22 +402,21 @@ PetscErrorCode TCOPFLOWComputeConstraints_GENRAMP(TCOPFLOW tcopflow, Vec X,
           ierr = PSBUSGetGen(bustpre, k, &gentpre);
           CHKERRQ(ierr);
 
-          if (!gen->status) {
-            if (gentpre->status)
-              loctpre += 2;
+          if (!gen->status || !gentpre->status)
             continue;
-          } else {
-            loc += 2;
-            if (!gentpre->status)
-              continue;
-            loctpre += 2;
-          }
 
-          gi[ctr] = xi[loc] - xtpre[loctpre]; /* PG(t) - PG(t-dT) */
+          gi[ctr] =
+            xi[gen->startxpowloc] - xtpre[gentpre->startxpowloc];
+
           ctr++;
         }
       }
-    }
+
+  if (ctr != tcopflow->nconineqcoup[i]) {
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ,
+            "GENRAMP value coupling constraint count mismatch");
+  }
+}
 
     ierr = VecResetArray(opflow->X);
     CHKERRQ(ierr);
