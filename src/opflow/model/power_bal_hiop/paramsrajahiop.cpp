@@ -22,6 +22,7 @@ int BUSParamsRajaHiop::destroy(OPFLOW opflow) {
   h_allocator_.deallocate(xidx);
   h_allocator_.deallocate(gidx);
   h_allocator_.deallocate(eqjacsp_idx);
+  h_allocator_.deallocate(hesssp_eq_idx);
   if (opflow->include_powerimbalance_variables) {
     h_allocator_.deallocate(xidxpimb);
     h_allocator_.deallocate(powerimbalance_penalty);
@@ -47,6 +48,7 @@ int BUSParamsRajaHiop::destroy(OPFLOW opflow) {
   d_allocator_.deallocate(xidx_dev_);
   d_allocator_.deallocate(gidx_dev_);
   d_allocator_.deallocate(eqjacsp_idx_dev_);
+  d_allocator_.deallocate(hesssp_eq_idx_dev_);
   if (opflow->include_powerimbalance_variables) {
     d_allocator_.deallocate(xidxpimb_dev_);
     d_allocator_.deallocate(powerimbalance_penalty_dev_);
@@ -87,6 +89,7 @@ int BUSParamsRajaHiop::copy(OPFLOW opflow) {
   resmgr.copy(xidx_dev_, xidx);
   resmgr.copy(gidx_dev_, gidx);
   resmgr.copy(eqjacsp_idx_dev_, eqjacsp_idx);
+  resmgr.copy(hesssp_eq_idx_dev_, hesssp_eq_idx);
   if (opflow->include_powerimbalance_variables) {
     resmgr.copy(xidxpimb_dev_, xidxpimb);
     resmgr.copy(jacsp_idx_dev_, jacsp_idx);
@@ -112,6 +115,7 @@ int BUSParamsRajaHiop::copy(OPFLOW opflow) {
   xidxpimb_dev_ = xidxpimb;
   gidx_dev_ = gidx;
   eqjacsp_idx_dev_ = eqjacsp_idx;
+  hesssp_eq_idx_dev = hesssp_eq_idx;
   jacsp_idx_dev_ = jacsp_idx;
   jacsq_idx_dev_ = jacsq_idx;
   powerimbalance_penalty_dev_ = powerimbalance_penalty;
@@ -150,6 +154,7 @@ int BUSParamsRajaHiop::allocate(OPFLOW opflow) {
   xidx = paramAlloc<int>(h_allocator_, nbus);
   gidx = paramAlloc<int>(h_allocator_, nbus);
   eqjacsp_idx = paramAlloc<int>(h_allocator_, 2 * nbus);
+  hesssp_eq_idx = paramAlloc<int>(h_allocator_, nbus);
 
   if (opflow->include_powerimbalance_variables) {
     xidxpimb = paramAlloc<int>(h_allocator_, nbus);
@@ -238,6 +243,7 @@ int BUSParamsRajaHiop::allocate(OPFLOW opflow) {
   xidx_dev_ = paramAlloc<int>(d_allocator_, nbus);
   gidx_dev_ = paramAlloc<int>(d_allocator_, nbus);
   eqjacsp_idx_dev_ = paramAlloc<int>(d_allocator_, 2 * nbus);
+  hesssp_eq_idx_dev_ = paramAlloc<int>(d_allocator_, nbus);
 
   if (opflow->include_powerimbalance_variables) {
     xidxpimb_dev_ = paramAlloc<int>(d_allocator_, nbus);
@@ -282,10 +288,12 @@ int LINEParamsRajaHiop::copy(OPFLOW opflow) {
     resmgr.copy(gbineqidx_dev_, gbineqidx);
     resmgr.copy(linelimidx_dev_, linelimidx);
     resmgr.copy(ineqjacsp_idx_dev_, ineqjacsp_idx);
+    resmgr.copy(hesssp_ineq_idx_dev_, hesssp_ineq_idx);
     resmgr.copy(xslackidx_dev_, xslackidx);
   }
   resmgr.copy(eqjacsp_idx_dev_, eqjacsp_idx);
   resmgr.copy(eqjacsp_diag_idx_dev_, eqjacsp_diag_idx);
+  resmgr.copy(hesssp_eq_idx_dev_, hesssp_eq_idx);
   resmgr.copy(isdcline_dev_, isdcline);
 #else
   Gff_dev_ = Gff;
@@ -306,10 +314,12 @@ int LINEParamsRajaHiop::copy(OPFLOW opflow) {
     gbineqidx_dev_ = gbineqidx;
     linelimidx_dev_ = linelimidx;
     ineqjacsp_idx_dev_ = ineqjacsp_idx;
+    hesssp_ineq_idx_dev_ = hesssp_ineq_idx;
     xslackidx_dev_ = xslackidx;
   }
   eqjacsp_idx_dev_ = eqjacsp_idx;
   eqjacsp_diag_idx_dev_ = eqjacsp_diag_idx;
+  hesssp_eq_idx_dev_ = hesssp_eq_idx;
   isdcline_dev_ = isdcline;
 #endif
   return 0;
@@ -338,10 +348,12 @@ int LINEParamsRajaHiop::destroy(OPFLOW opflow) {
     h_allocator_.deallocate(gbineqidx);
     h_allocator_.deallocate(linelimidx);
     h_allocator_.deallocate(ineqjacsp_idx);
+    h_allocator_.deallocate(hesssp_ineq_idx);
     h_allocator_.deallocate(xslackidx);
   }
   h_allocator_.deallocate(eqjacsp_idx);
   h_allocator_.deallocate(eqjacsp_diag_idx);
+  h_allocator_.deallocate(hesssp_eq_idx);
   h_allocator_.deallocate(isdcline);
 
 #ifdef EXAGO_ENABLE_GPU
@@ -367,10 +379,12 @@ int LINEParamsRajaHiop::destroy(OPFLOW opflow) {
     d_allocator_.deallocate(gbineqidx_dev_);
     d_allocator_.deallocate(linelimidx_dev_);
     d_allocator_.deallocate(ineqjacsp_idx_dev_);
+    d_allocator_.deallocate(hesssp_ineq_idx_dev_);
     d_allocator_.deallocate(xslackidx_dev_);
   }
   d_allocator_.deallocate(eqjacsp_idx_dev_);
   d_allocator_.deallocate(eqjacsp_diag_idx_dev_);
+  d_allocator_.deallocate(hesssp_eq_idx_dev_);
   d_allocator_.deallocate(isdcline_dev_);
 #endif
 
@@ -418,11 +432,13 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
     gineqidx = paramAlloc<int>(h_allocator_, nlinelim);
     gbineqidx = paramAlloc<int>(h_allocator_, nlinelim);
     ineqjacsp_idx = paramAlloc<int>(h_allocator_, nlinelim);
+    hesssp_ineq_idx = paramAlloc<int>(h_allocator_, 10 * nlinelim);
     xslackidx = paramAlloc<int>(h_allocator_, nlinelim);
   }
 
   eqjacsp_idx = paramAlloc<int>(h_allocator_, nlineON);
   eqjacsp_diag_idx = paramAlloc<int>(h_allocator_, 4 * nlineON);
+  hesssp_eq_idx = paramAlloc<int>(h_allocator_, 10 * nlineON);
   isdcline = paramAlloc<int>(h_allocator_, nlineON);
 
   PetscInt j = 0;
@@ -500,11 +516,13 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
     gbineqidx_dev_ = paramAlloc<int>(d_allocator_, nlinelim);
     linelimidx_dev_ = paramAlloc<int>(d_allocator_, nlinelim);
     ineqjacsp_idx_dev_ = paramAlloc<int>(d_allocator_, nlinelim);
+    hesssp_ineq_idx_dev_ = paramAlloc<int>(d_allocator_, 10 * nlinelim);
     xslackidx_dev_ = paramAlloc<int>(d_allocator_, nlinelim);
   }
 
   eqjacsp_idx_dev_ = paramAlloc<int>(d_allocator_, nlineON);
   eqjacsp_diag_idx_dev_ = paramAlloc<int>(d_allocator_, 4 * nlineON);
+  hesssp_eq_idx_dev_ = paramAlloc<int>(d_allocator_, 10 * nlineON);
   isdcline_dev_ = paramAlloc<int>(d_allocator_, nlineON);
 #endif
   return 0;
@@ -524,7 +542,7 @@ int LOADParamsRajaHiop::copy(OPFLOW opflow) {
   if (opflow->include_loadloss_variables) {
     resmgr.copy(jacsp_idx_dev_, jacsp_idx);
     resmgr.copy(jacsq_idx_dev_, jacsq_idx);
-    resmgr.copy(hesssp_idx_dev_, hesssp_idx);
+    resmgr.copy(hesssp_obj_idx_dev_, hesssp_obj_idx);
     resmgr.copy(loadloss_penalty_dev_, loadloss_penalty);
   }
 #else
@@ -534,7 +552,7 @@ int LOADParamsRajaHiop::copy(OPFLOW opflow) {
   gidx_dev_ = gidx;
   jacsp_idx_dev_ = jacsp_idx;
   jacsq_idx_dev_ = jacsq_idx;
-  hesssp_idx_dev_ = hesssp_idx;
+  hesssp_obj_idx_dev_ = hesssp_obj_idx;
   loadloss_penalty_dev_ = loadloss_penalty;
 #endif
 
@@ -550,7 +568,7 @@ int LOADParamsRajaHiop::destroy(OPFLOW opflow) {
     h_allocator_.deallocate(loadloss_penalty);
     h_allocator_.deallocate(jacsp_idx);
     h_allocator_.deallocate(jacsq_idx);
-    h_allocator_.deallocate(hesssp_idx);
+    h_allocator_.deallocate(hesssp_obj_idx);
   }
 #ifdef EXAGO_ENABLE_GPU
   d_allocator_.deallocate(pl_dev_);
@@ -561,7 +579,7 @@ int LOADParamsRajaHiop::destroy(OPFLOW opflow) {
     d_allocator_.deallocate(loadloss_penalty_dev_);
     d_allocator_.deallocate(jacsp_idx_dev_);
     d_allocator_.deallocate(jacsq_idx_dev_);
-    d_allocator_.deallocate(hesssp_idx_dev_);
+    d_allocator_.deallocate(hesssp_obj_idx_dev_);
   }
 #endif
   return 0;
@@ -593,7 +611,7 @@ int LOADParamsRajaHiop::allocate(OPFLOW opflow) {
     loadloss_penalty = paramAlloc<double>(h_allocator_, nload);
     jacsp_idx = paramAlloc<int>(h_allocator_, nload);
     jacsq_idx = paramAlloc<int>(h_allocator_, nload);
-    hesssp_idx = paramAlloc<int>(h_allocator_, nload);
+    hesssp_obj_idx = paramAlloc<int>(h_allocator_, nload);
   }
   /* Insert data in loadparams */
   for (i = 0; i < ps->nbus; i++) {
@@ -625,7 +643,7 @@ int LOADParamsRajaHiop::allocate(OPFLOW opflow) {
     loadloss_penalty_dev_ = paramAlloc<double>(d_allocator_, nload);
     jacsp_idx_dev_ = paramAlloc<int>(d_allocator_, nload);
     jacsq_idx_dev_ = paramAlloc<int>(d_allocator_, nload);
-    hesssp_idx_dev_ = paramAlloc<int>(d_allocator_, nload);
+    hesssp_obj_idx_dev_ = paramAlloc<int>(d_allocator_, nload);
   }
 
 #endif
@@ -651,7 +669,7 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
   h_allocator_.deallocate(gidxbus);
   h_allocator_.deallocate(eqjacspbus_idx);
   h_allocator_.deallocate(eqjacsqbus_idx);
-  h_allocator_.deallocate(hesssp_idx);
+  h_allocator_.deallocate(hesssp_obj_idx);
   if (opflow->has_gensetpoint) {
     h_allocator_.deallocate(geqidxgen);
     h_allocator_.deallocate(gineqidxgen);
@@ -659,6 +677,7 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
     h_allocator_.deallocate(pgs);
     h_allocator_.deallocate(eqjacspgen_idx);
     h_allocator_.deallocate(ineqjacspgen_idx);
+    h_allocator_.deallocate(hesssp_ineq_idx);
   }
 #ifdef EXAGO_ENABLE_GPU
   // Free arrays on the device
@@ -678,7 +697,7 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
   d_allocator_.deallocate(gidxbus_dev_);
   d_allocator_.deallocate(eqjacspbus_idx_dev_);
   d_allocator_.deallocate(eqjacsqbus_idx_dev_);
-  d_allocator_.deallocate(hesssp_idx_dev_);
+  d_allocator_.deallocate(hesssp_obj_idx_dev_);
   if (opflow->has_gensetpoint) {
     d_allocator_.deallocate(geqidxgen_dev_);
     d_allocator_.deallocate(gineqidxgen_dev_);
@@ -686,6 +705,7 @@ int GENParamsRajaHiop::destroy(OPFLOW opflow) {
     d_allocator_.deallocate(pgs_dev_);
     d_allocator_.deallocate(eqjacspgen_idx_dev_);
     d_allocator_.deallocate(ineqjacspgen_idx_dev_);
+    d_allocator_.deallocate(hesssp_ineq_idx_dev_);
   }
 
 #endif
@@ -718,13 +738,14 @@ int GENParamsRajaHiop::copy(OPFLOW opflow) {
 
   resmgr.copy(eqjacspbus_idx_dev_, eqjacspbus_idx);
   resmgr.copy(eqjacsqbus_idx_dev_, eqjacsqbus_idx);
-  resmgr.copy(hesssp_idx_dev_, hesssp_idx);
+  resmgr.copy(hesssp_obj_idx_dev_, hesssp_obj_idx);
   if (opflow->has_gensetpoint) {
     resmgr.copy(geqidxgen_dev_, geqidxgen);
     resmgr.copy(gineqidxgen_dev_, gineqidxgen);
     resmgr.copy(gbineqidxgen_dev_, gbineqidxgen);
     resmgr.copy(eqjacspgen_idx_dev_, eqjacspgen_idx);
     resmgr.copy(ineqjacspgen_idx_dev_, ineqjacspgen_idx);
+    resmgr.copy(hesssp_ineq_idx_dev_, hesssp_ineq_idx);
     resmgr.copy(pgs_dev_, pgs);
   }
 #else
@@ -744,12 +765,13 @@ int GENParamsRajaHiop::copy(OPFLOW opflow) {
   gidxbus_dev_ = gidxbus;
   eqjacspbus_idx_dev_ = eqjacspbus_idx;
   eqjacsqbus_idx_dev_ = eqjacsqbus_idx;
-  hesssp_idx_dev_ = hesssp_idx;
+  hesssp_obj_idx_dev_ = hesssp_obj_idx;
   geqidxgen_dev_ = geqidxgen;
   gineqidxgen_dev_ = gineqidxgen;
   gbineqidxgen_dev_ = gbineqidxgen;
   eqjacspgen_idx_dev_ = eqjacspgen_idx;
   ineqjacspgen_idx_dev_ = ineqjacspgen_idx;
+  hesssp_ineq_idx_dev_ = hesssp_ineq_idx;
   pgs_dev_ = pgs;
 #endif
   return 0;
@@ -791,7 +813,7 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
 
   eqjacspbus_idx = paramAlloc<int>(h_allocator_, ngenON);
   eqjacsqbus_idx = paramAlloc<int>(h_allocator_, ngenON);
-  hesssp_idx = paramAlloc<int>(h_allocator_, ngenON);
+  hesssp_obj_idx = paramAlloc<int>(h_allocator_, ngenON);
 
   if (opflow->has_gensetpoint) {
     geqidxgen = paramAlloc<int>(h_allocator_, ngenON);
@@ -799,6 +821,7 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
     gbineqidxgen = paramAlloc<int>(h_allocator_, ngenON);
     eqjacspgen_idx = paramAlloc<int>(h_allocator_, ngenON);
     ineqjacspgen_idx = paramAlloc<int>(h_allocator_, ngenON);
+    hesssp_ineq_idx = paramAlloc<int>(h_allocator_, 3 * ngenON);
     pgs = paramAlloc<double>(h_allocator_, ngenON);
   }
 
@@ -870,13 +893,14 @@ int GENParamsRajaHiop::allocate(OPFLOW opflow) {
 
   eqjacspbus_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
   eqjacsqbus_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
-  hesssp_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
+  hesssp_obj_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
   if (opflow->has_gensetpoint) {
     geqidxgen_dev_ = paramAlloc<int>(d_allocator_, ngenON);
     gineqidxgen_dev_ = paramAlloc<int>(d_allocator_, ngenON);
     gbineqidxgen_dev_ = paramAlloc<int>(d_allocator_, ngenON);
     eqjacspgen_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
     ineqjacspgen_idx_dev_ = paramAlloc<int>(d_allocator_, ngenON);
+    hesssp_ineq_idx_dev_ = paramAlloc<int>(d_allocator_, 3 * ngenON);
     pgs_dev_ = paramAlloc<double>(d_allocator_, ngenON);
   }
 #endif

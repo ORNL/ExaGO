@@ -405,7 +405,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOP(OPFLOW opflow) {
       if (!gen->status)
         continue;
       genparams->eqjacspbus_idx[geni + gi] = nnz_eqjacsp;
-      genparams->hesssp_idx[geni + gi] = nnz_hesssp;
+      genparams->hesssp_obj_idx[geni + gi] = nnz_hesssp;
       nnz_eqjacsp += 1;
       nnz_hesssp += 1;
       gi++;
@@ -416,7 +416,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOP(OPFLOW opflow) {
         ierr = PSBUSGetLoad(bus, k, &load);
         CHKERRQ(ierr);
         loadparams->jacsp_idx[loadi + k] = nnz_eqjacsp;
-        loadparams->hesssp_idx[loadi + k] = nnz_hesssp;
+        loadparams->hesssp_obj_idx[loadi + k] = nnz_hesssp;
         nnz_eqjacsp += 1;
         nnz_hesssp += 2;
       }

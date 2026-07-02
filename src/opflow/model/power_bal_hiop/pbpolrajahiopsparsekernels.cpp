@@ -977,7 +977,7 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     jCol = pbpolrajahiopsparse->j_hess;
 
     // Compute indices
-    
+
     // Sort indices
 
     // Copy over i_hess and j_hess arrays to device

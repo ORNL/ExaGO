@@ -227,6 +227,26 @@ PetscErrorCode OPFLOWSolutionToPS_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 /// @brief `extern` set up function from PBPOL model.
 extern PetscErrorCode OPFLOWModelSetUp_PBPOL(OPFLOW);
 
+/** @brief Helper function to ensure Hessian entries are not duplicated
+ *
+ */
+static inline int
+count_entry(std::map<std::pair<int, int>, int> &existing_pairs, int r, int c,
+            int &nnz_hesssp) {
+  if (r > c)
+    std::swap(r, c);
+  const auto key = std::make_pair(r, c);
+
+  auto it = existing_pairs.find(key);
+  if (it == existing_pairs.end()) {
+    const int idx = nnz_hesssp;
+    existing_pairs[key] = idx;
+    nnz_hesssp++;
+    return idx;
+  }
+  return it->second;
+}
+
 /** @brief Set up the PBPOLRAJAHIOPSPARSE model.
  *
  * This function initializes the host objects for the PBPOLRAJAHIOPSPARSE
@@ -262,16 +282,14 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   PSLINE line;
   PetscInt i, k;
 
-  /* KS: Store the AGC variable index (scalar) */
+  /* Store the AGC variable index (scalar) */
   if (opflow->use_agc) {
     pbpolrajahiopsparse->agc_xidx = opflow->idxn2sd_map[ps->startxloc];
   } else {
     pbpolrajahiopsparse->agc_xidx = -1;
   }
 
-  /* KS: Compute the number of nonzeros in equality and inequality constraint
-   * Jacobians. Equality count is computed explicitly for the GPU kernel.
-   * Inequality count is computed explicitly so we can skip PETSc. */
+  /* Initialize the number of nonzeros to 0 */
   int nnz_eqjacsp = 0, nnz_ineqjacsp = 0, nnz_hesssp = 0;
 
   /* ---- Equality constraint Jacobian nnz counting ---- */
@@ -408,66 +426,300 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     }
   }
 
-  /*
-   * KS: Count inequality Jacobian non-zeros. The traversal order must match
-   * the startineqloc assignment in OPFLOWModelSetUp_PBPOL: for each bus
-   * (bus ineq, then gen ineq), then for each line.
-   */
-  int geni = 0, gi;
-  for (i = 0; i < ps->nbus; i++) {
-    bus = &ps->bus[i];
+  /* ---- Inequality constraint Jacobian nnz counting ---- */
+  {
+    int geni = 0, gi;
+    for (i = 0; i < ps->nbus; i++) {
+      bus = &ps->bus[i];
 
-    /* Bus voltage-Q-bounds constraints (FIXED_WITHIN_QBOUNDS) */
-    if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
-      if (bus->ide == PV_BUS || bus->ide == REF_BUS) {
-        busparams->ineqjacsp_idx[i] = nnz_ineqjacsp;
-        /* 2 rows, each with ngenON + 1 entries (one per gen Qg + one for V) */
-        nnz_ineqjacsp += 2 * (bus->ngenON + 1);
+      /* Bus voltage-Q-bounds constraints (FIXED_WITHIN_QBOUNDS) */
+      if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+        if (bus->ide == PV_BUS || bus->ide == REF_BUS) {
+          busparams->ineqjacsp_idx[i] = nnz_ineqjacsp;
+          /* 2 rows, each with ngenON + 1 entries (one per gen Qg + one for V)
+           */
+          nnz_ineqjacsp += 2 * (bus->ngenON + 1);
+        }
+      }
+
+      /* KS: Generator set-point constraints */
+      gi = 0;
+      if (opflow->has_gensetpoint) {
+        for (k = 0; k < bus->ngen; k++) {
+          ierr = PSBUSGetGen(bus, k, &gen);
+          CHKERRQ(ierr);
+          if (!gen->status)
+            continue;
+          if (!gen->isrenewable) {
+            genparams->ineqjacspgen_idx[geni + gi] = nnz_ineqjacsp;
+            if (opflow->use_agc) {
+              nnz_ineqjacsp += 6; /* 2 rows x 3 entries (Pg, delPg, delP) */
+            }
+          }
+          gi++;
+        }
+      }
+
+      geni += bus->ngenON;
+    }
+
+    /* Line flow constraints */
+    int linej = 0;
+    for (i = 0; i < ps->nline; i++) {
+      line = &ps->line[i];
+      if (!line->status)
+        continue;
+      if (line->isdcline)
+        continue;
+
+      if (linej < opflow->nlinesmon && opflow->linesmon[linej] == i) {
+        lineparams->ineqjacsp_idx[linej] = nnz_ineqjacsp;
+        /* 2 rows x 4 entries (thetaf, Vmf, thetat, Vmt) */
+        int entries_per_line = 8;
+        if (opflow->allow_lineflow_violation) {
+          entries_per_line += 2; /* 1 slack entry per row */
+        }
+        nnz_ineqjacsp += entries_per_line;
+        linej++;
+      }
+    }
+  }
+
+  /* ---- Hessian nnz counting ---- */
+  {
+    std::map<std::pair<int, int>, int> existing_pairs;
+
+    // Bus equality constraint Hessian (1 diagonal entry)
+    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+      PSBUS bus = &ps->bus[ibus];
+      const int xloc = bus->startxVloc;
+      busparams->hesssp_eq_idx[ibus] =
+          count_entry(existing_pairs, xloc + 1, xloc + 1, nnz_hesssp);
+    }
+
+    // Line equality constraints Hessian (4x4, 10 upper triangular)
+    for (int iline = 0; iline < ps->nline; ++iline) {
+      PSLINE line = &ps->line[iline];
+      if (!line->status)
+        continue;
+
+      const PSBUS *connbuses;
+      ierr = PSLINEGetConnectedBuses(line, &connbuses);
+      CHKERRQ(ierr);
+      PSBUS busf = connbuses[0];
+      PSBUS bust = connbuses[1];
+
+      const int xlocf = busf->startxVloc;
+      const int xloct = bust->startxVloc;
+
+      const int base = 10 * iline;
+
+      lineparams->hesssp_eq_idx[base + 0] =
+          count_entry(existing_pairs, xlocf, xlocf, nnz_hesssp);
+      lineparams->hesssp_eq_idx[base + 1] =
+          count_entry(existing_pairs, xlocf, xlocf + 1, nnz_hesssp);
+      lineparams->hesssp_eq_idx[base + 2] =
+          count_entry(existing_pairs, xlocf, xloct, nnz_hesssp);
+      lineparams->hesssp_eq_idx[base + 3] =
+          count_entry(existing_pairs, xlocf, xloct + 1, nnz_hesssp);
+
+      lineparams->hesssp_eq_idx[base + 4] =
+          count_entry(existing_pairs, xlocf + 1, xlocf + 1, nnz_hesssp);
+      lineparams->hesssp_eq_idx[base + 5] =
+          count_entry(existing_pairs, xlocf + 1, xloct, nnz_hesssp);
+      lineparams->hesssp_eq_idx[base + 6] =
+          count_entry(existing_pairs, xlocf + 1, xloct + 1, nnz_hesssp);
+
+      lineparams->hesssp_eq_idx[base + 7] =
+          count_entry(existing_pairs, xloct, xloct, nnz_hesssp);
+      lineparams->hesssp_eq_idx[base + 8] =
+          count_entry(existing_pairs, xloct, xloct + 1, nnz_hesssp);
+
+      lineparams->hesssp_eq_idx[base + 9] =
+          count_entry(existing_pairs, xloct + 1, xloct + 1, nnz_hesssp);
+    }
+
+    // Generator AGC inequality constraints Hessian (3 upper triangular entries)
+    if (opflow->has_gensetpoint && opflow->use_agc) {
+      int iagc = 0;
+
+      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+        PSBUS bus = &ps->bus[ibus];
+
+        for (int igen = 0; igen < bus->ngen; ++igen) {
+          PSGEN gen;
+          ierr = PSBUSGetGen(bus, igen, &gen);
+          CHKERRQ(ierr);
+          if (!gen->status || gen->isrenewable)
+            continue;
+
+          const int xloc_pg = gen->startxpowloc;
+          const int xloc_dev = gen->startxpdevloc;
+          const int xloc_dpsys = ps->startxloc;
+
+          if (iagc < ps->ngenON) {
+            const int base = 3 * iagc;
+
+            genparams->hesssp_ineq_idx[base + 0] =
+                count_entry(existing_pairs, xloc_pg, xloc_pg, nnz_hesssp);
+            genparams->hesssp_ineq_idx[base + 1] =
+                count_entry(existing_pairs, xloc_pg, xloc_dev, nnz_hesssp);
+            genparams->hesssp_ineq_idx[base + 2] =
+                count_entry(existing_pairs, xloc_pg, xloc_dpsys, nnz_hesssp);
+          }
+          iagc++;
+        }
       }
     }
 
-    /* KS: Generator set-point constraints */
-    gi = 0;
-    if (opflow->has_gensetpoint) {
-      for (k = 0; k < bus->ngen; k++) {
-        ierr = PSBUSGetGen(bus, k, &gen);
+    // Set voltage inequality constraints Hessian (1 entry)
+    if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+      int i = 0;
+
+      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+        PSBUS bus = &ps->bus[ibus];
+        if (bus->ide != PV_BUS && bus->ide != REF_BUS)
+          continue;
+
+        const int xloc_v = bus->startxVloc + 1;
+
+        for (int igen = 0; igen < bus->ngen; ++igen) {
+          PSGEN gen;
+          ierr = PSBUSGetGen(bus, igen, &gen);
+          CHKERRQ(ierr);
+          if (!gen->status)
+            continue;
+
+          const int xloc_qg = gen->startxpowloc + 1;
+
+          if (i < ps->ngenON) {
+            busparams->hesssp_ineq_idx[i] =
+                count_entry(existing_pairs, xloc_qg, xloc_v, nnz_hesssp);
+          }
+          i++;
+        }
+      }
+    }
+
+    // Line inequality constraints Hessian (4x4, 10 upper triangular)
+    for (int imon = 0; imon < opflow->nlinesmon; ++imon) {
+      PSLINE line = &ps->line[opflow->linesmon[imon]];
+      if (line->isdcline)
+        continue;
+
+      const PSBUS *connbuses;
+      ierr = PSLINEGetConnectedBuses(line, &connbuses);
+      CHKERRQ(ierr);
+      PSBUS busf = connbuses[0];
+      PSBUS bust = connbuses[1];
+
+      const int xlocf = busf->startxVlocglob;
+      const int xloct = bust->startxVlocglob;
+
+      const int base = 10 * imon;
+
+      lineparams->hesssp_ineq_idx[base + 0] =
+          count_entry(existing_pairs, xlocf, xlocf, nnz_hesssp);
+      lineparams->hesssp_ineq_idx[base + 1] =
+          count_entry(existing_pairs, xlocf, xlocf + 1, nnz_hesssp);
+      lineparams->hesssp_ineq_idx[base + 2] =
+          count_entry(existing_pairs, xlocf, xloct, nnz_hesssp);
+      lineparams->hesssp_ineq_idx[base + 3] =
+          count_entry(existing_pairs, xlocf, xloct + 1, nnz_hesssp);
+
+      lineparams->hesssp_ineq_idx[base + 4] =
+          count_entry(existing_pairs, xlocf + 1, xlocf + 1, nnz_hesssp);
+      lineparams->hesssp_ineq_idx[base + 5] =
+          count_entry(existing_pairs, xlocf + 1, xloct, nnz_hesssp);
+      lineparams->hesssp_ineq_idx[base + 6] =
+          count_entry(existing_pairs, xlocf + 1, xloct + 1, nnz_hesssp);
+
+      lineparams->hesssp_ineq_idx[base + 7] =
+          count_entry(existing_pairs, xloct, xloct, nnz_hesssp);
+      lineparams->hesssp_ineq_idx[base + 8] =
+          count_entry(existing_pairs, xloct, xloct + 1, nnz_hesssp);
+
+      lineparams->hesssp_ineq_idx[base + 9] =
+          count_entry(existing_pairs, xloct + 1, xloct + 1, nnz_hesssp);
+    }
+
+    // Power-imbalance objective Hessian (2 diagonal entries)
+    if (opflow->include_powerimbalance_variables) {
+      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+        PSBUS bus = &ps->bus[ibus];
+        const int xloc = bus->startxpimblocglob;
+        const int base = 2 * ibus;
+
+        busparams->hesssp_obj_idx[base + 0] =
+            count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
+        busparams->hesssp_obj_idx[base + 1] =
+            count_entry(existing_pairs, xloc + 1, xloc + 1, nnz_hesssp);
+      }
+    }
+
+    // Gen objective Hessian (1 diagonal entry)
+    int iobj = 0;
+    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+      PSBUS bus = &ps->bus[ibus];
+
+      for (int igen = 0; igen < bus->ngen; ++igen) {
+        PSGEN gen;
+        ierr = PSBUSGetGen(bus, igen, &gen);
         CHKERRQ(ierr);
         if (!gen->status)
           continue;
-        if (!gen->isrenewable) {
-          genparams->ineqjacspgen_idx[geni + gi] = nnz_ineqjacsp;
-          if (opflow->use_agc) {
-            nnz_ineqjacsp += 6; /* 2 rows x 3 entries (Pg, delPg, delP) */
+
+        if (opflow->objectivetype == MIN_GEN_COST) {
+          const int xloc = gen->startxpowlocglob;
+
+          if (iobj < ps->ngenON) {
+            genparams->hesssp_obj_idx[iobj] =
+                count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
           }
+          iobj++;
+        } else if (opflow->objectivetype == MIN_GENSETPOINT_DEVIATION) {
+          const int xloc = gen->startxpdevlocglob;
+
+          if (iobj < ps->ngenON) {
+            genparams->hesssp_obj_idx[iobj] =
+                count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
+          }
+          iobj++;
         }
-        gi++;
       }
     }
 
-    geni += bus->ngenON;
-  }
+    // Load objective Hessian (2 diagonal entries)
+    if (opflow->include_loadloss_variables) {
+      int iloss = 0;
 
-  /* Line flow constraints */
-  int linej = 0;
-  for (i = 0; i < ps->nline; i++) {
-    line = &ps->line[i];
-    if (!line->status)
-      continue;
-    if (line->isdcline)
-      continue;
+      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
+        PSBUS bus = &ps->bus[ibus];
 
-    if (linej < opflow->nlinesmon && opflow->linesmon[linej] == i) {
-      lineparams->ineqjacsp_idx[linej] = nnz_ineqjacsp;
-      /* 2 rows x 4 entries (thetaf, Vmf, thetat, Vmt) */
-      int entries_per_line = 8;
-      if (opflow->allow_lineflow_violation) {
-        entries_per_line += 2; /* 1 slack entry per row */
+        for (int iload = 0; iload < bus->nload; ++iload) {
+          PSLOAD load;
+          ierr = PSBUSGetLoad(bus, iload, &load);
+          CHKERRQ(ierr);
+          if (!load->status)
+            continue;
+
+          const int xloc = load->startxloadlosslocglob;
+          const int base = 2 * iloss;
+
+          loadparams->hesssp_obj_idx[base + 0] =
+              count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
+          loadparams->hesssp_obj_idx[base + 1] =
+              count_entry(existing_pairs, xloc + 1, xloc + 1, nnz_hesssp);
+
+          iloss++;
+        }
       }
-      nnz_ineqjacsp += entries_per_line;
-      linej++;
     }
   }
 
+  std::cout << "nnz_hesssp: " << nnz_hesssp << "\n";
+
+  /* Store nnz counts */
   opflow->nnz_eqjacsp = nnz_eqjacsp;
   opflow->nnz_ineqjacsp = nnz_ineqjacsp;
   opflow->nnz_hesssp = nnz_hesssp;

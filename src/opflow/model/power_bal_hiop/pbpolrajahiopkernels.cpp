@@ -786,25 +786,25 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOP(
 
     /* Generator contributions for row,col numbers */
     int *g_xidx = genparams->xidx_dev_;
-    int *hesssp_idx = genparams->hesssp_idx_dev_;
+    int *hesssp_obj_idx = genparams->hesssp_obj_idx_dev_;
     RAJA::forall<exago_raja_exec>(
         RAJA::RangeSegment(0, genparams->ngenON),
         RAJA_LAMBDA(RAJA::Index_type i) {
-          iHSS_dev[hesssp_idx[i]] = g_xidx[i];
-          jHSS_dev[hesssp_idx[i]] = g_xidx[i];
+          iHSS_dev[hesssp_obj_idx[i]] = g_xidx[i];
+          jHSS_dev[hesssp_obj_idx[i]] = g_xidx[i];
         });
 
     /* Loadloss contributions - two contributions*/
     if (opflow->include_loadloss_variables) {
       int *l_xidx = loadparams->xidx_dev_;
-      int *l_hesssp_idx = loadparams->hesssp_idx_dev_;
+      int *l_hesssp_obj_idx = loadparams->hesssp_obj_idx_dev_;
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, loadparams->nload),
           RAJA_LAMBDA(RAJA::Index_type i) {
-            iHSS_dev[l_hesssp_idx[i]] = l_xidx[i];
-            jHSS_dev[l_hesssp_idx[i]] = l_xidx[i];
-            iHSS_dev[l_hesssp_idx[i] + 1] = l_xidx[i] + 1;
-            jHSS_dev[l_hesssp_idx[i] + 1] = l_xidx[i] + 1;
+            iHSS_dev[l_hesssp_obj_idx[i]] = l_xidx[i];
+            jHSS_dev[l_hesssp_obj_idx[i]] = l_xidx[i];
+            iHSS_dev[l_hesssp_obj_idx[i] + 1] = l_xidx[i] + 1;
+            jHSS_dev[l_hesssp_obj_idx[i] + 1] = l_xidx[i] + 1;
           });
     }
   }
@@ -813,31 +813,31 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOP(
 
     /* Generator contributions */
     if (opflow->objectivetype == MIN_GEN_COST) {
-      int *hesssp_idx = genparams->hesssp_idx_dev_;
+      int *hesssp_obj_idx = genparams->hesssp_obj_idx_dev_;
       double *cost_alpha = genparams->cost_alpha_dev_;
 
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, genparams->ngenON),
           RAJA_LAMBDA(RAJA::Index_type i) {
-            MHSS_dev[hesssp_idx[i]] = weight * isobj_gencost * obj_factor *
-                                      2.0 * cost_alpha[i] * MVAbase * MVAbase;
+            MHSS_dev[hesssp_obj_idx[i]] = weight * isobj_gencost * obj_factor *
+                                          2.0 * cost_alpha[i] * MVAbase * MVAbase;
           });
       flps += 6 * genparams->ngenON;
     } else if (opflow->objectivetype == NO_OBJ) {
-      int *hesssp_idx = genparams->hesssp_idx_dev_;
+      int *hesssp_obj_idx = genparams->hesssp_obj_idx_dev_;
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, genparams->ngenON),
-          RAJA_LAMBDA(RAJA::Index_type i) { MHSS_dev[hesssp_idx[i]] = 0.0; });
+          RAJA_LAMBDA(RAJA::Index_type i) { MHSS_dev[hesssp_obj_idx[i]] = 0.0; });
     }
 
     /* Loadloss contributions - 2 contributions expected */
     if (opflow->include_loadloss_variables) {
-      int *l_hesssp_idx = loadparams->hesssp_idx_dev_;
+      int *l_hesssp_obj_idx = loadparams->hesssp_obj_idx_dev_;
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, loadparams->nload),
           RAJA_LAMBDA(RAJA::Index_type i) {
-            MHSS_dev[l_hesssp_idx[i]] = 0.0;
-            MHSS_dev[l_hesssp_idx[i] + 1] = 0.0;
+            MHSS_dev[l_hesssp_obj_idx[i]] = 0.0;
+            MHSS_dev[l_hesssp_obj_idx[i] + 1] = 0.0;
           });
     }
   }
