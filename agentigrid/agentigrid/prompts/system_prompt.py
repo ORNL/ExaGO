@@ -619,6 +619,14 @@ def _build_standard_prompt(
   "reasoning": "What information is needed and why.",
   "query": "e.g. buses with voltage below 0.95"
 }}
+   For network topology, prefer a STRUCTURED query_type over free text (deterministic,
+   exact, and scales to large networks):
+   {{"action": "analyze", "query_type": "nearest_neighbors", "bus": 77, "k": 3}}
+   {{"action": "analyze", "query_type": "incident_branches", "bus": 77}}
+   nearest_neighbors returns the k nearest buses by hop count (BFS over in-service
+   branches, ties broken by ascending bus number). incident_branches lists the branch
+   circuits touching a bus. Use these for any "nearest neighbor", "buses connected to X",
+   or contingency-neighbor goal — do NOT ask for branch/adjacency data in free text.
 """
     else:
         _action_header = "You MUST respond with a single JSON object. Choose one of four actions:"
@@ -648,6 +656,14 @@ def _build_standard_prompt(
   "reasoning": "What information is needed and why.",
   "query": "e.g. buses with voltage below 0.95"
 }}
+   For network topology, prefer a STRUCTURED query_type over free text (deterministic,
+   exact, and scales to large networks):
+   {{"action": "analyze", "query_type": "nearest_neighbors", "bus": 77, "k": 3}}
+   {{"action": "analyze", "query_type": "incident_branches", "bus": 77}}
+   nearest_neighbors returns the k nearest buses by hop count (BFS over in-service
+   branches, ties broken by ascending bus number). incident_branches lists the branch
+   circuits touching a bus. Use these for any "nearest neighbor", "buses connected to X",
+   or contingency-neighbor goal — do NOT ask for branch/adjacency data in free text.
 
 4. SWEEP over a candidate set — test the SAME mutation at every bus (or a subset) in ONE action.
    Use this for any goal of the form "find all buses that can ..." or "for each bus ...".
@@ -686,6 +702,56 @@ def _build_standard_prompt(
   "candidate_set": {{"type": "all_buses"}},
   "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
 }}
+   Contingency screening (single action, runs the whole N-1/N-2 study internally):
+{{
+  "action": "sweep",
+  "mode": "contingency",
+  "target_bus": 77,
+  "neighbor_count": 3,
+  "contingency_order": 1,
+  "components": ["branch", "gen", "load"],
+  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
+}}
+   Python resolves the nearest neighbor buses by hop count, enumerates every
+   contingency (order 1 = single outages, order 2 = pairs), applies each outage set
+   on top of the CURRENT operating point, re-solves OPFLOW, and returns a pass/fail
+   table. FIRST connect any required load with a `modify` action, THEN issue this.
+   Do not enumerate contingencies yourself and do not loop analyze/modify to test them.
+   To also suggest RELIEF measures for the failures, add an ordered "relief_measures"
+   list (applied only to FAILED contingencies; the first measure that restores
+   feasibility is reported):
+   {{"action": "sweep", "mode": "contingency", "target_bus": 35, "contingency_order": 2,
+     "relief_measures": ["transformer_ratio", "generator_redispatch", "line_switching", "load_curtailment"]}}
+   Priority order matters (highest-priority first). Note: under ExaGO OPFLOW generator
+   redispatch is INHERENT to the solve, so "generator_redispatch" is logged as an
+   inherent no-op (it cannot rescue a case that already failed with optimal redispatch);
+   the resolving measure will be a tap change, a line switch, or load curtailment.
+
+   Hot reserve / N-1 generator security assessment (single action):
+{{
+  "action": "sweep",
+  "mode": "reserve",
+  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
+}}
+   Python computes the system hot reserve (Σ Pmax−Pg over in-service units at the
+   solved base dispatch), runs a system-wide N-1 generator-outage screen (each
+   committed unit tripped, OPF re-solved), and reports the reserve available, the
+   minimum required for N-1 (the largest committed unit's output — the worst single
+   loss), the margin, and whether every unit loss is feasible.
+
+   Minimum feasible hot reserve (single action):
+{{
+  "action": "sweep",
+  "mode": "reserve",
+  "minimize": true,
+  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
+}}
+   Python greedily de-commits generators (largest capacity first), re-solving the OPF
+   and the full N-1 generator screen after each, to find the minimum hot reserve
+   (Σ Pmax−Pg over on-units) that remains N-1 secure. Returns the minimum reserve
+   (a greedy UPPER BOUND, bracketed below by the largest remaining committed unit),
+   which units were de-committed, and the N-1-secure confirmation. Do NOT enumerate
+   generator outages yourself and do NOT attempt manual per-unit de-commitment loops.
 
 6. ECONOMIC (DISPATCHABLE) GENERATOR SITING — for "where is the minimum-cost location for a
    generator under economic dispatch?" The OPF must CHOOSE the unit's output, so add a
@@ -783,6 +849,22 @@ the requested parameters (same mutation/entity/mode/candidate set), trust them a
 the answer. Re-running the same sweep yields byte-identical results, gives no new information, \
 and wastes 2-3x the compute (which scales badly to thousands of buses). Only run another sweep \
 if you genuinely change a parameter (a different mutation size, entity, metric, or candidate set).
+- For "nearest neighbor by hop count" or "buses connected to bus X" goals, issue ONE \
+analyze action with query_type "nearest_neighbors" (do not loop free-text analyze \
+queries asking for branch data).
+- For "test all N-1/N-2 contingencies on the nearest neighbors" goals, FIRST connect any \
+required load with a `modify` action, THEN issue ONE `sweep` with `mode:"contingency"` \
+(set target_bus, neighbor_count, contingency_order 1 or 2). Never hand-enumerate outages \
+or loop analyze/modify to test them one at a time.
+- For "N-1 generator security" or "how much hot reserve is available / required" goals, issue \
+ONE `sweep` with `mode:"reserve"`. Python computes the available hot reserve and the minimum \
+required for N-1 (largest committed unit) and screens every single-generator outage in one \
+action. Do NOT enumerate generator outages yourself.
+- For "minimum / minimize hot reserve for N-1" goals, issue ONE `sweep` with \
+`mode:"reserve", minimize:true`. Python greedily de-commits generators and re-screens N-1 to \
+find the minimum N-1-secure hot reserve. When it returns, the goal is fully answered — issue \
+`complete` with the reported minimum. Do NOT attempt manual per-unit de-commitment loops and \
+do NOT invent a reserve number that no screen produced.
 - Declare "complete" when you have a clear answer, when further iterations \
 cannot improve the result, or when the goal is provably infeasible.
 - When performing a binary search (e.g., finding a maximum scaling factor), \

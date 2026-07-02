@@ -48,6 +48,10 @@ from agentigrid.parsers import (
 )
 from agentigrid.parsers.matpower_model import MATNetwork
 from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.engine import topology
+from agentigrid.engine import contingency
+from agentigrid.engine import relief as relief_search
+from agentigrid.engine import reserve as reserve_search
 
 
 def _count_scenario_rows(scenario_path: Path) -> int:
@@ -2030,6 +2034,10 @@ class AgentLoopController:
     _SWEEP_SIGNATURE_KEYS = (
         "mode", "entity", "power_factor", "mutation", "candidate_set", "feasibility",
         "metric", "feasibility_predicate", "entity_dispatchable", "entity_cost_coeffs",
+        # C.5 contingency screen — an identical study is deterministic and served from cache.
+        "target_bus", "neighbor_count", "contingency_order", "components",
+        # C.8 Path A reserve minimization — the minimize flag changes the study.
+        "minimize",
     )
 
     def _sweep_cache_key(self, data: dict) -> str:
@@ -2101,6 +2109,15 @@ class AgentLoopController:
         # Boundary (hosting-capacity) mode: per-candidate bisection on injection magnitude.
         if data.get("mode") == "boundary":
             return self._handle_boundary_sweep(iteration, data)
+
+        # Contingency (N-1/N-2) mode: enumerate outages on the target's neighbors,
+        # re-solve each on top of the current operating point, tabulate pass/fail.
+        if data.get("mode") == "contingency":
+            return self._handle_contingency_sweep(iteration, data)
+
+        # Hot-reserve / minimum N-1 generator security (C.8): system-wide gen screen.
+        if data.get("mode") == "reserve":
+            return self._handle_reserve_screen(iteration, data)
 
         description = data.get("description", "Parametric sweep")
         reasoning = data.get("reasoning", "")
@@ -2695,6 +2712,987 @@ class AgentLoopController:
 
         return "sweep", True
 
+    def _run_contingency_screen(
+        self,
+        net: MATNetwork,
+        contingencies: list,
+        vmin: float,
+        vmax: float,
+        *,
+        iteration: int,
+        reference: bool = True,
+    ) -> tuple[dict, list[dict]]:
+        """Shared per-contingency screen loop (C.5 neighbor-scoped + C.8 system-wide N-1).
+
+        Applies each contingency's outage set ON TOP OF ``net`` under the voltage
+        band (set_all_bus_vlimits), re-solves OPFLOW in parallel, and judges each
+        with the standard predicate — PASS iff the post-outage OPF converges to a
+        feasible re-dispatched operating point. When ``reference`` is True, also
+        runs the pre-contingency reference solve on the band-constrained base point.
+
+        Returns ``(reference, contingency_summaries)``:
+          - ``reference``: dict with keys ``passed``, ``reason``, ``opflow``,
+            ``sim``, ``bus_limits``, ``first_opflow``, ``results_by_ctg``,
+            ``build_errors``, ``built_count``.
+          - ``contingency_summaries``: per-contingency summary dicts (the exact
+            shape journaled by ``add_contingency`` / ``add_reserve``).
+        """
+        # Bus limits from the vlimits-applied operating point (same for all solves).
+        vlimits_cmd = {"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax}
+        try:
+            _ref_net, _ = apply_modifications(
+                net, [parse_command(vlimits_cmd)], application="opflow",
+            )
+            bus_limits = _bus_limits_from_network(_ref_net)
+        except Exception:
+            _ref_net = net
+            bus_limits = _bus_limits_from_network(net)
+
+        predicate_fn = sweep_metrics.PREDICATES["standard"]
+
+        # --- pre-contingency reference solve (base operating point under the band) ---
+        ref_sim = None
+        ref_opflow = None
+        ref_passed = True
+        ref_reason = ""
+        if reference:
+            if self._on_phase:
+                self._on_phase(iteration, "running_simulation (contingency: pre-contingency reference)")
+            ref_sim = self._executor.run(
+                _ref_net, "opflow", -(iteration * 10000 + 9999),
+                self._build_extra_args(), None,
+            )
+            if ref_sim is not None:
+                ref_opflow = parse_simulation_result_for_app(
+                    ref_sim, application="opflow", bus_limits=bus_limits,
+                )
+            ref_passed, ref_reason = predicate_fn(
+                ref_opflow, None, {"vmin": vmin, "vmax": vmax},
+            )
+
+        # --- build one task per contingency (vlimits + outage set on the current net) ---
+        sim_tasks: list[tuple[MATNetwork, str, int, list[str] | None]] = []
+        task_idx_for_ctg: list[int] = []  # task index → contingency index
+        build_errors: list[str] = []
+        skipped: set[int] = set()
+
+        for idx, ctg in enumerate(contingencies):
+            raw_cmds = [vlimits_cmd] + ctg.commands()
+            commands = []
+            parse_ok = True
+            for raw in raw_cmds:
+                try:
+                    commands.append(parse_command(raw))
+                except ValueError as exc:
+                    build_errors.append(f"{ctg.label()}: {exc}")
+                    parse_ok = False
+                    break
+            if not parse_ok:
+                skipped.add(idx)
+                continue
+            try:
+                modified_net, _ = apply_modifications(net, commands, application="opflow")
+            except Exception as exc:  # e.g. element not found after a prior outage
+                build_errors.append(f"{ctg.label()}: {exc}")
+                skipped.add(idx)
+                continue
+            sim_tasks.append(
+                (modified_net, "opflow", -(iteration * 10000 + idx), self._build_extra_args())
+            )
+            task_idx_for_ctg.append(idx)
+
+        # --- run in parallel ---
+        results_by_ctg: dict[int, "SimulationResult"] = {}
+        if sim_tasks:
+            workers = self._resolve_sweep_workers(len(sim_tasks))
+            thread_limit = 1 if workers > 1 else None
+            if self._on_phase:
+                self._on_phase(
+                    iteration, f"running_simulation ({len(sim_tasks)} contingency solves)"
+                )
+            self._print(
+                f"[Iter {iteration}] Running {len(sim_tasks)} contingency solves "
+                f"({workers} concurrent)..."
+            )
+
+            def _ctg_progress(done: int, total: int) -> None:
+                if self._on_phase:
+                    self._on_phase(iteration, f"running_simulation (contingency {done}/{total} solved)")
+
+            results_map = self._executor.run_parallel(
+                sim_tasks, max_workers=workers, thread_limit=thread_limit,
+                on_progress=_ctg_progress,
+            )
+            for task_idx, ctg_idx in enumerate(task_idx_for_ctg):
+                r = results_map.get(task_idx)
+                if r is not None:
+                    results_by_ctg[ctg_idx] = r
+
+        # --- judge each contingency with the standard predicate ---
+        contingency_summaries: list[dict] = []
+        first_opflow: "OPFLOWResult | None" = None
+
+        for idx, ctg in enumerate(contingencies):
+            if idx in skipped:
+                contingency_summaries.append({
+                    "label": ctg.label(),
+                    "order": ctg.order,
+                    "kinds": [e.kind for e in ctg.elements],
+                    "neighbor_buses": [e.neighbor_bus for e in ctg.elements],
+                    "elements": [e.to_command() for e in ctg.elements],
+                    "passed": False,
+                    "voltage_min": 0.0,
+                    "voltage_max": 0.0,
+                    "max_line_loading_pct": 0.0,
+                    "violations": 0,
+                    "status": "BUILD_ERROR",
+                    "reason": "build error",
+                })
+                continue
+
+            sim_result = results_by_ctg.get(idx)
+            opflow = None
+            if sim_result is not None:
+                opflow = parse_simulation_result_for_app(
+                    sim_result, application="opflow", bus_limits=bus_limits,
+                )
+            if first_opflow is None and opflow is not None:
+                first_opflow = opflow
+
+            passed, reason = predicate_fn(
+                opflow, None, {"vmin": vmin, "vmax": vmax},
+            )
+
+            contingency_summaries.append({
+                "label": ctg.label(),
+                "order": ctg.order,
+                "kinds": [e.kind for e in ctg.elements],
+                "neighbor_buses": [e.neighbor_bus for e in ctg.elements],
+                "elements": [e.to_command() for e in ctg.elements],
+                "passed": passed,
+                "voltage_min": opflow.voltage_min if opflow else 0.0,
+                "voltage_max": opflow.voltage_max if opflow else 0.0,
+                "max_line_loading_pct": opflow.max_line_loading_pct if opflow else 0.0,
+                "violations": opflow.num_violations if opflow else 0,
+                "status": opflow.convergence_status if opflow else "FAILED",
+                "reason": reason,
+            })
+
+        reference_out = {
+            "passed": ref_passed,
+            "reason": ref_reason,
+            "opflow": ref_opflow,
+            "sim": ref_sim,
+            "bus_limits": bus_limits,
+            "first_opflow": first_opflow,
+            "results_by_ctg": results_by_ctg,
+            "build_errors": build_errors,
+            "built_count": len(sim_tasks),
+        }
+        return reference_out, contingency_summaries
+
+    def _handle_contingency_sweep(
+        self, iteration: int, data: dict
+    ) -> tuple[str, bool]:
+        """Handle a contingency (N-1/N-2) screen — one LLM action, whole study in Python.
+
+        Enumerates outages drawn from the k nearest neighbor buses of a target,
+        applies each outage set ON TOP OF THE CURRENT OPERATING POINT (so a prior
+        `modify` that connected the load is included), re-solves OPFLOW, and judges
+        pass/fail.
+
+        Feasibility semantics: under OPFLOW the V-band (via set_all_bus_vlimits)
+        and Rate A are in-solve hard constraints, so a contingency PASSES iff the
+        post-contingency OPFLOW converges to a feasible re-dispatched operating
+        point and FAILS iff it does not — the OPF-redispatch post-contingency
+        model. The pre-contingency reference solve certifies the base operating
+        point under the stated band.
+
+        Like the boundary sweep, the whole screen is ONE LLM turn performing N
+        internal solves; it does not consume N iterations of the LLM budget.
+        """
+        if self._config.search.application != "opflow":
+            self._print(f"[Iter {iteration}] 'contingency' sweep is only supported for OPFLOW")
+            self._error_feedback = (
+                "The contingency sweep is only supported for the OPFLOW application. "
+                "Use 'modify' for other applications."
+            )
+            return "error", True
+
+        description = data.get("description", "Contingency screen")
+        reasoning = data.get("reasoning", "")
+
+        # --- validate parameters ---
+        raw_target = data.get("target_bus")
+        if raw_target is None:
+            self._error_feedback = "contingency sweep requires a 'target_bus' (integer bus number)."
+            return "error", True
+        try:
+            target_bus = int(raw_target)
+        except (TypeError, ValueError):
+            self._error_feedback = f"contingency 'target_bus' must be an integer, got {raw_target!r}."
+            return "error", True
+
+        try:
+            neighbor_count = int(data.get("neighbor_count", 3))
+        except (TypeError, ValueError):
+            self._error_feedback = f"contingency 'neighbor_count' must be an integer, got {data.get('neighbor_count')!r}."
+            return "error", True
+        if neighbor_count < 1:
+            self._error_feedback = "contingency 'neighbor_count' must be >= 1."
+            return "error", True
+
+        try:
+            order = int(data.get("contingency_order", 1))
+        except (TypeError, ValueError):
+            self._error_feedback = f"contingency 'contingency_order' must be 1 or 2, got {data.get('contingency_order')!r}."
+            return "error", True
+        if order not in (1, 2):
+            self._error_feedback = "contingency 'contingency_order' must be 1 (N-1) or 2 (N-2)."
+            return "error", True
+
+        components = data.get("components", ["branch", "gen", "load"])
+        if not isinstance(components, list) or not components:
+            self._error_feedback = (
+                "contingency 'components' must be a non-empty list drawn from "
+                "['branch', 'gen', 'load']."
+            )
+            return "error", True
+        _valid_kinds = {"branch", "gen", "load"}
+        if any(c not in _valid_kinds for c in components):
+            self._error_feedback = (
+                f"contingency 'components' may only contain {sorted(_valid_kinds)}; "
+                f"got {components}."
+            )
+            return "error", True
+
+        feasibility_spec = data.get("feasibility", {})
+        vmin = feasibility_spec.get("Vmin", 0.9)
+        vmax = feasibility_spec.get("Vmax", 1.1)
+
+        # Optional relief phase (C.7): ordered list of relief measures to try on each
+        # FAILED contingency. Absent → no relief phase (behaves exactly as C.5).
+        relief_measures = data.get("relief_measures")
+        if relief_measures is not None:
+            if not isinstance(relief_measures, list) or not relief_measures:
+                self._error_feedback = (
+                    "contingency 'relief_measures' must be a non-empty ordered list drawn "
+                    f"from {list(relief_search.MEASURE_ORDER)}."
+                )
+                return "error", True
+            _bad = [m for m in relief_measures if m not in relief_search.MEASURE_ORDER]
+            if _bad:
+                self._error_feedback = (
+                    f"contingency 'relief_measures' contains unknown measure(s) {_bad}; "
+                    f"valid measures: {list(relief_search.MEASURE_ORDER)}."
+                )
+                return "error", True
+
+        # Operating point: apply the screen on top of the CURRENT network (post-modify).
+        net = self._current_network or self._base_network
+
+        # --- enumerate ---
+        try:
+            contingencies = contingency.enumerate_contingencies(
+                net, target_bus, neighbor_count, order, tuple(components),
+            )
+        except ValueError as exc:
+            self._error_feedback = f"contingency enumeration error: {exc}"
+            return "error", True
+
+        if not contingencies:
+            self._error_feedback = (
+                f"No contingencies enumerated for target bus {target_bus} "
+                f"(neighbors={neighbor_count}, components={components}). The neighbor "
+                "buses may have no outage-eligible elements of the requested kinds."
+            )
+            return "error", True
+
+        max_count = self._config.search.contingency_max_count
+        if len(contingencies) > max_count:
+            self._error_feedback = (
+                f"Contingency screen would enumerate {len(contingencies)} contingencies, "
+                f"exceeding the guard of {max_count}. Lower neighbor_count, reduce "
+                f"contingency_order (2→1), or narrow components to shrink the study."
+            )
+            return "error", True
+
+        neighbors = topology.k_nearest_by_hops(net, target_bus, neighbor_count)
+        self._print(
+            f'[Iter {iteration}] LLM action: contingency sweep — "{description}" '
+            f"(target bus {target_bus}, N-{order}, {len(contingencies)} contingencies, "
+            f"neighbors={[nb for nb, _ in neighbors]})"
+        )
+
+        if self._on_phase:
+            self._on_phase(iteration, "applying_commands")
+
+        # --- shared screen: reference solve + per-contingency parallel solves + judging ---
+        reference, contingency_summaries = self._run_contingency_screen(
+            net, contingencies, vmin, vmax, iteration=iteration, reference=True,
+        )
+        bus_limits = reference["bus_limits"]
+        ref_sim = reference["sim"]
+        ref_passed = reference["passed"]
+        ref_reason = reference["reason"]
+        results_by_ctg = reference["results_by_ctg"]
+
+        if reference["built_count"] == 0:
+            self._error_feedback = (
+                "All contingencies failed to build outage commands. Errors:\n"
+                + "\n".join(reference["build_errors"][:5])
+            )
+            return "error", True
+
+        passed_count = sum(1 for s in contingency_summaries if s["passed"])
+        failed_count = len(contingency_summaries) - passed_count
+        self._latest_opflow = reference["opflow"] or reference["first_opflow"]
+
+        # --- relief phase (C.7): search relief measures for each FAILED contingency ---
+        if relief_measures:
+            self._run_relief_phase(
+                iteration, net, contingencies, contingency_summaries,
+                relief_measures, vmin, vmax, bus_limits,
+            )
+
+        # --- LLM-facing view (token-bounded) ---
+        self._latest_results_text = self._build_contingency_llm_view(
+            target_bus=target_bus,
+            neighbors=neighbors,
+            order=order,
+            components=components,
+            vmin=vmin,
+            vmax=vmax,
+            contingency_summaries=contingency_summaries,
+            passed_count=passed_count,
+            failed_count=failed_count,
+            ref_passed=ref_passed,
+            ref_reason=ref_reason,
+            threshold=self._config.search.sweep_full_table_threshold,
+            top_n=self._config.search.sweep_llm_top_n,
+            relief_measures=relief_measures,
+        )
+
+        # --- journal + cache ---
+        active_directive = (
+            self._active_steering_directives[-1]["directive"]
+            if self._active_steering_directives else None
+        )
+        _representative_sim = ref_sim or next(iter(results_by_ctg.values()), None)
+        _ctg_command = _multi_call_record(
+            "contingency", len(contingencies), _representative_sim,
+            "Executed once per enumerated contingency. Each outage set is written into "
+            "the per-contingency netfile (via set_branch_status / set_gen_status / "
+            "set_load), not passed as an ExaGO argument; only the -netfile path differs. "
+            "The representative shown is the pre-contingency reference solve.",
+        )
+        self._journal.add_contingency(
+            iteration=iteration,
+            description=f"[contingency N-{order}] {description} (on current operating point)",
+            target_bus=target_bus,
+            neighbors=neighbors,
+            order=order,
+            contingency_summaries=contingency_summaries,
+            passed_count=passed_count,
+            failed_count=failed_count,
+            llm_reasoning=reasoning,
+            steering_directive=active_directive,
+            exago_command=_ctg_command,
+        )
+        self._store_sweep_cache(
+            self._sweep_cache_key(data), description, len(contingencies),
+            contingency_summaries, [], self._latest_results_text,
+        )
+
+        self._print(
+            f"[Iter {iteration}] Contingency screen complete: "
+            f"{passed_count} passed / {failed_count} failed of {len(contingencies)} "
+            f"(N-{order}, target bus {target_bus})"
+        )
+        return "sweep", True
+
+    def _handle_reserve_screen(
+        self, iteration: int, data: dict
+    ) -> tuple[str, bool]:
+        """Handle a hot-reserve / minimum N-1 generator security screen (C.8).
+
+        Computes system hot reserve (Σ Pmax−Pg over on-units) from the SOLVED base
+        operating point, then runs a system-wide N-1 generator-outage screen (each
+        committed unit tripped, OPF re-solved) to verify each loss is coverable by
+        redispatch within network limits (deliverability, not copperplate). The
+        minimum hot reserve required for N-1 is the output of the largest committed
+        unit — the worst single-generator loss. ONE LLM action performing
+        1 + n_on internal solves; it does not consume the LLM iteration budget.
+        """
+        if self._config.search.application != "opflow":
+            self._print(f"[Iter {iteration}] 'reserve' screen is only supported for OPFLOW")
+            self._error_feedback = (
+                "The reserve screen is only supported for the OPFLOW application. "
+                "Use 'modify' for other applications."
+            )
+            return "error", True
+
+        description = data.get("description", "Hot reserve / N-1 generator security")
+        reasoning = data.get("reasoning", "")
+        feasibility_spec = data.get("feasibility", {})
+        vmin = feasibility_spec.get("Vmin", 0.9)
+        vmax = feasibility_spec.get("Vmax", 1.1)
+        minimize = bool(data.get("minimize", False))
+
+        # Operating point: the reserve screen runs on the CURRENT network (the base
+        # network when no prior `modify` ran — prompt 4 adds no load).
+        net = self._current_network or self._base_network
+
+        contingencies = contingency.all_generator_contingencies(net)
+        if not contingencies:
+            self._error_feedback = (
+                "No in-service generators found; cannot run the reserve / N-1 "
+                "generator security screen."
+            )
+            return "error", True
+
+        max_count = self._config.search.contingency_max_count
+        if len(contingencies) > max_count:
+            self._error_feedback = (
+                f"Reserve screen would enumerate {len(contingencies)} generator "
+                f"outages, exceeding the guard of {max_count}."
+            )
+            return "error", True
+
+        self._print(
+            f'[Iter {iteration}] LLM action: reserve screen — "{description}" '
+            f"({len(contingencies)} in-service generators, system-wide N-1)"
+        )
+        if self._on_phase:
+            self._on_phase(iteration, "applying_commands")
+
+        # --- shared screen: base reference solve + per-unit N-1 solves + judging ---
+        reference, contingency_summaries = self._run_contingency_screen(
+            net, contingencies, vmin, vmax, iteration=iteration, reference=True,
+        )
+        base_result = reference["opflow"]
+        if base_result is None or not reference["passed"]:
+            self._error_feedback = (
+                "Reserve screen: the base operating point is infeasible under the "
+                f"band (Vmin={vmin}, Vmax={vmax}): "
+                f"{reference['reason'] or 'did not converge'}. Cannot assess reserve."
+            )
+            return "error", True
+
+        self._latest_opflow = base_result
+
+        # --- reserve accounting from the solved base dispatch ---
+        on_units = [g for g in base_result.generators if g.status == 1]
+        if not on_units:
+            self._error_feedback = (
+                "Reserve screen: base solve reported no in-service generators."
+            )
+            return "error", True
+        hot_reserve_available = sum(g.Pmax - g.Pg for g in on_units)
+        largest_pg_gen = max(on_units, key=lambda g: g.Pg)
+        largest_pmax_gen = max(on_units, key=lambda g: g.Pmax)
+        n_on = len(on_units)
+
+        passed_count = sum(1 for s in contingency_summaries if s["passed"])
+        failed_count = len(contingency_summaries) - passed_count
+
+        required_reserve_n1 = largest_pg_gen.Pg
+        margin = hot_reserve_available - required_reserve_n1
+        n1_secure = failed_count == 0
+
+        reserve_meta = {
+            "n_on": n_on,
+            "hot_reserve_available": hot_reserve_available,
+            "largest_pg": largest_pg_gen.Pg,
+            "largest_pg_bus": largest_pg_gen.bus,
+            "largest_pmax": largest_pmax_gen.Pmax,
+            "largest_pmax_bus": largest_pmax_gen.bus,
+            "required_reserve_n1": required_reserve_n1,
+            "margin": margin,
+            "n1_secure": n1_secure,
+            "passed_count": passed_count,
+            "failed_count": failed_count,
+        }
+
+        # --- optional minimization pass (C.8 Path A): greedy de-commitment ---
+        # ``journal_summaries`` holds the per-unit N-1 summaries that become
+        # ``explored_variants`` in the journal entry.  For the minimize path these
+        # reflect the MINIMIZED commitment so the PDF evidence table is correct.
+        journal_summaries = contingency_summaries
+        if minimize:
+            min_result = self._run_reserve_minimization(iteration, net, vmin, vmax)
+            # Keep the base ``n1_secure``/counts as the full-commitment assessment;
+            # store the minimized commitment's security under a distinct key so the
+            # assessment table stays coherent. The ``minimize`` flag is added only on
+            # this path so the reading-2 assessment journal stays byte-identical.
+            reserve_meta.update({
+                "minimize": True,
+                "reserve_full": min_result.reserve_full,
+                "min_reserve": min_result.min_reserve,
+                "n_decommitted": len(min_result.decommitted),
+                "decommitted": list(min_result.decommitted),
+                "final_on_count": min_result.final_on_count,
+                "lower_bound_pg": min_result.lower_bound_pg,
+                "lower_bound_bus": min_result.lower_bound_bus,
+                "n1_secure_min": min_result.n1_secure,
+                "solves_used": min_result.solves_used,
+                "hit_budget": min_result.hit_budget,
+                "trajectory": list(min_result.trajectory),
+            })
+            description = (
+                f"[reserve N-1 minimize] min feasible hot reserve = "
+                f"{min_result.min_reserve:.0f} MW"
+            )
+            # Run one final N-1 screen on the MINIMIZED commitment so the PDF
+            # evidence table shows the 41-unit (not 54-unit) outage list.
+            if min_result.decommitted:
+                try:
+                    _decommit_cmds = [
+                        {"action": "set_gen_status", "bus": b, "gen_id": g, "status": 0}
+                        for (b, g) in min_result.decommitted
+                    ]
+                    _min_variant, _ = apply_modifications(
+                        net,
+                        [parse_command(c) for c in _decommit_cmds],
+                        application="opflow",
+                    )
+                    _min_ctgs = contingency.all_generator_contingencies(_min_variant)
+                    if _min_ctgs:
+                        _, _min_summaries = self._run_contingency_screen(
+                            _min_variant, _min_ctgs, vmin, vmax,
+                            iteration=iteration, reference=False,
+                        )
+                        journal_summaries = _min_summaries
+                except Exception:
+                    pass  # fall back to full-commitment summaries
+        else:
+            description = f"[reserve N-1] {description} (on current operating point)"
+
+        # --- LLM-facing view ---
+        self._latest_results_text = self._build_reserve_llm_view(
+            reserve_meta, contingency_summaries, vmin, vmax,
+        )
+
+        # --- journal + cache ---
+        active_directive = (
+            self._active_steering_directives[-1]["directive"]
+            if self._active_steering_directives else None
+        )
+        _representative_sim = reference["sim"] or next(
+            iter(reference["results_by_ctg"].values()), None
+        )
+        _reserve_command = _multi_call_record(
+            "reserve", 1 + len(contingencies), _representative_sim,
+            "Base operating-point solve plus one OPF solve per in-service generator "
+            "(each unit tripped via set_gen_status in the per-solve netfile; only the "
+            "-netfile path differs). The representative shown is the base solve.",
+        )
+        self._journal.add_reserve(
+            iteration=iteration,
+            description=description,
+            reserve_meta=reserve_meta,
+            contingency_summaries=journal_summaries,
+            llm_reasoning=reasoning,
+            steering_directive=active_directive,
+            exago_command=_reserve_command,
+        )
+        self._store_sweep_cache(
+            self._sweep_cache_key(data), description, len(contingencies),
+            journal_summaries, [], self._latest_results_text,
+        )
+
+        self._print(
+            f"[Iter {iteration}] Reserve screen complete: "
+            f"available {hot_reserve_available:.1f} MW, required (N-1) "
+            f"{required_reserve_n1:.1f} MW, margin {margin:.1f} MW; "
+            f"N-1 generator security {passed_count}/{n_on} feasible"
+        )
+        return "sweep", True
+
+    def _run_reserve_minimization(
+        self, iteration: int, net: MATNetwork, vmin: float, vmax: float,
+    ) -> "reserve_search.ReserveMinResult":
+        """Greedy security-constrained de-commitment to minimize N-1-secure hot reserve.
+
+        Builds the base-solve and N-1-screen closures over ``net`` and delegates the
+        accept/revert search to the pure ``reserve.minimize_hot_reserve``. Each trial
+        de-commits a set of units (``set_gen_status=0``) and re-solves; the N-1 screen
+        reuses the validated ``_run_contingency_screen`` over the remaining on-units.
+        The result's greedy value is an upper bound; the lower bound is the largest
+        remaining committed Pg at the final commitment.
+        """
+        predicate_fn = sweep_metrics.PREDICATES["standard"]
+        vlimits_cmd = {"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax}
+        solve_seq = {"n": 0}
+
+        def _decommit_commands(off_units) -> list[dict]:
+            return [
+                {"action": "set_gen_status", "bus": b, "gen_id": g, "status": 0}
+                for (b, g) in sorted(off_units)
+            ]
+
+        def _base_solve_fn(off_units):
+            cmds = [vlimits_cmd] + _decommit_commands(off_units)
+            try:
+                variant, _ = apply_modifications(
+                    net, [parse_command(c) for c in cmds], application="opflow",
+                )
+            except Exception:
+                return None
+            bus_limits = _bus_limits_from_network(variant)
+            solve_seq["n"] += 1
+            run_id = -(iteration * 1_000_000 + solve_seq["n"])
+            sim = self._executor.run(
+                variant, "opflow", run_id, self._build_extra_args(), None,
+            )
+            if sim is None:
+                return None
+            opflow = parse_simulation_result_for_app(
+                sim, application="opflow", bus_limits=bus_limits,
+            )
+            passed, _ = predicate_fn(opflow, None, {"vmin": vmin, "vmax": vmax})
+            return opflow if passed else None
+
+        def _n1_screen_fn(off_units):
+            cmds = _decommit_commands(off_units)
+            if cmds:
+                try:
+                    variant, _ = apply_modifications(
+                        net, [parse_command(c) for c in cmds], application="opflow",
+                    )
+                except Exception:
+                    return False, 0, 0
+            else:
+                variant = net
+            ctgs = contingency.all_generator_contingencies(variant)
+            if not ctgs:
+                return True, 0, 0  # no committed units left → vacuously N-1 secure
+            _ref, summaries = self._run_contingency_screen(
+                variant, ctgs, vmin, vmax, iteration=iteration, reference=False,
+            )
+            passed = sum(1 for s in summaries if s["passed"])
+            total = len(summaries)
+            return (passed == total), passed, total
+
+        max_solves = self._config.search.reserve_max_solves
+        self._print(
+            f"[Iter {iteration}] Reserve minimization: greedy largest-Pmax-first "
+            f"de-commitment (budget {max_solves} solves)..."
+        )
+        result = reserve_search.minimize_hot_reserve(
+            net, vmin, vmax,
+            base_solve_fn=_base_solve_fn,
+            n1_screen_fn=_n1_screen_fn,
+            max_solves=max_solves,
+        )
+        self._print(
+            f"[Iter {iteration}] Reserve minimization complete: "
+            f"min reserve {result.min_reserve:.1f} MW (full {result.reserve_full:.1f} MW), "
+            f"{len(result.decommitted)} units de-committed, "
+            f"lower bound {result.lower_bound_pg:.1f} MW"
+            + (" [budget hit]" if result.hit_budget else "")
+        )
+        return result
+
+    def _build_reserve_llm_view(
+        self,
+        reserve_meta: dict,
+        contingency_summaries: list[dict],
+        vmin: float,
+        vmax: float,
+    ) -> str:
+        """Token-bounded LLM view of the hot-reserve / N-1 generator security screen."""
+        m = reserve_meta
+        n_on = m["n_on"]
+        passed = m["passed_count"]
+        failed = m["failed_count"]
+
+        # Minimization result leads the view so the LLM answers with the minimum and
+        # issues `complete` — no manual per-unit de-commitment, no invented number.
+        if m.get("minimize"):
+            secure_min = m.get("n1_secure_min", m["n1_secure"])
+            lines = [
+                "MINIMUM feasible hot reserve for N-1 (greedy largest-Pmax-first "
+                "de-commitment; result is an UPPER BOUND on the true minimum).",
+                f"Minimum feasible hot reserve = {m['min_reserve']:.1f} MW "
+                f"(N-1 secure: {'yes' if secure_min else 'no'}).",
+                f"Hot reserve at full commitment = {m['reserve_full']:.1f} MW; "
+                f"de-committed {m['n_decommitted']} of {n_on} units "
+                f"→ {m['final_on_count']} remain committed.",
+                f"Bracket: lower bound {m['lower_bound_pg']:.1f} MW "
+                f"(largest remaining committed unit, gen@{m['lower_bound_bus']}) "
+                f"≤ minimum feasible reserve ≤ {m['min_reserve']:.1f} MW (greedy upper bound).",
+                f"Feasibility model unchanged: OPF redispatch under Vmin={vmin}, Vmax={vmax} "
+                "and Rate A; each remaining single-unit outage re-solved.",
+            ]
+            if m.get("hit_budget"):
+                lines.append(
+                    "Note: the solve budget was reached — the reported commitment is the "
+                    "best found so far (the true minimum may be lower)."
+                )
+            if m["decommitted"]:
+                shown = ", ".join(
+                    f"gen@{b}#{g}" for (b, g) in m["decommitted"][:20]
+                )
+                more = "" if len(m["decommitted"]) <= 20 else f" (+{len(m['decommitted']) - 20} more)"
+                lines.append(f"De-committed units (in order): {shown}{more}")
+            lines.append(
+                "This fully answers a 'minimum/minimize hot reserve for N-1' goal — "
+                "issue `complete` with this minimum."
+            )
+            return "\n".join(lines)
+
+        lines = [
+            f"System hot-reserve / N-1 generator security ({n_on} committed units).",
+            f"Feasibility band: Vmin={vmin}, Vmax={vmax} "
+            "(OPF-redispatch model — a unit loss PASSES iff the post-outage OPFLOW "
+            "converges feasibly, proving the loss is coverable by redispatch within "
+            "network limits, not just on a copperplate).",
+            f"Hot reserve available (Σ Pmax−Pg over on-units): "
+            f"{m['hot_reserve_available']:.1f} MW",
+            f"Largest committed unit: gen@{m['largest_pg_bus']} at {m['largest_pg']:.1f} MW "
+            f"(capacity {m['largest_pmax']:.1f} MW"
+            + (f", largest capacity gen@{m['largest_pmax_bus']}"
+               if m['largest_pmax_bus'] != m['largest_pg_bus'] else "")
+            + ")",
+            f"Minimum hot reserve required for N-1 = {m['required_reserve_n1']:.1f} MW "
+            "(worst single-unit loss)",
+            f"Reserve margin = {m['margin']:.1f} MW",
+            f"N-1 generator security: {passed}/{n_on} unit outages feasible",
+        ]
+
+        failed_summaries = [s for s in contingency_summaries if not s["passed"]]
+        if failed_summaries:
+            lines.append("")
+            lines.append(
+                f"NOT N-1 secure: {failed} unit outage(s) infeasible — the loss of "
+                "these units is not coverable by redispatch within limits, so the "
+                "arithmetic reserve margin is not deliverable and the required reserve "
+                "is mis-located. Failed units:"
+            )
+            lines.append(
+                f"{'contingency':<20} | {'reason':<22} | {'Vmin':>5} | {'Vmax':>5} | maxLoad%"
+            )
+            for s in failed_summaries:
+                lines.append(
+                    f"{s['label']:<20} | {(s.get('reason') or ''):<22} | "
+                    f"{s['voltage_min']:>5.3f} | {s['voltage_max']:>5.3f} | "
+                    f"{s['max_line_loading_pct']:>7.1f}"
+                )
+        else:
+            lines.append("")
+            lines.append(
+                "N-1 SECURE: every single committed-generator loss is feasible under "
+                "OPF redispatch within the band and thermal limits."
+            )
+        return "\n".join(lines)
+
+    def _run_relief_phase(
+        self,
+        iteration: int,
+        net: MATNetwork,
+        contingencies: list,
+        contingency_summaries: list[dict],
+        relief_measures: list[str],
+        vmin: float,
+        vmax: float,
+        bus_limits: dict,
+    ) -> None:
+        """Search relief measures for each FAILED contingency (C.7); attach 'relief' payloads.
+
+        Uses the same executor solve as C.5 via an injected ``solve_fn``. A shared
+        solve counter enforces ``relief_max_solves``: once the budget is spent,
+        remaining failures are marked 'relief budget exhausted' rather than searched.
+        """
+        budget = self._config.search.relief_max_solves
+        solve_counter = {"n": 0}
+        extra_args = self._build_extra_args()
+
+        def _solve_fn(mnet: MATNetwork):
+            tag = -(iteration * 1_000_000 + solve_counter["n"])
+            solve_counter["n"] += 1
+            sim = self._executor.run(mnet, "opflow", tag, extra_args, None)
+            if sim is None:
+                return None
+            return parse_simulation_result_for_app(
+                sim, application="opflow", bus_limits=bus_limits,
+            )
+
+        failures = [i for i, s in enumerate(contingency_summaries) if not s["passed"]]
+        if not failures:
+            return
+
+        if self._on_phase:
+            self._on_phase(iteration, f"relief search ({len(failures)} failed contingencies)")
+        self._print(
+            f"[Iter {iteration}] Relief search over {len(failures)} failed contingencies "
+            f"(measures: {relief_measures}, budget {budget} solves)..."
+        )
+
+        for i in failures:
+            summary = contingency_summaries[i]
+            if summary.get("status") == "BUILD_ERROR":
+                summary["relief"] = {
+                    "resolved": False, "measure": None,
+                    "detail": "build error; cannot search relief", "attempts": [],
+                }
+                continue
+            if solve_counter["n"] >= budget:
+                summary["relief"] = {
+                    "resolved": False, "measure": None,
+                    "detail": "relief budget exhausted", "attempts": [],
+                }
+                continue
+            result = relief_search.find_relief(
+                net, contingencies[i], relief_measures, vmin, vmax,
+                _solve_fn, self._config.search,
+            )
+            summary["relief"] = {
+                "resolved": result.resolved,
+                "measure": result.action.measure if result.action else None,
+                "detail": result.action.detail if result.action else "no relief measure restored feasibility",
+                "attempts": [[m, r] for m, r in result.attempts],
+            }
+
+        n_resolved = sum(
+            1 for i in failures if contingency_summaries[i].get("relief", {}).get("resolved")
+        )
+        self._print(
+            f"[Iter {iteration}] Relief search complete: "
+            f"{n_resolved}/{len(failures)} failures resolved "
+            f"({solve_counter['n']} relief solves used)"
+        )
+
+    def _build_contingency_llm_view(
+        self,
+        target_bus: int,
+        neighbors: list[tuple[int, int]],
+        order: int,
+        components: list[str],
+        vmin: float,
+        vmax: float,
+        contingency_summaries: list[dict],
+        passed_count: int,
+        failed_count: int,
+        ref_passed: bool,
+        ref_reason: str,
+        threshold: int,
+        top_n: int,
+        relief_measures: list[str] | None = None,
+    ) -> str:
+        """Token-bounded LLM view of a contingency screen, mirroring the sweep view gating.
+
+        At or below ``threshold`` contingencies, a full pass/fail table is shown.
+        Above it, the FAILED set is listed in full (grouped by reason) with a capped
+        sample of passers plus aggregate counts and a journal/PDF pointer — the LLM
+        needs the complete failed set to answer, so failures are never truncated.
+        """
+        n_total = len(contingency_summaries)
+        nbr_str = ", ".join(f"{nb}(h{hop})" for nb, hop in neighbors)
+        comp_str = "/".join(components)
+        ref_line = (
+            "Pre-contingency reference: FEASIBLE under the band."
+            if ref_passed
+            else f"Pre-contingency reference: INFEASIBLE ({ref_reason or 'did not converge'}) "
+                 "— base operating point does not hold under the band; interpret results with care."
+        )
+        header = [
+            f"Contingency screen (N-{order}) on target bus {target_bus}: "
+            f"{n_total} contingencies over nearest neighbors [{nbr_str}].",
+            f"Components: {comp_str}.  Feasibility band: Vmin={vmin}, Vmax={vmax} "
+            f"(OPF-redispatch model — PASS = post-outage OPFLOW converges feasibly).",
+            f"PASSED: {passed_count} / {n_total}   FAILED: {failed_count} / {n_total}",
+            ref_line,
+            "",
+        ]
+
+        # Relief section (C.7) — appended to whichever table branch is used below.
+        relief_lines = self._relief_section_lines(
+            contingency_summaries, failed_count, relief_measures,
+        )
+
+        # --- full-table branch ---
+        if threshold > 0 and n_total <= threshold:
+            lines = header + [
+                f"{'contingency':<28} | {'kinds':<14} | {'pass':>4} | "
+                f"{'Vmin':>5} | {'Vmax':>5} | {'maxLoad%':>8} | reason",
+            ]
+            for s in contingency_summaries:
+                pass_str = "yes" if s["passed"] else "no"
+                kinds_str = "+".join(s["kinds"])
+                lines.append(
+                    f"{s['label']:<28} | {kinds_str:<14} | {pass_str:>4} | "
+                    f"{s['voltage_min']:>5.3f} | {s['voltage_max']:>5.3f} | "
+                    f"{s['max_line_loading_pct']:>8.1f} | {s.get('reason') or ''}"
+                )
+            lines += relief_lines
+            return "\n".join(lines)
+
+        # --- summarized branch (FAILED set never truncated) ---
+        lines = list(header)
+        failed = [s for s in contingency_summaries if not s["passed"]]
+        passed = [s for s in contingency_summaries if s["passed"]]
+
+        failed_by_reason: dict[str, list[str]] = defaultdict(list)
+        for s in failed:
+            failed_by_reason[s.get("reason") or "did not converge"].append(s["label"])
+        lines.append(f"FAILED contingencies grouped by reason ({failed_count} total):")
+        if failed_by_reason:
+            for reason in sorted(failed_by_reason):
+                labels = failed_by_reason[reason]
+                lines.append(f"  {reason} ({len(labels)}): {labels}")
+        else:
+            lines.append("  (none)")
+        lines.append("")
+
+        sample = passed[:top_n]
+        lines.append(
+            f"Passed contingencies ({passed_count} total; showing {len(sample)}):"
+        )
+        lines.append(f"  {[s['label'] for s in sample]}")
+        if passed_count > len(sample):
+            lines.append(f"  ... and {passed_count - len(sample)} more (see journal).")
+        lines.append("")
+        lines.append(
+            f"[Note: Full per-contingency pass/fail table ({n_total} rows) is stored in "
+            "the journal. Only the complete failed set and a sample of passers are shown "
+            "here to limit token usage — no failure is omitted from this view.]"
+        )
+        lines += relief_lines
+        return "\n".join(lines)
+
+    def _relief_section_lines(
+        self,
+        contingency_summaries: list[dict],
+        failed_count: int,
+        relief_measures: list[str] | None,
+    ) -> list[str]:
+        """Build the 'Relief for failed contingencies' view section (empty if no relief)."""
+        if not relief_measures:
+            return []
+        lines = ["", f"Relief for failed contingencies (measures tried in order: {relief_measures}):"]
+        if failed_count == 0:
+            lines.append("  no failures; no relief required.")
+            return lines
+        lines.append(
+            f"{'contingency':<28} | {'resolving measure':<20} | detail | (measures tried)"
+        )
+        for s in contingency_summaries:
+            if s["passed"]:
+                continue
+            rel = s.get("relief") or {}
+            if rel.get("resolved"):
+                measure = rel.get("measure") or "?"
+                detail = rel.get("detail") or ""
+            else:
+                measure = "UNRESOLVED"
+                detail = rel.get("detail") or "no relief measure restored feasibility"
+            tried = ", ".join(
+                f"{m}{'✓' if r else '✗'}" for m, r in (rel.get("attempts") or [])
+            )
+            lines.append(f"{s['label']:<28} | {measure:<20} | {detail} | ({tried})")
+        return lines
+
     def _handle_select(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -2855,6 +3853,10 @@ class AgentLoopController:
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
         """Handle an 'analyze' action from the LLM."""
+        query_type = (data.get("query_type") or "").strip().lower()
+        if query_type:
+            return self._handle_topology_analyze(iteration, data, query_type)
+
         query = data.get("query", "")
 
         self._print(f'[Iter {iteration}] LLM action: analyze — "{query}"')
@@ -2867,6 +3869,73 @@ class AgentLoopController:
         self._journal.add_analysis(
             iteration=iteration,
             query=query,
+            result_summary=result_text[:200],
+        )
+
+        return "analyze", True
+
+    def _handle_topology_analyze(
+        self, iteration: int, data: dict, query_type: str
+    ) -> tuple[str, bool]:
+        """Handle a structured topology query — deterministic, no LLM/backend call."""
+        _VALID = ("nearest_neighbors", "incident_branches")
+        if query_type not in _VALID:
+            self._error_feedback = (
+                f"Unknown query_type '{query_type}'. "
+                f"Valid topology query types: {', '.join(_VALID)}."
+            )
+            return "error", True
+
+        net = self._current_network or self._base_network
+        if net is None:
+            self._error_feedback = "No network loaded; cannot execute topology query."
+            return "error", True
+
+        raw_bus = data.get("bus")
+        if raw_bus is None:
+            self._error_feedback = "Topology query requires a 'bus' field (integer bus number)."
+            return "error", True
+        try:
+            bus = int(raw_bus)
+        except (TypeError, ValueError):
+            self._error_feedback = f"'bus' must be an integer, got {raw_bus!r}."
+            return "error", True
+
+        if query_type == "nearest_neighbors":
+            raw_k = data.get("k", 3)
+            try:
+                k = int(raw_k)
+            except (TypeError, ValueError):
+                self._error_feedback = f"'k' must be a positive integer, got {raw_k!r}."
+                return "error", True
+
+            try:
+                neighbors = topology.k_nearest_by_hops(net, bus, k)
+                total = topology.count_reachable(net, bus)
+            except ValueError as exc:
+                self._error_feedback = f"Topology query error: {exc}"
+                return "error", True
+
+            result_text = topology.format_nearest_neighbors_view(bus, k, neighbors, total)
+            query_desc = f"nearest_neighbors bus={bus} k={k}"
+
+        else:  # incident_branches
+            try:
+                branches = topology.incident_branches(net, bus)
+            except ValueError as exc:
+                self._error_feedback = f"Topology query error: {exc}"
+                return "error", True
+
+            result_text = topology.format_incident_branches_view(bus, branches)
+            query_desc = f"incident_branches bus={bus}"
+
+        self._latest_results_text = result_text
+        self._print(f"[Iter {iteration}] LLM action: analyze (topology) — {query_desc}")
+        logger.info("Topology query %s result:\n%s", query_desc, result_text)
+
+        self._journal.add_analysis(
+            iteration=iteration,
+            query=query_desc,
             result_summary=result_text[:200],
         )
 

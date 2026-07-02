@@ -33,6 +33,7 @@ from session_manager import SessionManager
 from charts import (
     convergence_chart, voltage_range_chart, voltage_profile_chart,
     generator_dispatch_chart, line_loading_chart, multi_objective_trend_chart,
+    reserve_trajectory_chart,
 )
 
 from agentigrid.parsers import parse_matpower, network_summary
@@ -1101,6 +1102,199 @@ def render_results():
 
 # ── Tab 1: Overview ──────────────────────────────────────────────────────────
 
+def _render_contingency_overview(session, entry):
+    """Render Overview tab content for contingency-screen or reserve-screen runs."""
+    rm = getattr(entry, "reserve_meta", None)
+    meta = entry.contingency_meta or {}
+    variants = entry.explored_variants or []
+
+    def _certified_reason(v: dict) -> str:
+        status = (v.get("status") or "").upper()
+        return "Did not converge" if not status.startswith("CONVERGED") else "Constraint violation"
+
+    if rm is not None:
+        # ── Reserve run ──────────────────────────────────────────────────
+        st.subheader("Hot Reserve / N-1 Generator Security")
+
+        n_on = rm.get("n_on", 0)
+        avail = rm.get("hot_reserve_available", 0.0)
+        req = rm.get("required_reserve_n1", 0.0)
+        margin = rm.get("margin", 0.0)
+        n1_secure = rm.get("n1_secure", False)
+        passed_count = rm.get("passed_count", 0)
+        failed_count = rm.get("failed_count", 0)
+
+        # Minimization result (C.8 Path A) leads, if present.
+        if rm.get("minimize"):
+            secure_min = rm.get("n1_secure_min", n1_secure)
+            min_reserve = rm.get("min_reserve", 0.0)
+            reserve_full = rm.get("reserve_full", 0.0)
+            n_decommitted = rm.get("n_decommitted", 0)
+            final_on = rm.get("final_on_count", n_on)
+            lb_pg = rm.get("lower_bound_pg", 0.0)
+            lb_bus = rm.get("lower_bound_bus", "?")
+            st.markdown("**Minimum feasible hot reserve for N-1**")
+            xm1, xm2, xm3, xm4 = st.columns(4)
+            xm1.metric("Minimum Reserve (N-1)", f"{min_reserve:,.1f} MW")
+            xm2.metric("At Full Commitment", f"{reserve_full:,.1f} MW")
+            xm3.metric("Units De-committed", f"{n_decommitted} / {n_on}")
+            xm4.metric("N-1 Secure at Min", "Yes" if secure_min else "No")
+            st.caption(
+                f"Greedy largest-Pmax-first de-commitment — upper bound on the true minimum, "
+                f"global optimality not claimed. {final_on} units remain committed. "
+                f"Largest committed unit at minimized commitment: gen@{lb_bus} ({lb_pg:,.1f} MW) "
+                f"— its output is the N-1 reserve requirement at this operating point."
+                + (" Solve budget reached — reported commitment is best-so-far."
+                   if rm.get("hit_budget") else "")
+            )
+            trajectory = rm.get("trajectory") or []
+            if trajectory:
+                st.plotly_chart(
+                    reserve_trajectory_chart(trajectory, height=300),
+                    use_container_width=True,
+                )
+            st.markdown("**Full-commitment starting point**")
+
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("Hot Reserve Available", f"{avail:,.1f} MW")
+        mc2.metric("Minimum Required (N-1)", f"{req:,.1f} MW")
+        mc3.metric("Margin", f"{margin:,.1f} MW")
+        mc4.metric("N-1 Secure", "Yes" if n1_secure else "No")
+
+        lg_bus = rm.get("largest_pg_bus", "?")
+        lg_pg = rm.get("largest_pg", 0.0)
+        lg_pmax = rm.get("largest_pmax", 0.0)
+        st.caption(
+            f"Largest committed unit: gen@{lg_bus} at {lg_pg:,.1f} MW "
+            f"(capacity {lg_pmax:,.1f} MW). Required N-1 reserve = largest single "
+            f"committed generation. Each unit loss is verified by full OPF redispatch "
+            f"(deliverability), not copperplate."
+        )
+        st.markdown(
+            f"**N-1 generator screen:** {passed_count}/{passed_count + failed_count} "
+            f"unit outages feasible."
+        )
+
+        failed_variants = [v for v in variants if not v.get("passed")]
+        if failed_variants:
+            st.markdown(f"**Failed generator outages ({len(failed_variants)}):**")
+            df_fail = pd.DataFrame([{
+                "Contingency": v.get("label", "?"),
+                "Status": _certified_reason(v),
+            } for v in failed_variants])
+            st.dataframe(df_fail, width="stretch", hide_index=True)
+
+    else:
+        # ── Contingency screening run ─────────────────────────────────────
+        st.subheader("Contingency Screening")
+
+        order = meta.get("order", "?")
+        target_bus = meta.get("target_bus", "?")
+        neighbors = meta.get("neighbors", [])
+        kinds = meta.get("kinds", [])
+        vmin = meta.get("vmin", 0.9)
+        vmax = meta.get("vmax", 1.1)
+        passed_count = meta.get("passed_count", 0)
+        failed_count = meta.get("failed_count", 0)
+        total_count = passed_count + failed_count
+
+        neighbor_str = (
+            ", ".join(f"bus {n[0]} (hop {n[1]})" for n in neighbors[:5])
+            if neighbors else "—"
+        )
+        kind_str = ", ".join(sorted(set(kinds))) if kinds else "all"
+
+        st.caption(
+            f"N-{order} contingency screen | target bus {target_bus} | "
+            f"neighbors: {neighbor_str} | components: {kind_str} | "
+            f"V-band [{vmin:.2f}, {vmax:.2f}] p.u. | "
+            f"{passed_count}/{total_count} contingencies feasible."
+        )
+        st.caption(
+            "Note: Under OPFLOW, the voltage band and thermal limits (Rate A) are enforced "
+            "as in-solve hard constraints. PASS = post-outage OPFLOW converges feasibly "
+            "under V-band + Rate A."
+        )
+
+        failed_variants = [v for v in variants if not v.get("passed")]
+        passed_variants = [v for v in variants if v.get("passed")]
+
+        if failed_variants:
+            has_relief = any(v.get("relief") for v in failed_variants)
+            failed_rows = []
+            for v in failed_variants:
+                row = {
+                    "Contingency": v.get("label", "?"),
+                    "Component(s)": ", ".join(v.get("kinds", [])),
+                    "Status": _certified_reason(v),
+                }
+                if has_relief:
+                    relief = v.get("relief") or {}
+                    resolved = relief.get("resolved", False) if relief else False
+                    if relief and not resolved:
+                        row["Relief Measure"] = "unresolved (no local measure)"
+                        row["Relief Detail"] = "—"
+                    elif relief:
+                        row["Relief Measure"] = relief.get("measure", "—")
+                        row["Relief Detail"] = relief.get("detail", "—")
+                    else:
+                        row["Relief Measure"] = "—"
+                        row["Relief Detail"] = "—"
+                failed_rows.append(row)
+
+            st.markdown(f"**Failed contingencies ({len(failed_variants)}):**")
+            st.dataframe(pd.DataFrame(failed_rows), width="stretch", hide_index=True)
+
+            if has_relief:
+                st.markdown("**Relief attempts audit:**")
+                for v in failed_variants:
+                    relief = v.get("relief") or {}
+                    attempts = relief.get("attempts", [])
+                    if attempts:
+                        trail = ", ".join(
+                            f"{a.get('action', '?')} {'✓' if a.get('resolved') else '✗'}"
+                            + (f" [{a['note']}]" if a.get("note") else "")
+                            for a in attempts
+                        )
+                        st.caption(f"{v.get('label', '?')}: {trail}")
+                st.caption(
+                    "Relief scope: local modifications only (transformer ratio, generator "
+                    "redispatch at neighboring buses, line switching, load curtailment). "
+                    "Load curtailment is applied uniformly across all loads at the affected bus."
+                )
+
+        if passed_variants:
+            st.markdown(f"**{len(passed_variants)} contingencies passed.** Full data in the JSON journal.")
+
+            top_loading = sorted(
+                passed_variants,
+                key=lambda v: v.get("max_line_loading_pct", 0.0),
+                reverse=True,
+            )[:10]
+            if top_loading:
+                st.markdown("*Top 10 by max line loading (%):*")
+                st.dataframe(pd.DataFrame([{
+                    "Contingency": v.get("label", "?"),
+                    "Component(s)": ", ".join(v.get("kinds", [])),
+                    "V_min (pu)": round(v.get("voltage_min", 0.0), 3),
+                    "V_max (pu)": round(v.get("voltage_max", 0.0), 3),
+                    "Max Load (%)": round(v.get("max_line_loading_pct", 0.0), 1),
+                } for v in top_loading]), width="stretch", hide_index=True)
+
+            lowest_vmin = sorted(
+                passed_variants, key=lambda v: v.get("voltage_min", 1.0)
+            )[:10]
+            if lowest_vmin:
+                st.markdown("*Lowest 10 by V_min:*")
+                st.dataframe(pd.DataFrame([{
+                    "Contingency": v.get("label", "?"),
+                    "Component(s)": ", ".join(v.get("kinds", [])),
+                    "V_min (pu)": round(v.get("voltage_min", 0.0), 3),
+                    "V_max (pu)": round(v.get("voltage_max", 0.0), 3),
+                    "Max Load (%)": round(v.get("max_line_loading_pct", 0.0), 1),
+                } for v in lowest_vmin]), width="stretch", hide_index=True)
+
+
 def _render_overview_tab(session):
     """Render the Overview tab with summary and convergence chart."""
     # Determine goal classification override
@@ -1141,6 +1335,12 @@ def _render_overview_tab(session):
                 best_entry = e
                 break
     is_pflow = session.application == "pflow"
+
+    # Contingency/reserve runs get their own layout; skip sweep/scalar paths.
+    contingency_entry = session.journal.get_contingency_entry()
+    if contingency_entry is not None:
+        _render_contingency_overview(session, contingency_entry)
+        return
 
     # Sweep summary replaces scalar-objective metrics
     if is_sweep:
@@ -1574,7 +1774,7 @@ def _render_detailed_tab(session):
     sweep_entry = session.journal.get_sweep_entry()
     is_sweep = sweep_entry is not None
 
-    _NON_SIM = {"SWEEP", "EXPLORE", "ANALYSIS", "COMPLETE"}
+    _NON_SIM = {"SWEEP", "EXPLORE", "ANALYSIS", "COMPLETE", "CONTINGENCY"}
 
     def _fmt_obj(v, is_pf=False):
         if is_pf:
@@ -1614,7 +1814,15 @@ def _render_detailed_tab(session):
     rows = []
     cost_col = "Cost" if is_pflow else "Cost ($)"
     for e in session.journal.entries:
-        if e.convergence_status in _NON_SIM:
+        if e.convergence_status == "CONTINGENCY":
+            rm = getattr(e, "reserve_meta", None)
+            cm = e.contingency_meta or {}
+            _meta = rm or cm or {}
+            p = _meta.get("passed_count", 0)
+            f = _meta.get("failed_count", 0)
+            cost_val = f"SCREEN ({p}/{p + f} passed)"
+            feas_icon = "✅" if f == 0 else "❌"
+        elif e.convergence_status in _NON_SIM:
             cost_val = e.convergence_status
             feas_icon = "—"
         else:

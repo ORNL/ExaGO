@@ -45,6 +45,8 @@ class JournalEntry:
     candidate_count: int = 0  # Sweep: total number of candidates tested
     feasible_buses: Optional[list[int]] = None  # Sweep: list of feasible bus ids
     exago_command: Optional[dict] = None  # Reproducible ExaGO invocation record (JSON journal only; see add_* methods)
+    contingency_meta: Optional[dict] = None  # C.5: target bus, neighbors, order, pass/fail counts
+    reserve_meta: Optional[dict] = None  # C.8: hot-reserve / N-1 generator security accounting
 
 
 @dataclass
@@ -403,6 +405,117 @@ class SearchJournal:
         self._entries.append(entry)
         return entry
 
+    def add_contingency(
+        self,
+        iteration: int,
+        description: str,
+        target_bus: int,
+        neighbors: list[tuple[int, int]],
+        order: int,
+        contingency_summaries: list[dict],
+        passed_count: int,
+        failed_count: int,
+        llm_reasoning: str = "",
+        steering_directive: Optional[str] = None,
+        exago_command: Optional[dict] = None,
+    ) -> JournalEntry:
+        """Record a 'contingency' screen in the journal (C.5).
+
+        Modeled on ``add_sweep``: a lightweight entry whose ``explored_variants``
+        holds the full per-contingency pass/fail summaries and whose
+        ``contingency_meta`` captures the reproducible study parameters (target
+        bus, resolved neighbors, order, and pass/fail counts) so the JSON journal
+        is a complete, reproducible record of the N-1/N-2 study.
+
+        When a C.7 relief phase ran, each FAILED contingency summary carries a
+        ``relief`` payload ({resolved, measure, detail, attempts}); these ride
+        along inside ``contingency_summaries`` and are therefore persisted here.
+        """
+        entry = JournalEntry(
+            iteration=iteration,
+            description=description,
+            commands=[],
+            objective_value=None,
+            feasible=passed_count > 0,
+            convergence_status="CONTINGENCY",
+            violations_count=0,
+            voltage_min=0.0,
+            voltage_max=0.0,
+            max_line_loading_pct=0.0,
+            total_gen_mw=0.0,
+            total_load_mw=0.0,
+            llm_reasoning=llm_reasoning,
+            mode="contingency",
+            elapsed_seconds=0.0,
+            steering_directive=steering_directive,
+            feasibility_detail="",
+            explored_variants=contingency_summaries,
+            candidate_count=len(contingency_summaries),
+            feasible_buses=[],
+            exago_command=exago_command,
+            contingency_meta={
+                "target_bus": target_bus,
+                "neighbors": [[nb, hop] for nb, hop in neighbors],
+                "order": order,
+                "passed_count": passed_count,
+                "failed_count": failed_count,
+            },
+        )
+        self._entries.append(entry)
+        return entry
+
+    def add_reserve(
+        self,
+        iteration: int,
+        description: str,
+        reserve_meta: dict,
+        contingency_summaries: list[dict],
+        llm_reasoning: str = "",
+        steering_directive: Optional[str] = None,
+        exago_command: Optional[dict] = None,
+    ) -> JournalEntry:
+        """Record a hot-reserve / N-1 generator security screen in the journal (C.8).
+
+        Modeled on ``add_contingency``: a lightweight entry whose
+        ``explored_variants`` holds the per-generator N-1 pass/fail summaries. The
+        ``reserve_meta`` dict carries the reserve accounting (available reserve,
+        largest committed unit, required N-1 reserve, margin, N-1-secure flag, and
+        pass/fail counts). When the run minimized reserve (C.8 Path A) it also
+        carries the greedy de-commitment result: ``minimize`` (True), ``reserve_full``,
+        ``min_reserve``, ``n_decommitted``, ``decommitted``, ``final_on_count``,
+        ``lower_bound_pg``, ``lower_bound_bus``, ``solves_used``, and ``hit_budget``.
+
+        ``convergence_status`` is ``"CONTINGENCY"`` so the entry routes through the
+        contingency-aware PDF report path (C.5b); the report keys off
+        ``reserve_meta`` to render the Hot Reserve Assessment block.
+        """
+        entry = JournalEntry(
+            iteration=iteration,
+            description=description,
+            commands=[],
+            objective_value=None,
+            feasible=reserve_meta.get("n1_secure", False),
+            convergence_status="CONTINGENCY",
+            violations_count=0,
+            voltage_min=0.0,
+            voltage_max=0.0,
+            max_line_loading_pct=0.0,
+            total_gen_mw=0.0,
+            total_load_mw=0.0,
+            llm_reasoning=llm_reasoning,
+            mode="reserve",
+            elapsed_seconds=0.0,
+            steering_directive=steering_directive,
+            feasibility_detail="",
+            explored_variants=contingency_summaries,
+            candidate_count=len(contingency_summaries),
+            feasible_buses=[],
+            exago_command=exago_command,
+            reserve_meta=reserve_meta,
+        )
+        self._entries.append(entry)
+        return entry
+
     def add_analysis(
         self,
         iteration: int,
@@ -470,6 +583,13 @@ class SearchJournal:
         """Return the most recent sweep entry (mode='sweep'), or None."""
         for e in reversed(self._entries):
             if e.mode == "sweep":
+                return e
+        return None
+
+    def get_contingency_entry(self) -> Optional[JournalEntry]:
+        """Return the most recent contingency entry (convergence_status='CONTINGENCY'), or None."""
+        for e in reversed(self._entries):
+            if e.convergence_status == "CONTINGENCY":
                 return e
         return None
 
@@ -744,6 +864,7 @@ class SearchJournal:
             "mode", "elapsed_seconds", "timestamp", "steering_directive",
             "tracked_metrics", "feasibility_detail", "solver", "num_steps", "num_scenarios",
             "explored_variants", "candidate_count", "feasible_buses", "exago_command",
+            "contingency_meta", "reserve_meta",
         ]
 
         with open(path, "w", newline="", encoding="utf-8") as f:
@@ -756,6 +877,8 @@ class SearchJournal:
                 row["explored_variants"] = json.dumps(row.get("explored_variants") or [])
                 row["feasible_buses"] = json.dumps(row.get("feasible_buses") or [])
                 row["exago_command"] = json.dumps(row.get("exago_command") or None)
+                row["contingency_meta"] = json.dumps(row.get("contingency_meta") or None)
+                row["reserve_meta"] = json.dumps(row.get("reserve_meta") or None)
                 writer.writerow(row)
 
         logger.info("Journal CSV exported to %s (%d entries)", path, len(self._entries))

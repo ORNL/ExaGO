@@ -4,3 +4,5 @@ anthropic>=0.30,<1
 ollama>=0.3,<1
 pandas>=2.0,<3
 pytest>=7.0,<9
+plotly>=6.8
+reportlab>=5.0

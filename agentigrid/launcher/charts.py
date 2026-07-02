@@ -692,3 +692,72 @@ def multi_objective_trend_chart(
 
     fig.update_layout(**layout_kwargs)
     return fig
+
+
+# ── Chart 7: Reserve Trajectory ──────────────────────────────────────────────
+
+def reserve_trajectory_chart(
+    trajectory: list,
+    *,
+    height: int = 350,
+) -> go.Figure:
+    """Step/line chart of hot reserve across greedy de-commitment steps.
+
+    Args:
+        trajectory: List of dicts from ``ReserveMinResult.trajectory``.
+        height: Chart height in pixels.
+
+    Returns:
+        Plotly Figure.
+    """
+    if not trajectory:
+        return _empty_figure("No trajectory data available", height)
+
+    steps = [t["step"] for t in trajectory]
+    reserves = [t["reserve"] for t in trajectory]
+    hover = []
+    for t in trajectory:
+        bus = t.get("decommitted_bus")
+        gid = t.get("decommitted_gen_id")
+        if bus is None:
+            hover.append(f"Step 0 — Full commitment<br>Reserve: {t['reserve']:,.1f} MW")
+        else:
+            hover.append(
+                f"Step {t['step']} — De-commit gen@{bus}#{gid}<br>"
+                f"Reserve: {t['reserve']:,.1f} MW<br>"
+                f"Committed units: {t.get('on_count', '?')}"
+            )
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=steps,
+        y=reserves,
+        mode="lines+markers",
+        line=dict(color=COLORS["base_case"], width=2),
+        marker=dict(size=9, color=COLORS["base_case"]),
+        hovertext=hover,
+        hoverinfo="text",
+        name="Hot Reserve",
+        showlegend=False,
+    ))
+
+    # Annotate the final minimum
+    if reserves:
+        min_val = reserves[-1]
+        min_step = steps[-1]
+        fig.add_annotation(
+            x=min_step, y=min_val,
+            text=f"Min: {min_val:,.1f} MW",
+            showarrow=True, arrowhead=2,
+            ax=50, ay=-35,
+            font=dict(size=11, color=COLORS["infeasible"]),
+        )
+
+    fig.update_layout(
+        title="Hot Reserve Reduction (greedy de-commitment)",
+        xaxis_title="Step (accepted de-commitments)",
+        yaxis_title="Hot Reserve (MW)",
+        height=height,
+        margin=dict(l=60, r=20, t=50, b=40),
+    )
+    return fig

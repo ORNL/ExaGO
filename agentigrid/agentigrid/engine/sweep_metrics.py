@@ -58,15 +58,28 @@ def _max_delta_v_metric(candidate, base, context) -> Optional[float]:
     return worst
 
 
+def _hot_reserve_metric(candidate, base, context) -> Optional[float]:
+    """System hot reserve: sum over on-units (status==1) of (Pmax - Pg).
+
+    The reserve available at the candidate operating point, computed from the
+    SOLVED generator dispatch (C.8). Off-line units (status != 1) contribute
+    nothing. ``None`` when there is no candidate result to read.
+    """
+    if candidate is None:
+        return None
+    return sum(g.Pmax - g.Pg for g in candidate.generators if g.status == 1)
+
+
 # Metrics that require a parsed base-case result (solved once before the sweep).
 _METRICS_NEED_BASE = {"max_delta_v"}
 
 # Default ranking direction per metric (how the LLM reduces over candidates).
-_METRIC_DIRECTION = {"cost": "minimize", "max_delta_v": "maximize"}
+_METRIC_DIRECTION = {"cost": "minimize", "max_delta_v": "maximize", "hot_reserve": "minimize"}
 
 METRICS: dict[str, Callable] = {
     "cost": _cost_metric,
     "max_delta_v": _max_delta_v_metric,
+    "hot_reserve": _hot_reserve_metric,
 }
 
 

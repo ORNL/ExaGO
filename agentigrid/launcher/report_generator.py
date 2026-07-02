@@ -29,11 +29,13 @@ try:
     from charts import (
         convergence_chart, voltage_range_chart, voltage_profile_chart,
         generator_dispatch_chart, line_loading_chart, multi_objective_trend_chart,
+        reserve_trajectory_chart,
     )
 except ModuleNotFoundError:
     from launcher.charts import (
         convergence_chart, voltage_range_chart, voltage_profile_chart,
         generator_dispatch_chart, line_loading_chart, multi_objective_trend_chart,
+        reserve_trajectory_chart,
     )
 
 logger = logging.getLogger("launcher.report_generator")
@@ -49,13 +51,16 @@ def _register_fonts():
     global _FONT_REGISTERED
     if _FONT_REGISTERED:
         return
+    _bundled = Path(__file__).parent / "assets" / "fonts"
     font_paths = [
+        str(_bundled / "DejaVuSans.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/DejaVuSans.ttf",
         "/usr/share/fonts/TTF/DejaVuSans.ttf",
     ]
     bold_paths = [
+        str(_bundled / "DejaVuSans-Bold.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/DejaVuSans-Bold.ttf",
@@ -237,6 +242,7 @@ class ReportGenerator:
 
         sweep_entry = session.journal.get_sweep_entry()
         is_sweep = sweep_entry is not None
+        contingency_entry = session.journal.get_contingency_entry()
 
         v_min = session.enforced_vmin if session.enforced_vmin is not None else 0.95
         v_max = session.enforced_vmax if session.enforced_vmax is not None else 1.05
@@ -249,13 +255,18 @@ class ReportGenerator:
         )
 
         story: list = []
-        story.extend(self._build_title_page(session, goal_type=goal_type))
+        story.extend(self._build_title_page(
+            session, goal_type=goal_type, contingency_entry=contingency_entry,
+        ))
         story.append(PageBreak())
         story.extend(self._build_executive_summary(
             session, summary_text, goal_classification=gc,
+            contingency_entry=contingency_entry,
         ))
         story.append(PageBreak())
-        if is_sweep:
+        if contingency_entry is not None:
+            story.extend(self._build_contingency_results_section(session, contingency_entry))
+        elif is_sweep:
             story.extend(self._build_sweep_results_section(session, sweep_entry, goal_type=goal_type))
         else:
             story.extend(self._build_convergence_section(
@@ -475,12 +486,21 @@ class ReportGenerator:
 
     def _build_title_page(
         self, session: SearchSession, goal_type: str | None = None,
+        contingency_entry=None,
     ) -> list:
         s = self._styles
         elements: list = []
         elements.append(Spacer(1, 6 * cm))
         elements.append(Paragraph("AgentiGrid Search Report", s["title"]))
-        if goal_type:
+        if contingency_entry is not None:
+            if getattr(contingency_entry, "reserve_meta", None):
+                type_label = "Hot Reserve / N-1 Generator Security"
+            else:
+                meta = contingency_entry.contingency_meta or {}
+                order = meta.get("order", "?")
+                type_label = f"Contingency Analysis (N-{order})"
+            elements.append(Paragraph(f"Search Type: {type_label}", s["caption"]))
+        elif goal_type:
             type_label = goal_type.replace("_", " ").title()
             elements.append(Paragraph(f"Search Type: {type_label}", s["caption"]))
         elements.append(Spacer(1, 1 * cm))
@@ -517,6 +537,7 @@ class ReportGenerator:
         session: SearchSession,
         summary_text: str | None,
         goal_classification: dict | None = None,
+        contingency_entry=None,
     ) -> list:
         s = self._styles
         elements: list = []
@@ -534,6 +555,115 @@ class ReportGenerator:
         end = datetime.fromisoformat(session.end_time) if session.end_time else datetime.now()
         duration = end - start
         total_tokens = session.total_prompt_tokens + session.total_completion_tokens
+
+        # Reserve shortcut — checked before the contingency/sweep shortcuts
+        if contingency_entry is not None and getattr(contingency_entry, "reserve_meta", None):
+            rm = contingency_entry.reserve_meta
+            n_on = rm.get("n_on", 0)
+            passed = rm.get("passed_count", 0)
+            failed = rm.get("failed_count", 0)
+            secure = "N-1 secure" if rm.get("n1_secure") else "NOT N-1 secure"
+            res_lines = []
+            if rm.get("minimize"):
+                secure_min = ("N-1 secure" if rm.get("n1_secure_min", rm.get("n1_secure"))
+                              else "NOT N-1 secure")
+                _lb_pg = rm.get("lower_bound_pg", 0)
+                _lb_bus = rm.get("lower_bound_bus", "?")
+                res_lines.append(
+                    f"Minimum feasible hot reserve for N-1 = "
+                    f"{rm.get('min_reserve', 0):.1f} MW ({secure_min}) — upper bound on the "
+                    f"true minimum, global optimality not claimed. Found by greedy largest-Pmax-"
+                    f"first de-commitment ({rm.get('n_decommitted', 0)} of {n_on} units "
+                    f"de-committed; full-commitment reserve {rm.get('reserve_full', 0):.1f} MW). "
+                    f"At this commitment the largest committed unit is gen@{_lb_bus} "
+                    f"({_lb_pg:.1f} MW), so the N-1 reserve requirement at this operating "
+                    f"point is {_lb_pg:.1f} MW."
+                )
+            res_lines.extend([
+                (
+                    f"Hot-reserve / N-1 generator security screen over {n_on} committed "
+                    f"units: {passed}/{n_on} single-unit losses feasible ({secure})."
+                ),
+                (
+                    f"Hot reserve available: {rm.get('hot_reserve_available', 0):.1f} MW; "
+                    f"minimum required for N-1 (largest committed unit, "
+                    f"gen@{rm.get('largest_pg_bus', '?')} at {rm.get('largest_pg', 0):.1f} MW): "
+                    f"{rm.get('required_reserve_n1', 0):.1f} MW; "
+                    f"margin {rm.get('margin', 0):.1f} MW."
+                ),
+            ])
+            if failed:
+                res_lines.append(
+                    f"{failed} unit outage(s) infeasible — the arithmetic reserve margin "
+                    "is not deliverable for these losses (required reserve is mis-located)."
+                )
+            res_lines.extend([
+                f"Total iterations: {stats['total_iterations']}",
+                f"Duration: {duration.total_seconds():.0f}s",
+                f"Termination: {session.termination_reason}",
+                (f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A"),
+            ])
+            for line in res_lines:
+                elements.append(Paragraph(self._escape_xml(line), s["body"]))
+            if summary_text:
+                elements.append(Spacer(1, 0.5 * cm))
+                elements.append(Paragraph("Analysis", s["heading2"]))
+                elements.extend(self._render_summary_text(summary_text))
+            return elements
+
+        # Contingency shortcut — checked before sweep shortcut
+        if contingency_entry is not None:
+            meta = contingency_entry.contingency_meta or {}
+            order = meta.get("order", "?")
+            target = meta.get("target_bus", "?")
+            neighbors = meta.get("neighbors") or []
+            passed = meta.get("passed_count", 0)
+            failed = meta.get("failed_count", 0)
+            total = passed + failed
+            nb_parts = [
+                f"bus {nb} ({hop} hop{'s' if hop != 1 else ''})"
+                for nb, hop in neighbors
+            ]
+            nb_str = ", ".join(nb_parts) if nb_parts else "—"
+            headline = (
+                f"N-{order} contingency screen on the {len(neighbors)} nearest "
+                f"neighbors of bus {target} ({nb_str}): "
+                f"{passed}/{total} contingencies feasible, {failed} failed."
+            )
+            cont_lines = [headline]
+            # Relief summary when applicable
+            variants = contingency_entry.explored_variants or []
+            failed_vs = [v for v in variants if not v.get("passed")]
+            if failed_vs and any("relief" in v for v in failed_vs):
+                relief_vs = [v for v in failed_vs if "relief" in v]
+                resolved_count = sum(
+                    1 for v in relief_vs if (v.get("relief") or {}).get("resolved")
+                )
+                unresolved_count = len(relief_vs) - resolved_count
+                measures_used = sorted({
+                    v["relief"]["measure"]
+                    for v in relief_vs
+                    if (v.get("relief") or {}).get("resolved")
+                    and (v.get("relief") or {}).get("measure")
+                })
+                relief_line = f"Relief: {resolved_count} of {failed} resolved"
+                if measures_used:
+                    relief_line += f" ({', '.join(measures_used)})"
+                relief_line += f"; {unresolved_count} unresolved."
+                cont_lines.append(relief_line)
+            cont_lines.extend([
+                f"Total iterations: {stats['total_iterations']}",
+                f"Duration: {duration.total_seconds():.0f}s",
+                f"Termination: {session.termination_reason}",
+                (f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A"),
+            ])
+            for line in cont_lines:
+                elements.append(Paragraph(self._escape_xml(line), s["body"]))
+            if summary_text:
+                elements.append(Spacer(1, 0.5 * cm))
+                elements.append(Paragraph("Analysis", s["heading2"]))
+                elements.extend(self._render_summary_text(summary_text))
+            return elements
 
         # Sweep shortcut: replace the scalar-objective block with sweep summary
         sweep_entry = session.journal.get_sweep_entry()
@@ -997,6 +1127,390 @@ class ReportGenerator:
 
         return elements
 
+    # ── Hot Reserve Assessment (C.8) ─────────────────────────────────────
+
+    def _build_hot_reserve_assessment(self, rm: dict, v_min: float, v_max: float) -> list:
+        """Build the Hot Reserve Assessment block for a reserve / N-1 generator screen."""
+        s = self._styles
+        elements: list = []
+        elements.append(Paragraph("Hot Reserve Assessment", s["heading2"]))
+
+        n_on = rm.get("n_on", 0)
+
+        # --- Minimization result (C.8 Path A) leads the section, if present ---
+        if rm.get("minimize"):
+            secure_min = "Yes" if rm.get("n1_secure_min", rm.get("n1_secure")) else "No"
+            min_reserve = rm.get("min_reserve", 0.0)
+            reserve_full = rm.get("reserve_full", 0.0)
+            n_decommitted = rm.get("n_decommitted", 0)
+            final_on = rm.get("final_on_count", n_on)
+            lb_pg = rm.get("lower_bound_pg", 0.0)
+            lb_bus = rm.get("lower_bound_bus", "?")
+            elements.append(Paragraph(
+                "Goal: minimum feasible hot reserve that remains N-1 secure. Method: greedy "
+                "largest-Pmax-first security-constrained de-commitment (re-solving the OPF and "
+                "the full N-1 generator screen after each de-commitment). The reported value is "
+                "an upper bound on the true minimum; global optimality is not claimed.",
+                s["caption"],
+            ))
+            elements.append(Spacer(1, 0.2 * cm))
+            min_rows = [
+                ["Metric", "Value"],
+                [
+                    "Minimum feasible hot reserve (N-1 secure, greedy upper bound)",
+                    f"{min_reserve:,.1f} MW",
+                ],
+                ["Hot reserve at full commitment", f"{reserve_full:,.1f} MW"],
+                [
+                    "Units de-committed",
+                    f"{n_decommitted} of {n_on} ({final_on} remain committed)",
+                ],
+                [
+                    "Largest committed unit at minimized commitment (its N-1 requirement)",
+                    f"{lb_pg:,.1f} MW at gen@{lb_bus}",
+                ],
+                ["N-1 secure at minimum", secure_min],
+            ]
+            if rm.get("hit_budget"):
+                min_rows.append(
+                    ["Solve budget", "reached — reported commitment is best-so-far"]
+                )
+            min_table = Table(min_rows, colWidths=[10 * cm, 7 * cm])
+            min_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16a085")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("FONTNAME", (0, 1), (-1, -1), self._font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#eafaf6")]),
+                ("ALIGN", (1, 0), (1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(min_table)
+            elements.append(Spacer(1, 0.3 * cm))
+            # Reserve-reduction trajectory chart
+            trajectory = rm.get("trajectory") or []
+            if trajectory:
+                traj_fig = reserve_trajectory_chart(trajectory, height=280)
+                traj_bytes = _export_chart_image(traj_fig, width_px=700, height_px=280)
+                if traj_bytes:
+                    elements.append(Image(io.BytesIO(traj_bytes), width=16 * cm, height=7 * cm))
+                    elements.append(Paragraph(
+                        "Hot reserve as each greedy de-commitment is accepted. "
+                        "Rejected attempts are not plotted; the chart shows only accepted steps.",
+                        s["caption"],
+                    ))
+                    elements.append(Spacer(1, 0.3 * cm))
+            elements.append(Paragraph(
+                "The full-commitment starting point below is the base assessment. "
+                "The N-1 generator screen table further down reflects the minimized "
+                "commitment — global optimality not claimed.",
+                s["caption"],
+            ))
+            elements.append(Spacer(1, 0.3 * cm))
+            elements.append(Paragraph("Full-commitment starting point", s["heading2"]))
+
+        secure = "Yes" if rm.get("n1_secure") else "No"
+        rows = [
+            ["Metric", "Value"],
+            ["Committed (on-line) units", str(n_on)],
+            ["Hot reserve available (Σ Pmax−Pg)", f"{rm.get('hot_reserve_available', 0):,.1f} MW"],
+            [
+                "Largest committed unit (worst N-1 loss)",
+                f"gen@{rm.get('largest_pg_bus', '?')}: {rm.get('largest_pg', 0):,.1f} MW "
+                f"(capacity {rm.get('largest_pmax', 0):,.1f} MW)",
+            ],
+            ["Minimum reserve required for N-1", f"{rm.get('required_reserve_n1', 0):,.1f} MW"],
+            ["Reserve margin (available − required)", f"{rm.get('margin', 0):,.1f} MW"],
+            [
+                "N-1 generator secure",
+                f"{secure} ({rm.get('passed_count', 0)}/{n_on} unit outages feasible)",
+            ],
+        ]
+        table = Table(rows, colWidths=[8 * cm, 9 * cm])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16a085")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("FONTNAME", (0, 1), (-1, -1), self._font),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#eafaf6")]),
+            ("ALIGN", (1, 0), (1, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 0.3 * cm))
+        elements.append(Paragraph(
+            "The minimum hot reserve required for N-1 is the output of the largest single "
+            "committed generator — the reserve that must be deployable elsewhere to replace "
+            "its loss. Feasibility of each unit loss is verified by a full post-outage OPF "
+            "redispatch under the voltage band "
+            f"(V ∈ [{v_min:.2f}, {v_max:.2f}] pu) and Rate A thermal limits (deliverability), "
+            "not a copperplate balance. If any unit loss is infeasible the system is not N-1 "
+            "secure regardless of the arithmetic margin, and the required reserve is "
+            "mis-located (a congested-pocket unit, not the largest, is binding). Reserve is "
+            "assessed at fixed commitment; OPFLOW does not de-commit units.",
+            s["caption"],
+        ))
+        return elements
+
+    # ── Contingency Results Section ──────────────────────────────────────
+
+    def _build_contingency_results_section(self, session, entry) -> list:
+        """Build the contingency-screening section: failed table, relief audit, passed rankings."""
+        s = self._styles
+        elements: list = []
+        elements.append(Paragraph("Contingency Screening", s["heading1"]))
+
+        variants = entry.explored_variants or []
+        v_min = session.enforced_vmin if session.enforced_vmin is not None else 0.95
+        v_max = session.enforced_vmax if session.enforced_vmax is not None else 1.05
+
+        reserve_meta = getattr(entry, "reserve_meta", None)
+        is_reserve = bool(reserve_meta)
+
+        if is_reserve:
+            elements.extend(self._build_hot_reserve_assessment(reserve_meta, v_min, v_max))
+            elements.append(Spacer(1, 0.4 * cm))
+            if reserve_meta.get("minimize"):
+                # variants now hold the minimized-commitment screen (not the 54-unit one).
+                failed_count = sum(1 for v in variants if not v.get("passed"))
+                passed_count = len(variants) - failed_count
+                final_on = reserve_meta.get("final_on_count", len(variants))
+                elements.append(Paragraph(
+                    f"Generator N-1 screen at the minimized commitment ({final_on} units)",
+                    s["heading2"],
+                ))
+                elements.append(Spacer(1, 0.2 * cm))
+            else:
+                passed_count = reserve_meta.get("passed_count", 0)
+                failed_count = reserve_meta.get("failed_count", 0)
+            failed_label = "Failed generator N-1 outages"
+        else:
+            meta = entry.contingency_meta or {}
+            order = meta.get("order", "?")
+            target_bus = meta.get("target_bus", "?")
+            neighbors = meta.get("neighbors") or []
+            passed_count = meta.get("passed_count", 0)
+            failed_count = meta.get("failed_count", 0)
+            total = passed_count + failed_count
+
+            # Infer component kinds from variant data
+            kinds = sorted({k for v in variants for k in (v.get("kinds") or [])})
+            nb_parts = [
+                f"bus {nb} ({hop} hop{'s' if hop != 1 else ''})"
+                for nb, hop in neighbors
+            ]
+            nb_str = ", ".join(nb_parts) if nb_parts else "—"
+
+            intro = (
+                f"N-{order} contingency screen: {len(neighbors)} nearest neighbors of "
+                f"bus {target_bus} ({nb_str}); "
+                f"components tested: {', '.join(kinds) if kinds else 'all'}; "
+                f"feasibility band: V ∈ [{v_min:.2f}, {v_max:.2f}] pu, Rate A. "
+                f"Result: {passed_count}/{total} feasible, {failed_count} failed."
+            )
+            elements.append(Paragraph(self._escape_xml(intro), s["body"]))
+            elements.append(Spacer(1, 0.3 * cm))
+
+            elements.append(Paragraph(
+                "Under OPFLOW, the voltage band and Rate A thermal limits are enforced as "
+                "in-solve hard constraints. A contingency PASSES if and only if the post-outage "
+                "OPF converges with all constraints satisfied. A FAIL is non-convergence; the "
+                "solver's last-iterate metrics for failed cases are uncertified and may not "
+                "reflect the actual binding constraint.",
+                s["caption"],
+            ))
+            elements.append(Spacer(1, 0.4 * cm))
+            failed_label = "Failed contingencies"
+
+        # ── Failed-contingency table ─────────────────────────────────────
+        failed_variants = [v for v in variants if not v.get("passed")]
+        passed_variants = [v for v in variants if v.get("passed")]
+        has_relief = any("relief" in v for v in failed_variants)
+
+        elements.append(Paragraph(f"{failed_label} ({failed_count})", s["heading2"]))
+        if failed_variants:
+            if has_relief:
+                header = ["Contingency", "Component(s)", "Status", "Relief measure", "Relief detail"]
+                col_widths_f = [3.2 * cm, 2.6 * cm, 2.6 * cm, 3.1 * cm, 5.5 * cm]
+            else:
+                header = ["Contingency", "Component(s)", "Status"]
+                col_widths_f = [5.5 * cm, 5.5 * cm, 6 * cm]
+
+            data_rows = []
+            for v in failed_variants:
+                label = self._escape_xml(v.get("label") or "")
+                kinds_str = self._escape_xml(", ".join(v.get("kinds") or []))
+                status = self._certified_reason(v)
+                row = [label, kinds_str, status]
+                if has_relief:
+                    rel = v.get("relief") or {}
+                    if rel.get("resolved"):
+                        measure = self._escape_xml(str(rel.get("measure") or "—"))
+                        detail = self._escape_xml(str(rel.get("detail") or "—"))
+                    else:
+                        measure = "unresolved"
+                        detail = self._escape_xml(rel.get("detail") or "no local measure")
+                    row += [measure, detail]
+                data_rows.append(row)
+
+            rows = [header] + data_rows
+            table = Table(rows, colWidths=col_widths_f, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c0392b")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("FONTNAME", (0, 1), (-1, -1), self._font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fdf2f1")]),
+                ("ALIGN", (0, 0), (1, -1), "LEFT"),
+                ("ALIGN", (2, 0), (-1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 0.3 * cm))
+            elements.append(Paragraph(
+                "Status reflects solver certification only: 'Did not converge' means no "
+                "certified post-contingency operating point exists. Last-iterate metrics "
+                "are omitted for failed cases as they are uncertified.",
+                s["caption"],
+            ))
+        else:
+            elements.append(Paragraph(
+                "No contingencies failed — the network is N-secure under all tested outages.",
+                s["body"],
+            ))
+
+        # ── Relief attempts audit ────────────────────────────────────────
+        if failed_variants and has_relief:
+            elements.append(Spacer(1, 0.4 * cm))
+            elements.append(Paragraph("Relief attempts audit", s["heading2"]))
+            elements.append(Paragraph(
+                "Priority-ordered relief search for each failed contingency. "
+                "generator_redispatch is an inherent OPF no-op: generator Pg is an "
+                "optimization variable, so the post-contingency OPF already includes "
+                "economic redispatch. It is listed for completeness but performs no "
+                "additional solve and never resolves a failure on its own.",
+                s["caption"],
+            ))
+            elements.append(Spacer(1, 0.2 * cm))
+
+            for v in failed_variants:
+                rel = v.get("relief")
+                if not rel:
+                    continue
+                label = v.get("label") or ""
+                attempts = rel.get("attempts") or []
+                parts = []
+                for m, resolved in attempts:
+                    if m == "generator_redispatch":
+                        parts.append(f"{m} ✗ [inherent to OPF]")
+                    elif resolved:
+                        parts.append(f"{m} ✓")
+                    else:
+                        parts.append(f"{m} ✗")
+                trail = ", ".join(parts) if parts else "—"
+                line = f"{label}: {trail}"
+                elements.append(Paragraph(self._escape_xml(line), s["body_small"]))
+
+        # ── Passed contingencies — stress rankings ───────────────────────
+        elements.append(Spacer(1, 0.5 * cm))
+        elements.append(Paragraph(f"Passed contingencies ({passed_count})", s["heading2"]))
+        if passed_variants:
+            elements.append(Paragraph(
+                f"{passed_count} contingencies passed (post-outage OPF converged feasibly). "
+                "Full per-contingency data is available in the JSON journal. "
+                "The tables below surface the most-stressed passing cases.",
+                s["body"],
+            ))
+            elements.append(Spacer(1, 0.3 * cm))
+
+            stress_col_widths = [4.5 * cm, 4 * cm, 2.5 * cm, 2.5 * cm, 3.5 * cm]
+            stress_header = ["Contingency", "Component(s)", "V_min (pu)", "V_max (pu)", "Max Load (%)"]
+            stress_style = TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3498db")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("FONTNAME", (0, 1), (-1, -1), self._font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8f9fa")]),
+                ("ALIGN", (0, 0), (1, -1), "LEFT"),
+                ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ])
+
+            def _stress_row(v):
+                return [
+                    self._escape_xml(v.get("label") or ""),
+                    self._escape_xml(", ".join(v.get("kinds") or [])),
+                    f"{v.get('voltage_min', 0):.3f}",
+                    f"{v.get('voltage_max', 0):.3f}",
+                    f"{v.get('max_line_loading_pct', 0):.1f}",
+                ]
+
+            # Top 10 by max_line_loading_pct descending
+            by_loading = sorted(
+                [v for v in passed_variants if isinstance(v.get("max_line_loading_pct"), (int, float))],
+                key=lambda v: v.get("max_line_loading_pct", 0),
+                reverse=True,
+            )[:10]
+            if by_loading:
+                elements.append(Paragraph("Most stressed: highest line loading", s["heading2"]))
+                elements.append(Paragraph(
+                    "Under OPF thermal enforcement all passing contingencies cluster "
+                    "near 100% loading — this table is less discriminating for N-1 screens. "
+                    "The lowest-voltage table below is the primary stress indicator.",
+                    s["caption"],
+                ))
+                load_rows = [stress_header] + [_stress_row(v) for v in by_loading]
+                load_table = Table(load_rows, colWidths=stress_col_widths, repeatRows=1)
+                load_table.setStyle(stress_style)
+                elements.append(load_table)
+                elements.append(Spacer(1, 0.3 * cm))
+
+            # Bottom 10 by voltage_min ascending
+            by_vmin = sorted(
+                [v for v in passed_variants if isinstance(v.get("voltage_min"), (int, float))],
+                key=lambda v: v.get("voltage_min", 1.0),
+            )[:10]
+            if by_vmin:
+                elements.append(Paragraph("Most stressed: lowest voltage minimum", s["heading2"]))
+                vmin_rows = [stress_header] + [_stress_row(v) for v in by_vmin]
+                vmin_table = Table(vmin_rows, colWidths=stress_col_widths, repeatRows=1)
+                vmin_table.setStyle(stress_style)
+                elements.append(vmin_table)
+        else:
+            elements.append(Paragraph("No contingencies passed.", s["body"]))
+
+        # ── Relief scope caveat ──────────────────────────────────────────
+        if failed_variants and has_relief:
+            elements.append(Spacer(1, 0.4 * cm))
+            elements.append(Paragraph(
+                "Relief scope note: relief candidates are local to the contingency "
+                "neighborhood (incident branches, transformers, and loads at the focus "
+                "buses). 'Unresolved' means the failure could not be relieved by local "
+                "measures; system-wide redispatch or remote switching may still restore "
+                "feasibility but is outside this screen's scope. Load curtailment is "
+                "applied uniformly across focus buses; in islanded sub-networks this may "
+                "over-curtail relative to a targeted load shed.",
+                s["caption"],
+            ))
+
+        return elements
+
     # ── Convergence Section ──────────────────────────────────────────────
 
     def _build_convergence_section(
@@ -1187,16 +1701,24 @@ class ReportGenerator:
             header = ["Iter", "Description", "Cost ($)", "Feas.", "V_min", "V_max", "Load%", "Time(s)"]
         rows = [header]
 
-        _NON_SIM = {"SWEEP", "EXPLORE", "ANALYSIS", "COMPLETE"}
+        _NON_SIM = {"SWEEP", "EXPLORE", "ANALYSIS", "COMPLETE", "CONTINGENCY"}
 
         for e in session.journal.entries:
             if e.convergence_status in _NON_SIM:
-                cost_cell = e.convergence_status
                 feas_text = "—"
-                desc = e.description[:40]
-                if e.convergence_status == "SWEEP" and e.candidate_count:
+                if e.convergence_status == "CONTINGENCY":
+                    cost_cell = "SCREEN"
+                    meta = e.contingency_meta or getattr(e, "reserve_meta", None) or {}
+                    pc = meta.get("passed_count", 0)
+                    fc = meta.get("failed_count", 0)
+                    desc = f"{e.description[:20]} — {pc}/{pc + fc} passed"[:40]
+                elif e.convergence_status == "SWEEP" and e.candidate_count:
+                    cost_cell = "SWEEP"
                     n_feas = len(e.feasible_buses or [])
                     desc = f"{e.description[:22]} — {n_feas}/{e.candidate_count} feasible"[:40]
+                else:
+                    cost_cell = e.convergence_status
+                    desc = e.description[:40]
             else:
                 if e.feasibility_detail == "marginal":
                     feas_text = "Marg"
