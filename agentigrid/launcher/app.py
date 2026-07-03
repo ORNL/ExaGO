@@ -1151,7 +1151,7 @@ def _render_contingency_overview(session, entry):
             if trajectory:
                 st.plotly_chart(
                     reserve_trajectory_chart(trajectory, height=300),
-                    use_container_width=True,
+                    width="stretch",
                 )
             st.markdown("**Full-commitment starting point**")
 
@@ -1251,11 +1251,18 @@ def _render_contingency_overview(session, entry):
                     relief = v.get("relief") or {}
                     attempts = relief.get("attempts", [])
                     if attempts:
-                        trail = ", ".join(
-                            f"{a.get('action', '?')} {'✓' if a.get('resolved') else '✗'}"
-                            + (f" [{a['note']}]" if a.get("note") else "")
-                            for a in attempts
-                        )
+                        parts = []
+                        for a in attempts:
+                            # attempts are [measure, resolved] pairs (ReliefResult.attempts)
+                            if isinstance(a, (list, tuple)):
+                                measure = a[0] if len(a) > 0 else "?"
+                                resolved = a[1] if len(a) > 1 else False
+                            else:  # tolerate a dict shape defensively
+                                measure = a.get("measure") or a.get("action", "?")
+                                resolved = a.get("resolved", False)
+                            note = " [inherent to OPF]" if measure == "generator_redispatch" else ""
+                            parts.append(f"{measure} {'✓' if resolved else '✗'}{note}")
+                        trail = ", ".join(parts)
                         st.caption(f"{v.get('label', '?')}: {trail}")
                 st.caption(
                     "Relief scope: local modifications only (transformer ratio, generator "
