@@ -284,7 +284,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 
   /* Store the AGC variable index (scalar) */
   if (opflow->use_agc) {
-    pbpolrajahiopsparse->agc_xidx = opflow->idxn2sd_map[ps->startxloc];
+    pbpolrajahiopsparse->agc_xidx = ps->startxloc;
   } else {
     pbpolrajahiopsparse->agc_xidx = -1;
   }
@@ -368,7 +368,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
       loadi_eq += bus_eq->nload;
     }
 
-    int linei_eq = 0;
+    int iline_eq = 0;
     std::map<std::pair<int, int>, int> buspair_to_offdiag;
     for (int iline = 0; iline < ps->nline; ++iline) {
       PSLINE line_eq = &(ps->line[iline]);
@@ -381,27 +381,27 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
         int busidxf = (int)(connbuses_eq[0] - ps->bus);
         int busidxt = (int)(connbuses_eq[1] - ps->bus);
 
-        lineparams->eqjacsp_diag_idx[4 * linei_eq + 0] =
+        lineparams->eqjacsp_diag_idx[4 * iline_eq + 0] =
             busparams->eqjacsp_idx[2 * busidxf];
-        lineparams->eqjacsp_diag_idx[4 * linei_eq + 1] =
+        lineparams->eqjacsp_diag_idx[4 * iline_eq + 1] =
             busparams->eqjacsp_idx[2 * busidxf + 1];
-        lineparams->eqjacsp_diag_idx[4 * linei_eq + 2] =
+        lineparams->eqjacsp_diag_idx[4 * iline_eq + 2] =
             busparams->eqjacsp_idx[2 * busidxt];
-        lineparams->eqjacsp_diag_idx[4 * linei_eq + 3] =
+        lineparams->eqjacsp_diag_idx[4 * iline_eq + 3] =
             busparams->eqjacsp_idx[2 * busidxt + 1];
 
         auto key = std::make_pair(std::min(busidxf, busidxt),
                                   std::max(busidxf, busidxt));
         auto it = buspair_to_offdiag.find(key);
         if (it != buspair_to_offdiag.end()) {
-          lineparams->eqjacsp_idx[linei_eq] = it->second;
+          lineparams->eqjacsp_idx[iline_eq] = it->second;
         } else {
-          lineparams->eqjacsp_idx[linei_eq] = nnz_eqjacsp;
+          lineparams->eqjacsp_idx[iline_eq] = nnz_eqjacsp;
           buspair_to_offdiag[key] = nnz_eqjacsp;
           nnz_eqjacsp += 8;
         }
       }
-      linei_eq++;
+      iline_eq++;
     }
 
     if (opflow->has_gensetpoint) {
@@ -490,28 +490,16 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     std::map<std::pair<int, int>, int> existing_pairs;
 
     // Bus equality constraint Hessian (1 diagonal entry)
-    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-      PSBUS bus = &ps->bus[ibus];
-      const int xloc = bus->startxVloc;
+    for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+      const int xloc = busparams->xidx[ibus];
       busparams->hesssp_eq_idx[ibus] =
           count_entry(existing_pairs, xloc + 1, xloc + 1, nnz_hesssp);
     }
 
     // Line equality constraints Hessian (4x4, 10 upper triangular)
-    for (int iline = 0; iline < ps->nline; ++iline) {
-      PSLINE line = &ps->line[iline];
-      if (!line->status)
-        continue;
-
-      const PSBUS *connbuses;
-      ierr = PSLINEGetConnectedBuses(line, &connbuses);
-      CHKERRQ(ierr);
-      PSBUS busf = connbuses[0];
-      PSBUS bust = connbuses[1];
-
-      const int xlocf = busf->startxVloc;
-      const int xloct = bust->startxVloc;
-
+    for (int iline = 0; iline < lineparams->nlineON; ++iline) {
+      const int xlocf = lineparams->xidxf[iline];
+      const int xloct = lineparams->xidxt[iline];
       const int base = 10 * iline;
 
       lineparams->hesssp_eq_idx[base + 0] =
@@ -542,33 +530,25 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     // Generator AGC inequality constraints Hessian (3 upper triangular entries)
     if (opflow->has_gensetpoint && opflow->use_agc) {
       int iagc = 0;
+      const int xloc_dpsys = pbpolrajahiopsparse->agc_xidx;
 
-      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-        PSBUS bus = &ps->bus[ibus];
+      for (int g = 0; g < genparams->ngenON; ++g) {
+        if (genparams->isrenewable[g])
+          continue;
 
-        for (int igen = 0; igen < bus->ngen; ++igen) {
-          PSGEN gen;
-          ierr = PSBUSGetGen(bus, igen, &gen);
-          CHKERRQ(ierr);
-          if (!gen->status || gen->isrenewable)
-            continue;
+        const int xloc_pg = genparams->xidx[g];
+        const int xloc_dev = genparams->xpdevidx[g];
 
-          const int xloc_pg = gen->startxpowloc;
-          const int xloc_dev = gen->startxpdevloc;
-          const int xloc_dpsys = ps->startxloc;
+        const int base = 3 * iagc;
 
-          if (iagc < ps->ngenON) {
-            const int base = 3 * iagc;
+        genparams->hesssp_ineq_idx[base + 0] =
+            count_entry(existing_pairs, xloc_pg, xloc_pg, nnz_hesssp);
+        genparams->hesssp_ineq_idx[base + 1] =
+            count_entry(existing_pairs, xloc_pg, xloc_dev, nnz_hesssp);
+        genparams->hesssp_ineq_idx[base + 2] =
+            count_entry(existing_pairs, xloc_pg, xloc_dpsys, nnz_hesssp);
 
-            genparams->hesssp_ineq_idx[base + 0] =
-                count_entry(existing_pairs, xloc_pg, xloc_pg, nnz_hesssp);
-            genparams->hesssp_ineq_idx[base + 1] =
-                count_entry(existing_pairs, xloc_pg, xloc_dev, nnz_hesssp);
-            genparams->hesssp_ineq_idx[base + 2] =
-                count_entry(existing_pairs, xloc_pg, xloc_dpsys, nnz_hesssp);
-          }
-          iagc++;
-        }
+        iagc++;
       }
     }
 
@@ -576,46 +556,33 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
       int i = 0;
 
-      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-        PSBUS bus = &ps->bus[ibus];
-        if (bus->ide != PV_BUS && bus->ide != REF_BUS)
+      for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+        if (!(busparams->ispv[ibus] || busparams->isref[ibus]))
           continue;
 
-        const int xloc_v = bus->startxVloc + 1;
+        const int xloc_v = busparams->xidx[ibus] + 1;
+        const int goff = busparams->genoffset[ibus];
+        const int ngen = busparams->ngenONbus[ibus];
 
-        for (int igen = 0; igen < bus->ngen; ++igen) {
-          PSGEN gen;
-          ierr = PSBUSGetGen(bus, igen, &gen);
-          CHKERRQ(ierr);
-          if (!gen->status)
-            continue;
+        for (int k = 0; k < ngen; ++k) {
+          const int g = goff + k;
+          const int xloc_qg = genparams->xidx[g] + 1;
 
-          const int xloc_qg = gen->startxpowloc + 1;
-
-          if (i < ps->ngenON) {
-            busparams->hesssp_ineq_idx[i] =
-                count_entry(existing_pairs, xloc_qg, xloc_v, nnz_hesssp);
-          }
+          busparams->hesssp_ineq_idx[i] =
+              count_entry(existing_pairs, xloc_qg, xloc_v, nnz_hesssp);
           i++;
         }
       }
     }
 
     // Line inequality constraints Hessian (4x4, 10 upper triangular)
-    for (int imon = 0; imon < opflow->nlinesmon; ++imon) {
-      PSLINE line = &ps->line[opflow->linesmon[imon]];
-      if (line->isdcline)
+    for (int imon = 0; imon < lineparams->nlinelim; ++imon) {
+      const int iline = lineparams->linelimidx[imon];
+      if (lineparams->isdcline[iline])
         continue;
 
-      const PSBUS *connbuses;
-      ierr = PSLINEGetConnectedBuses(line, &connbuses);
-      CHKERRQ(ierr);
-      PSBUS busf = connbuses[0];
-      PSBUS bust = connbuses[1];
-
-      const int xlocf = busf->startxVlocglob;
-      const int xloct = bust->startxVlocglob;
-
+      const int xlocf = lineparams->xidxf[iline];
+      const int xloct = lineparams->xidxt[iline];
       const int base = 10 * imon;
 
       lineparams->hesssp_ineq_idx[base + 0] =
@@ -645,9 +612,8 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
 
     // Power-imbalance objective Hessian (2 diagonal entries)
     if (opflow->include_powerimbalance_variables) {
-      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-        PSBUS bus = &ps->bus[ibus];
-        const int xloc = bus->startxpimblocglob;
+      for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+        const int xloc = busparams->xidxpimb[ibus];
         const int base = 2 * ibus;
 
         busparams->hesssp_obj_idx[base + 0] =
@@ -658,61 +624,28 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
     }
 
     // Gen objective Hessian (1 diagonal entry)
-    int iobj = 0;
-    for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-      PSBUS bus = &ps->bus[ibus];
+    if (opflow->objectivetype == MIN_GEN_COST ||
+        opflow->objectivetype == MIN_GENSETPOINT_DEVIATION) {
+      for (int igen = 0; igen < genparams->ngenON; ++igen) {
+        const int xloc = (opflow->objectivetype == MIN_GEN_COST)
+                             ? genparams->xidx[igen]
+                             : genparams->xpdevidx[igen];
 
-      for (int igen = 0; igen < bus->ngen; ++igen) {
-        PSGEN gen;
-        ierr = PSBUSGetGen(bus, igen, &gen);
-        CHKERRQ(ierr);
-        if (!gen->status)
-          continue;
-
-        if (opflow->objectivetype == MIN_GEN_COST) {
-          const int xloc = gen->startxpowlocglob;
-
-          if (iobj < ps->ngenON) {
-            genparams->hesssp_obj_idx[iobj] =
-                count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
-          }
-          iobj++;
-        } else if (opflow->objectivetype == MIN_GENSETPOINT_DEVIATION) {
-          const int xloc = gen->startxpdevlocglob;
-
-          if (iobj < ps->ngenON) {
-            genparams->hesssp_obj_idx[iobj] =
-                count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
-          }
-          iobj++;
-        }
+        genparams->hesssp_obj_idx[igen] =
+            count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
       }
     }
 
     // Load objective Hessian (2 diagonal entries)
     if (opflow->include_loadloss_variables) {
-      int iloss = 0;
+      for (int iload = 0; iload < loadparams->nload; ++iload) {
+        const int xloc = loadparams->xidx[iload];
+        const int base = 2 * iload;
 
-      for (int ibus = 0; ibus < ps->nbus; ++ibus) {
-        PSBUS bus = &ps->bus[ibus];
-
-        for (int iload = 0; iload < bus->nload; ++iload) {
-          PSLOAD load;
-          ierr = PSBUSGetLoad(bus, iload, &load);
-          CHKERRQ(ierr);
-          if (!load->status)
-            continue;
-
-          const int xloc = load->startxloadlosslocglob;
-          const int base = 2 * iloss;
-
-          loadparams->hesssp_obj_idx[base + 0] =
-              count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
-          loadparams->hesssp_obj_idx[base + 1] =
-              count_entry(existing_pairs, xloc + 1, xloc + 1, nnz_hesssp);
-
-          iloss++;
-        }
+        loadparams->hesssp_obj_idx[base + 0] =
+            count_entry(existing_pairs, xloc, xloc, nnz_hesssp);
+        loadparams->hesssp_obj_idx[base + 1] =
+            count_entry(existing_pairs, xloc + 1, xloc + 1, nnz_hesssp);
       }
     }
   }
