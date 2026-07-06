@@ -455,8 +455,21 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
 
 void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                               const double *x_dev,
+                                              const double *lambda_dev,
                                               const int *perm_dev,
-                                              double *hess_dev) {}
+                                              double *hess_dev) {
+  PbpolModelRajaHiop *pbpolrajahiopsparse =
+      reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
+  BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
+  GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
+  LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
+  LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
+
+  /* Zero the Hessian values before accumulating */
+  RAJA::forall<exago_raja_exec>(
+      RAJA::RangeSegment(0, opflow->nnz_hesssp),
+      RAJA_LAMBDA(RAJA::Index_type i) { hess_dev[i] = 0.0; });
+}
 
 #endif // EXAGO_ENABLE_HIOP_SPARSE
 #endif // EXAGO_ENABLE_RAJA
