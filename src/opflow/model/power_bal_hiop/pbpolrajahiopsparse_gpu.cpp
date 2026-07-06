@@ -643,6 +643,81 @@ void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
         });
   }
 
+  // Generator AGC inequality constraints Hessian (3 upper triangular entries)
+  if (opflow->has_gensetpoint && opflow->use_agc) {
+    const int agc_xidx = pbpolrajahiopsparse->agc_xidx;
+
+    const int *gen_isrenewable = genparams->isrenewable_dev_;
+    const int *gen_gineqidx = genparams->gineqidxgen_dev_;
+    const int *gen_xidx = genparams->xidx_dev_;
+    const int *gen_xpdevidx = genparams->xpdevidx_dev_;
+    const double *gen_apf = genparams->apf_dev_;
+    const int *gen_hesssp_ineq_idx = genparams->hesssp_ineq_idx_dev_;
+
+    RAJA::forall<exago_raja_exec>(
+        RAJA::RangeSegment(0, genparams->ngenON),
+        RAJA_LAMBDA(RAJA::Index_type g) {
+          if (gen_isrenewable[g])
+            return;
+
+          const int gloc = gen_gineqidx[g];
+
+          const double lambda0 = lambdai_dev[gloc];
+          const double lambda1 = lambdai_dev[gloc + 1];
+          const double lsum = lambda0 + lambda1;
+
+          const int base = 3 * g;
+
+          const double v_pg_pg = 0.0;
+          const double v_pg_dev = -lsum;
+          const double v_pg_dpsys = gen_apf[g] * lsum;
+
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 0]]], v_pg_pg);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 1]]], v_pg_dev);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 2]]], v_pg_dpsys);
+        });
+  }
+
+  // Set voltage inequality constraints Hessian (1 entry)
+  if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+    const int *bus_ispv = busparams->ispv_dev_;
+    const int *bus_isref = busparams->isref_dev_;
+    const int *bus_gineqidx = busparams->gineqidx_dev_;
+    const int *bus_xidx = busparams->xidx_dev_;
+    const int *bus_genoffset = busparams->genoffset_dev_;
+    const int *bus_ngenONbus = busparams->ngenONbus_dev_;
+
+    const int *gen_xidx = genparams->xidx_dev_;
+
+    const int *bus_hesssp_ineq_idx = busparams->hesssp_ineq_idx_dev_;
+
+    RAJA::forall<exago_raja_exec>(
+        RAJA::RangeSegment(0, busparams->nbus),
+        RAJA_LAMBDA(RAJA::Index_type ibus) {
+          if (!(bus_ispv[ibus] || bus_isref[ibus]))
+            return;
+
+          const int gloc = bus_gineqidx[ibus];
+
+          const double lambda0 = lambdai_dev[gloc];
+          const double lambda1 = lambdai_dev[gloc + 1];
+          const double v = -(lambda0 + lambda1);
+
+          const int goff = bus_genoffset[ibus];
+          const int ngen = bus_ngenONbus[ibus];
+
+          for (int k = 0; k < ngen; ++k) {
+            const int g = goff + k;
+
+            RAJA::atomicAdd<RAJA::auto_atomic>(
+                &hess_dev[perm_dev[bus_hesssp_ineq_idx[g]]], v);
+          }
+        });
+  }
+
   // Line inequality constraints Hessian (4x4, 10 upper triangular)
   {
     const int *line_xidxf = lineparams->xidxf_dev_;

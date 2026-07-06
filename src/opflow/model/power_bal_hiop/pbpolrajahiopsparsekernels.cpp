@@ -1037,7 +1037,6 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
 
     // Generator AGC inequality constraints Hessian (3 upper triangular entries)
     if (opflow->has_gensetpoint && opflow->use_agc) {
-      int iagc = 0;
       const int xloc_dpsys = pbpolrajahiopsparse->agc_xidx;
 
       for (int g = 0; g < genparams->ngenON; ++g) {
@@ -1046,7 +1045,7 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
 
         const int xloc_pg = genparams->xidx[g];
         const int xloc_dev = genparams->xpdevidx[g];
-        const int base = 3 * iagc;
+        const int base = 3 * g;
 
         store_entry(genparams->hesssp_ineq_idx[base + 0], xloc_pg, xloc_pg,
                     iRow_temp, jCol_temp);
@@ -1054,15 +1053,11 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
                     iRow_temp, jCol_temp);
         store_entry(genparams->hesssp_ineq_idx[base + 2], xloc_pg, xloc_dpsys,
                     iRow_temp, jCol_temp);
-
-        iagc++;
       }
     }
 
     // Set voltage inequality constraints Hessian (1 entry)
     if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
-      int i = 0;
-
       for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
         if (!(busparams->ispv[ibus] || busparams->isref[ibus]))
           continue;
@@ -1075,9 +1070,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
           const int g = goff + k;
           const int xloc_qg = genparams->xidx[g] + 1;
 
-          const int slot = busparams->hesssp_ineq_idx[i];
+          const int slot = busparams->hesssp_ineq_idx[g];
           store_entry(slot, xloc_qg, xloc_v, iRow_temp, jCol_temp);
-          i++;
         }
       }
     }
