@@ -467,8 +467,8 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOP(OPFLOW opflow) {
         }
         gi++;
         nnz_hesssp += 0; /* 3 Hessian elements from inequality constraints */
-                         /* @todo implementation is += 0, but comment says 3. To double-check. */
-                         /* Kernel implementation is consistent with += 0. */
+        /* @todo implementation is += 0, but comment says 3. To double-check. */
+        /* Kernel implementation is consistent with += 0. */
       }
     }
 

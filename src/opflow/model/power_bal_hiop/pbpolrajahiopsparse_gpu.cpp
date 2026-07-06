@@ -489,7 +489,7 @@ void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
           const double val = lambdae_gloc * (2.0 * bus_gl[ibus]) +
                              lambdae_gloc1 * (-2.0 * bus_bl[ibus]);
 
-          hess_dev[perm_dev[bus_hesssp_eq_idx[ibus]]] =  val;
+          hess_dev[perm_dev[bus_hesssp_eq_idx[ibus]]] = val;
         });
   }
 

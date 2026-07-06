@@ -820,14 +820,17 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOP(
           RAJA::RangeSegment(0, genparams->ngenON),
           RAJA_LAMBDA(RAJA::Index_type i) {
             MHSS_dev[hesssp_obj_idx[i]] = weight * isobj_gencost * obj_factor *
-                                          2.0 * cost_alpha[i] * MVAbase * MVAbase;
+                                          2.0 * cost_alpha[i] * MVAbase *
+                                          MVAbase;
           });
       flps += 6 * genparams->ngenON;
     } else if (opflow->objectivetype == NO_OBJ) {
       int *hesssp_obj_idx = genparams->hesssp_obj_idx_dev_;
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, genparams->ngenON),
-          RAJA_LAMBDA(RAJA::Index_type i) { MHSS_dev[hesssp_obj_idx[i]] = 0.0; });
+          RAJA_LAMBDA(RAJA::Index_type i) {
+            MHSS_dev[hesssp_obj_idx[i]] = 0.0;
+          });
     }
 
     /* Loadloss contributions - 2 contributions expected */

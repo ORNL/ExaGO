@@ -529,7 +529,7 @@ int main(int argc, char **argv) {
     fail += test.computeConstraintBounds(opflowtest, gl_ref, gu_ref, resmgr);
     fail += test.computeConstraintJacobian(opflowtest, x_ref_dev, Jeq, Jineq,
                                            resmgr);
-    fail += test.computeHessian(opflowtest, x_ref_dev, lambda_ref_dev, 
+    fail += test.computeHessian(opflowtest, x_ref_dev, lambda_ref_dev,
                                 obj_factor, Hess, resmgr);
 
     // Cleanup x_ref and lambda_ref on device
