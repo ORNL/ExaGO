@@ -1847,8 +1847,8 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsHessian_PBPOL(OPFLOW opflow,
   const PetscScalar *x;
   const PetscScalar *lambda;
   PetscInt gloc;
-  PetscInt row[8], col[8];
-  PetscScalar val[8];
+  PetscInt row[16], col[16];
+  PetscScalar val[16];
   PetscScalar lambda_gloc, lambda_gloc1;
 
   PetscFunctionBegin;
@@ -2229,8 +2229,8 @@ PetscErrorCode OPFLOWComputeInequalityConstraintsHessian_PBPOL(OPFLOW opflow,
   const PetscScalar *x;
   const PetscScalar *lambda;
   PetscInt gloc;
-  PetscInt row[4], col[4];
-  PetscScalar val[4];
+  PetscInt row[12], col[12];
+  PetscScalar val[12];
   PSBUS bus;
   PSGEN gen;
   PetscInt loc;
