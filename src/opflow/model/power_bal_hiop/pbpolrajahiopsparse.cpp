@@ -229,6 +229,8 @@ extern PetscErrorCode OPFLOWModelSetUp_PBPOL(OPFLOW);
 
 /** @brief Helper function to ensure Hessian entries are not duplicated
  *
+ * @note Some of the diagonal terms are guarantied to never overalap, the
+ * uniformly using the helper function looks cleaner.
  */
 static inline int
 count_entry(std::map<std::pair<int, int>, int> &existing_pairs, int r, int c,

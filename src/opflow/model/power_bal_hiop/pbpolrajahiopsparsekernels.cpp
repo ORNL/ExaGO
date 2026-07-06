@@ -959,17 +959,12 @@ static inline void store_entry(const int slot, int r, int c, int *iRow,
 PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, const double *lambda_dev, int *iHSS_dev,
     int *jHSS_dev, double *MHSS_dev) {
+
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
+
   PetscErrorCode ierr;
-  PetscInt *iRow, *jCol;
-  PetscScalar *x, *values, *lambda;
-  PetscInt nrow;
-  PetscInt nvals;
-  const PetscInt *cols;
-  const PetscScalar *vals;
-  PetscInt i, j;
-  PetscInt ctr = 0;
+
   auto &resmgr = umpire::ResourceManager::getInstance();
 
   PetscFunctionBegin;
@@ -1092,8 +1087,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
                   iRow_temp, jCol_temp);
       store_entry(lineparams->hesssp_ineq_idx[base + 2], xlocf, xloct,
                   iRow_temp, jCol_temp);
-      store_entry(lineparams->hesssp_ineq_idx[base + 3], xlocf, xloct + 1, iRow,
-                  jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 3], xlocf, xloct + 1,
+                  iRow_temp, jCol_temp);
 
       store_entry(lineparams->hesssp_ineq_idx[base + 4], xlocf + 1, xlocf + 1,
                   iRow_temp, jCol_temp);
@@ -1117,7 +1112,7 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
         const int xloc = busparams->xidxpimb[ibus];
         const int base = 2 * ibus;
 
-        store_entry(busparams->hesssp_obj_idx[base + 0], xloc, xloc, iRow,
+        store_entry(busparams->hesssp_obj_idx[base + 0], xloc, xloc, iRow_temp,
                     jCol_temp);
         store_entry(busparams->hesssp_obj_idx[base + 1], xloc + 1, xloc + 1,
                     iRow_temp, jCol_temp);
@@ -1143,8 +1138,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
         const int xloc = loadparams->xidx[iload];
         const int base = 2 * iload;
 
-        store_entry(loadparams->hesssp_obj_idx[base + 0], xloc, xloc, iRow,
-                    jCol);
+        store_entry(loadparams->hesssp_obj_idx[base + 0], xloc, xloc, iRow_temp,
+                    jCol_temp);
         store_entry(loadparams->hesssp_obj_idx[base + 1], xloc + 1, xloc + 1,
                     iRow_temp, jCol_temp);
       }
