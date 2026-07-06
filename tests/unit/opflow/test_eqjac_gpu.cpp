@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
     }
 
     double abs_err = fabs(gpu_val - e.val);
-    double rel_err = (fabs(e.val) > 1e-12) ? abs_err / fabs(e.val) : abs_err;
+    double rel_err = (fabs(e.val) > tol) ? abs_err / fabs(e.val) : abs_err;
     const char *status;
 
     if (!found) {
