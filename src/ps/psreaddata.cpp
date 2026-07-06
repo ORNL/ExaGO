@@ -1,5 +1,5 @@
 #include <private/psimpl.h>
-
+#include <utils.h>
 /*
   PSReadPSSERawData - Reads the PSSE raw data file and populates the PS object
 
@@ -1090,7 +1090,8 @@ PetscErrorCode PSReadMatPowerData(PS ps, const char netfile[]) {
         fuel_ramp_min = GENRAMPRATE_COAL; /* Defaults to COAL ramp rate */
         ps->ngenundefined++;
       }
-      if (Gen[genfueli].ramp_rate_min == 0) {
+      double ramp_rate_min_error = 0.0;
+      if (IsEqual(Gen[genfueli].ramp_rate_min, 0.0, 1e-12, ramp_rate_min_error)) {
         Gen[genfueli].ramp_rate_min = fuel_ramp_min / ps->MVAbase;
         Gen[genfueli].ramp_rate_10min = Gen[genfueli].ramp_rate_min * 10;
         Gen[genfueli].ramp_rate_30min = Gen[genfueli].ramp_rate_min * 30;
