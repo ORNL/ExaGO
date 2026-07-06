@@ -489,7 +489,7 @@ void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
           const double val = lambdae_gloc * (2.0 * bus_gl[ibus]) +
                              lambdae_gloc1 * (-2.0 * bus_bl[ibus]);
 
-          hess_dev[perm_dev[bus_hesssp_eq_idx[ibus]]] = val;
+          hess_dev[perm_dev[bus_hesssp_eq_idx[ibus]]] += val;
         });
   }
 
@@ -687,9 +687,9 @@ void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
           const double v_pg_dev = -lsum;
           const double v_pg_dpsys = gen_apf[g] * lsum;
 
-          hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 0]]] = v_pg_pg;
-          hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 1]]] = v_pg_dev;
-          hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 2]]] = v_pg_dpsys;
+          hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 0]]] += v_pg_pg;
+          hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 1]]] += v_pg_dev;
+          hess_dev[perm_dev[gen_hesssp_ineq_idx[base + 2]]] += v_pg_dpsys;
         });
   }
 
@@ -721,7 +721,7 @@ void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
           for (int k = 0; k < ngen; ++k) {
             const int g = goff + k;
 
-            hess_dev[perm_dev[bus_hesssp_ineq_idx[g]]] = v;
+            hess_dev[perm_dev[bus_hesssp_ineq_idx[g]]] += v;
           }
         });
   }
@@ -1084,8 +1084,8 @@ void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
         RAJA::RangeSegment(0, busparams->nbus),
         RAJA_LAMBDA(RAJA::Index_type ibus) {
           const int base = 2 * ibus;
-          hess_dev[perm_dev[bus_hesssp_obj_idx[base + 0]]] = 0.0;
-          hess_dev[perm_dev[bus_hesssp_obj_idx[base + 1]]] = 0.0;
+          hess_dev[perm_dev[bus_hesssp_obj_idx[base + 0]]] += 0.0;
+          hess_dev[perm_dev[bus_hesssp_obj_idx[base + 1]]] += 0.0;
         });
   }
 
@@ -1104,14 +1104,14 @@ void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
           RAJA_LAMBDA(RAJA::Index_type igen) {
             const double val = weight * obj_factor * 2.0 *
                                gen_cost_alpha[igen] * MVAbase * MVAbase;
-            hess_dev[perm_dev[gen_hesssp_obj_idx[igen]]] = val;
+            hess_dev[perm_dev[gen_hesssp_obj_idx[igen]]] += val;
           });
     } else if (opflow->objectivetype == MIN_GENSETPOINT_DEVIATION) {
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, genparams->ngenON),
           RAJA_LAMBDA(RAJA::Index_type igen) {
             const double val = weight * obj_factor * 2.0;
-            hess_dev[perm_dev[gen_hesssp_obj_idx[igen]]] = val;
+            hess_dev[perm_dev[gen_hesssp_obj_idx[igen]]] += val;
           });
     }
   }
@@ -1124,8 +1124,8 @@ void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
         RAJA::RangeSegment(0, loadparams->nload),
         RAJA_LAMBDA(RAJA::Index_type iload) {
           const int base = 2 * iload;
-          hess_dev[perm_dev[load_hesssp_obj_idx[base + 0]]] = 0.0;
-          hess_dev[perm_dev[load_hesssp_obj_idx[base + 1]]] = 0.0;
+          hess_dev[perm_dev[load_hesssp_obj_idx[base + 0]]] += 0.0;
+          hess_dev[perm_dev[load_hesssp_obj_idx[base + 1]]] += 0.0;
         });
   }
 }
