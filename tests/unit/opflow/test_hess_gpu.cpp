@@ -267,7 +267,6 @@ int main(int argc, char **argv) {
     if (!found) {
       n_missing_gpu++;
       if (fabs(e.val) < tol) {
-        status = "MISSING ZERO";
         n_missing_gpu_zero++;
       } else {
         status = "MISSING";
@@ -289,7 +288,7 @@ int main(int argc, char **argv) {
       worst_gpu = gpu_val;
     }
 
-    if (abs_err >= tol || !found) {
+    if (abs_err >= tol || (!found && fabs(e.val) > tol)) {
       printf("  %-8d %-8d %16.8e %16.8e %12.2e  %s\n", e.row, e.col, e.val,
              gpu_val, abs_err, status);
     }
@@ -299,36 +298,34 @@ int main(int argc, char **argv) {
   if (n_extra_gpu > 0) {
     printf("\n  Extra entries in GPU (not in PETSc reference):\n");
     for (const auto &kv : gpu_map) {
-      if (fabs(kv.second) < tol) { 
+      if (fabs(kv.second) < tol) {
         n_extra_gpu_zero++;
-      }
-      else {
+      } else {
         printf("  %-8d %-8d %16s %16.8e %12s  EXTRA\n", kv.first.first,
                kv.first.second, "n/a", kv.second, "n/a");
       }
     }
   }
-  int result =
-      (n_mismatch == 0) && (n_missing_gpu - n_missing_gpu_zero) == 0 &&
-       (n_extra_gpu - n_extra_gpu_zero) == 0
-          ? 0
-          : 1;
+  int result = (n_mismatch == 0) && (n_missing_gpu - n_missing_gpu_zero) == 0 &&
+                       (n_extra_gpu - n_extra_gpu_zero) == 0
+                   ? 0
+                   : 1;
 
   printf("\n");
   printf("============================================================\n");
   printf("  Validation summary\n");
   printf("============================================================\n");
-  printf("  PETSc nnz:         %d\n", (int)ref_entries.size());
-  printf("  GPU nnz:           %d\n", nnz_hess);
-  printf("  Matching:          %d\n", n_match);
-  printf("  Mismatched:        %d\n", n_mismatch);
-  printf("  Missing in GPU:    %d\n", n_missing_gpu);
-  printf("  Extra in GPU:      %d\n", n_extra_gpu);
-  printf("  Max absolute err:  %.2e  at (%d, %d)  ref=%.8e  gpu=%.8e\n",
+  printf("  PETSc nnz:              %d\n", (int)ref_entries.size());
+  printf("  GPU nnz:                %d\n", nnz_hess);
+  printf("  Matching:               %d\n", n_match);
+  printf("  Mismatched:             %d\n", n_mismatch);
+  printf("  Missing in GPU and !=0: %d\n", n_missing_gpu - n_missing_gpu_zero);
+  printf("  Extra in GPU and !=0:   %d\n", n_extra_gpu - n_extra_gpu_zero);
+  printf("  Max absolute err:       %.2e  at (%d, %d)  ref=%.8e  gpu=%.8e\n",
          max_abs_err, worst_row, worst_col, worst_ref, worst_gpu);
-  printf("  Max relative err:  %.2e\n", max_rel_err);
-  printf("  Tolerance:         %.2e\n", tol);
-  printf("  RESULT:            %s\n", result == 0 ? "PASS" : "FAIL");
+  printf("  Max relative err:       %.2e\n", max_rel_err);
+  printf("  Tolerance:              %.2e\n", tol);
+  printf("  RESULT:                 %s\n", result == 0 ? "PASS" : "FAIL");
   printf("============================================================\n\n");
 
   /* ----------------------------------------------------------------
