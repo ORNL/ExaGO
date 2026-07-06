@@ -37,11 +37,9 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
 /**
  * GPU-only (PETSc-free) computation of hessians values.
  */
-void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                              const double *x_dev,
-                                              const double *lambda_dev,
-                                              const int *perm_dev,
-                                              double *hess_dev);
+void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
+    OPFLOW opflow, const double *x_dev, const double *lambdae_dev,
+    const double *lambdai_dev, const int *perm_dev, double *hess_dev);
 
 #endif // EXAGO_ENABLE_HIOP_SPARSE
 #endif // EXAGO_ENABLE_RAJA

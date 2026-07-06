@@ -453,22 +453,580 @@ void ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
   }
 }
 
-void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
-                                              const double *x_dev,
-                                              const double *lambda_dev,
-                                              const int *perm_dev,
-                                              double *hess_dev) {
+void ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
+    OPFLOW opflow, const double *x_dev, const double *lambdae_dev,
+    const double *lambdai_dev, const int *perm_dev, double *hess_dev) {
+
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
+
+  PS ps = opflow->ps;
   BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
   GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
   LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
   LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
+  // NKK - Ignoring AGC term and FIXED_WITHIN_BOUNDS for now
+
   /* Zero the Hessian values before accumulating */
   RAJA::forall<exago_raja_exec>(
       RAJA::RangeSegment(0, opflow->nnz_hesssp),
       RAJA_LAMBDA(RAJA::Index_type i) { hess_dev[i] = 0.0; });
+
+  // Bus equality constraint Hessian (1 diagonal entry)
+  {
+    const int *bus_gidx = busparams->gidx_dev_;
+    const double *bus_gl = busparams->gl_dev_;
+    const double *bus_bl = busparams->bl_dev_;
+    const int *bus_hesssp_eq_idx = busparams->hesssp_eq_idx_dev_;
+
+    RAJA::forall<exago_raja_exec>(
+        RAJA::RangeSegment(0, busparams->nbus),
+        RAJA_LAMBDA(RAJA::Index_type ibus) {
+          const int gloc = bus_gidx[ibus];
+
+          const double lambdae_gloc = lambdae_dev[gloc];
+          const double lambdae_gloc1 = lambdae_dev[gloc + 1];
+
+          const double val = lambdae_gloc * (2.0 * bus_gl[ibus]) +
+                             lambdae_gloc1 * (-2.0 * bus_bl[ibus]);
+
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[bus_hesssp_eq_idx[ibus]]], val);
+        });
+  }
+
+  // Line equality constraints Hessian (4x4, 10 upper triangular)
+  {
+    const int *line_xidxf = lineparams->xidxf_dev_;
+    const int *line_xidxt = lineparams->xidxt_dev_;
+    const int *line_geqidxf = lineparams->geqidxf_dev_;
+    const int *line_geqidxt = lineparams->geqidxt_dev_;
+    const int *line_hesssp_eq_idx = lineparams->hesssp_eq_idx_dev_;
+
+    const double *line_Gff = lineparams->Gff_dev_;
+    const double *line_Bff = lineparams->Bff_dev_;
+    const double *line_Gft = lineparams->Gft_dev_;
+    const double *line_Bft = lineparams->Bft_dev_;
+    const double *line_Gtf = lineparams->Gtf_dev_;
+    const double *line_Btf = lineparams->Btf_dev_;
+    const double *line_Gtt = lineparams->Gtt_dev_;
+    const double *line_Btt = lineparams->Btt_dev_;
+
+    RAJA::forall<exago_raja_exec>(
+        RAJA::RangeSegment(0, lineparams->nlineON),
+        RAJA_LAMBDA(RAJA::Index_type iline) {
+          const int xlocf = line_xidxf[iline];
+          const int xloct = line_xidxt[iline];
+          const int base = 10 * iline;
+
+          const int glocf = line_geqidxf[iline];
+          const int gloct = line_geqidxt[iline];
+
+          const double lambdaPf = lambdae_dev[glocf];
+          const double lambdaQf = lambdae_dev[glocf + 1];
+          const double lambdaPt = lambdae_dev[gloct];
+          const double lambdaQt = lambdae_dev[gloct + 1];
+
+          const double thetaf = x_dev[xlocf];
+          const double Vmf = x_dev[xlocf + 1];
+          const double thetat = x_dev[xloct];
+          const double Vmt = x_dev[xloct + 1];
+
+          const double thetaft = thetaf - thetat;
+          const double thetatf = thetat - thetaf;
+
+          const double sin_thetaft = sin(thetaft);
+          const double cos_thetaft = cos(thetaft);
+          const double sin_thetatf = sin(thetatf);
+          const double cos_thetatf = cos(thetatf);
+
+          const double Gff = line_Gff[iline];
+          const double Bff = line_Bff[iline];
+          const double Gft = line_Gft[iline];
+          const double Bft = line_Bft[iline];
+          const double Gtf = line_Gtf[iline];
+          const double Btf = line_Btf[iline];
+          const double Gtt = line_Gtt[iline];
+          const double Btt = line_Btt[iline];
+
+          const double d2Pf_00 = -Vmf * Vmt * (Gft * cos_thetaft + Bft * sin_thetaft);
+          const double d2Pf_01 = Vmt * (-Gft * sin_thetaft + Bft * cos_thetaft);
+          const double d2Pf_02 = Vmf * Vmt * (Gft * cos_thetaft + Bft * sin_thetaft);
+          const double d2Pf_03 = Vmf * (-Gft * sin_thetaft + Bft * cos_thetaft);
+
+          const double d2Pf_11 = 2.0 * Gff;
+          const double d2Pf_12 = Vmt * (Gft * sin_thetaft - Bft * cos_thetaft);
+          const double d2Pf_13 = (Gft * cos_thetaft + Bft * sin_thetaft);
+
+          const double d2Pf_22 = Vmf * Vmt * (-Gft * cos_thetaft - Bft * sin_thetaft);
+          const double d2Pf_23 = Vmf * (Gft * sin_thetaft - Bft * cos_thetaft);
+
+          const double d2Pf_33 = 0.0;
+
+          const double d2Qf_00 = Vmf * Vmt * (Bft * cos_thetaft - Gft * sin_thetaft);
+          const double d2Qf_01 = Vmt * (Bft * sin_thetaft + Gft * cos_thetaft);
+          const double d2Qf_02 = Vmf * Vmt * (-Bft * cos_thetaft + Gft * sin_thetaft);
+          const double d2Qf_03 = Vmf * (Bft * sin_thetaft + Gft * cos_thetaft);
+
+          const double d2Qf_11 = -2.0 * Bff;
+          const double d2Qf_12 = Vmt * (-Bft * sin_thetaft - Gft * cos_thetaft);
+          const double d2Qf_13 = (-Bft * cos_thetaft + Gft * sin_thetaft);
+
+          const double d2Qf_22 = Vmf * Vmt * (Bft * cos_thetaft - Gft * sin_thetaft);
+          const double d2Qf_23 = Vmf * (-Bft * sin_thetaft - Gft * cos_thetaft);
+
+          const double d2Qf_33 = 0.0;
+
+          const double d2Pt_00 = Vmf * Vmt * (-Gtf * cos_thetatf - Btf * sin_thetatf);
+          const double d2Pt_01 = Vmt * (Gtf * sin_thetatf - Btf * cos_thetatf);
+          const double d2Pt_02 = Vmf * Vmt * (Gtf * cos_thetatf + Btf * sin_thetatf);
+          const double d2Pt_03 = Vmf * (Gtf * sin_thetatf - Btf * cos_thetatf);
+
+          const double d2Pt_11 = 0.0;
+          const double d2Pt_12 = Vmt * (-Gtf * sin_thetatf + Btf * cos_thetatf);
+          const double d2Pt_13 = (Gtf * cos_thetatf + Btf * sin_thetatf);
+
+          const double d2Pt_22 = Vmf * Vmt * (-Gtf * cos_thetatf - Btf * sin_thetatf);
+          const double d2Pt_23 = Vmf * (-Gtf * sin_thetatf + Btf * cos_thetatf);
+
+          const double d2Pt_33 = 2.0 * Gtt;
+
+          const double d2Qt_00 = Vmf * Vmt * (Btf * cos_thetatf - Gtf * sin_thetatf);
+          const double d2Qt_01 = Vmt * (-Btf * sin_thetatf - Gtf * cos_thetatf);
+          const double d2Qt_02 = Vmf * Vmt * (-Btf * cos_thetatf + Gtf * sin_thetatf);
+          const double d2Qt_03 = Vmf * (-Btf * sin_thetatf - Gtf * cos_thetatf);
+
+          const double d2Qt_11 = 0.0;
+          const double d2Qt_12 = Vmt * (Btf * sin_thetatf + Gtf * cos_thetatf);
+          const double d2Qt_13 = (-Btf * cos_thetatf + Gtf * sin_thetatf);
+
+          const double d2Qt_22 = Vmf * Vmt * (Btf * cos_thetatf - Gtf * sin_thetatf);
+          const double d2Qt_23 = Vmf * (Btf * sin_thetatf + Gtf * cos_thetatf);
+
+          const double d2Qt_33 = -2.0 * Btt;
+
+          const double H00 = lambdaPf * d2Pf_00 + lambdaQf * d2Qf_00 + lambdaPt * d2Pt_00 + lambdaQt * d2Qt_00;
+          const double H01 = lambdaPf * d2Pf_01 + lambdaQf * d2Qf_01 + lambdaPt * d2Pt_01 + lambdaQt * d2Qt_01;
+          const double H02 = lambdaPf * d2Pf_02 + lambdaQf * d2Qf_02 + lambdaPt * d2Pt_02 + lambdaQt * d2Qt_02;
+          const double H03 = lambdaPf * d2Pf_03 + lambdaQf * d2Qf_03 + lambdaPt * d2Pt_03 + lambdaQt * d2Qt_03;
+
+          const double H11 = lambdaPf * d2Pf_11 + lambdaQf * d2Qf_11 + lambdaPt * d2Pt_11 + lambdaQt * d2Qt_11;
+          const double H12 = lambdaPf * d2Pf_12 + lambdaQf * d2Qf_12 + lambdaPt * d2Pt_12 + lambdaQt * d2Qt_12;
+          const double H13 = lambdaPf * d2Pf_13 + lambdaQf * d2Qf_13 + lambdaPt * d2Pt_13 + lambdaQt * d2Qt_13;
+
+          const double H22 = lambdaPf * d2Pf_22 + lambdaQf * d2Qf_22 + lambdaPt * d2Pt_22 + lambdaQt * d2Qt_22;
+          const double H23 = lambdaPf * d2Pf_23 + lambdaQf * d2Qf_23 + lambdaPt * d2Pt_23 + lambdaQt * d2Qt_23;
+
+          const double H33 = lambdaPf * d2Pf_33 + lambdaQf * d2Qf_33 + lambdaPt * d2Pt_33 + lambdaQt * d2Qt_33;
+
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 0]]], H00);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 1]]], H01);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 2]]], H02);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 3]]], H03);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 4]]], H11);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 5]]], H12);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 6]]], H13);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 7]]], H22);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 8]]], H23);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_eq_idx[base + 9]]], H33);
+        });
+  }
+
+  // Line inequality constraints Hessian (4x4, 10 upper triangular)
+  {
+    const int *line_xidxf = lineparams->xidxf_dev_;
+    const int *line_xidxt = lineparams->xidxt_dev_;
+    const int *line_linelimidx = lineparams->linelimidx_dev_;
+    const int *line_isdcline = lineparams->isdcline_dev_;
+    const int *line_gineqidx = lineparams->gineqidx_dev_;
+    const int *line_hesssp_ineq_idx = lineparams->hesssp_ineq_idx_dev_;
+
+    const double *line_Gff = lineparams->Gff_dev_;
+    const double *line_Bff = lineparams->Bff_dev_;
+    const double *line_Gft = lineparams->Gft_dev_;
+    const double *line_Bft = lineparams->Bft_dev_;
+    const double *line_Gtf = lineparams->Gtf_dev_;
+    const double *line_Btf = lineparams->Btf_dev_;
+    const double *line_Gtt = lineparams->Gtt_dev_;
+    const double *line_Btt = lineparams->Btt_dev_;
+
+    RAJA::forall<exago_raja_exec>(
+        RAJA::RangeSegment(0, lineparams->nlinelim),
+        RAJA_LAMBDA(RAJA::Index_type imon) {
+          const int iline = line_linelimidx[imon];
+          if (line_isdcline[iline])
+            return;
+
+          const int xlocf = line_xidxf[iline];
+          const int xloct = line_xidxt[iline];
+          const int base = 10 * imon;
+
+          const int gloc = line_gineqidx[imon];
+
+          const double lambdai_gloc = lambdai_dev[gloc];
+          const double lambdai_gloc1 = lambdai_dev[gloc + 1];
+
+          const double thetaf = x_dev[xlocf];
+          const double Vmf = x_dev[xlocf + 1];
+          const double thetat = x_dev[xloct];
+          const double Vmt = x_dev[xloct + 1];
+
+          const double thetaft = thetaf - thetat;
+          const double thetatf = thetat - thetaf;
+
+          const double sin_thetaft = sin(thetaft);
+          const double cos_thetaft = cos(thetaft);
+          const double sin_thetatf = sin(thetatf);
+          const double cos_thetatf = cos(thetatf);
+
+          const double Gff = line_Gff[iline];
+          const double Bff = line_Bff[iline];
+          const double Gft = line_Gft[iline];
+          const double Bft = line_Bft[iline];
+          const double Gtf = line_Gtf[iline];
+          const double Btf = line_Btf[iline];
+          const double Gtt = line_Gtt[iline];
+          const double Btt = line_Btt[iline];
+
+          const double Pf = Gff * Vmf * Vmf +
+                            Vmf * Vmt * (Gft * cos_thetaft + Bft * sin_thetaft);
+          const double Qf =
+              -Bff * Vmf * Vmf +
+              Vmf * Vmt * (-Bft * cos_thetaft + Gft * sin_thetaft);
+
+          const double Pt = Gtt * Vmt * Vmt +
+                            Vmt * Vmf * (Gtf * cos_thetatf + Btf * sin_thetatf);
+          const double Qt =
+              -Btt * Vmt * Vmt +
+              Vmt * Vmf * (-Btf * cos_thetatf + Gtf * sin_thetatf);
+
+          const double dPf_dthetaf =
+              Vmf * Vmt * (-Gft * sin_thetaft + Bft * cos_thetaft);
+          const double dPf_dVmf =
+              2.0 * Gff * Vmf + Vmt * (Gft * cos_thetaft + Bft * sin_thetaft);
+          const double dPf_dthetat =
+              Vmf * Vmt * (Gft * sin_thetaft - Bft * cos_thetaft);
+          const double dPf_dVmt = Vmf * (Gft * cos_thetaft + Bft * sin_thetaft);
+
+          const double dQf_dthetaf =
+              Vmf * Vmt * (Bft * sin_thetaft + Gft * cos_thetaft);
+          const double dQf_dVmf =
+              -2.0 * Bff * Vmf + Vmt * (-Bft * cos_thetaft + Gft * sin_thetaft);
+          const double dQf_dthetat =
+              Vmf * Vmt * (-Bft * sin_thetaft - Gft * cos_thetaft);
+          const double dQf_dVmt =
+              Vmf * (-Bft * cos_thetaft + Gft * sin_thetaft);
+
+          const double dPt_dthetat =
+              Vmt * Vmf * (-Gtf * sin_thetatf + Btf * cos_thetatf);
+          const double dPt_dVmt =
+              2.0 * Gtt * Vmt + Vmf * (Gtf * cos_thetatf + Btf * sin_thetatf);
+          const double dPt_dthetaf =
+              Vmt * Vmf * (Gtf * sin_thetatf - Btf * cos_thetatf);
+          const double dPt_dVmf = Vmt * (Gtf * cos_thetatf + Btf * sin_thetatf);
+
+          const double dQt_dthetat =
+              Vmt * Vmf * (Btf * sin_thetatf + Gtf * cos_thetatf);
+          const double dQt_dVmt =
+              -2.0 * Btt * Vmt + Vmf * (-Btf * cos_thetatf + Gtf * sin_thetatf);
+          const double dQt_dthetaf =
+              Vmt * Vmf * (-Btf * sin_thetatf - Gtf * cos_thetatf);
+          const double dQt_dVmf =
+              Vmt * (-Btf * cos_thetatf + Gtf * sin_thetatf);
+
+          const double d2Pf_dthetaf_dthetaf =
+              -Vmf * Vmt * (Gft * cos_thetaft + Bft * sin_thetaft);
+          const double d2Pf_dthetaf_dVmf =
+              Vmt * (-Gft * sin_thetaft + Bft * cos_thetaft);
+          const double d2Pf_dthetaf_dthetat =
+              Vmf * Vmt * (Gft * cos_thetaft + Bft * sin_thetaft);
+          const double d2Pf_dthetaf_dVmt =
+              Vmf * (-Gft * sin_thetaft + Bft * cos_thetaft);
+
+          const double d2Pf_dVmf_dthetaf =
+              Vmt * (-Gft * sin_thetaft + Bft * cos_thetaft);
+          const double d2Pf_dVmf_dVmf = 2.0 * Gff;
+          const double d2Pf_dVmf_dthetat =
+              Vmt * (Gft * sin_thetaft - Bft * cos_thetaft);
+          const double d2Pf_dVmf_dVmt = (Gft * cos_thetaft + Bft * sin_thetaft);
+
+          const double d2Pf_dthetat_dthetaf =
+              Vmf * Vmt * (Gft * cos_thetaft + Bft * sin_thetaft);
+          const double d2Pf_dthetat_dVmf =
+              Vmt * (Gft * sin_thetaft - Bft * cos_thetaft);
+          const double d2Pf_dthetat_dthetat =
+              Vmf * Vmt * (-Gft * cos_thetaft - Bft * sin_thetaft);
+          const double d2Pf_dthetat_dVmt =
+              Vmf * (Gft * sin_thetaft - Bft * cos_thetaft);
+
+          const double d2Pf_dVmt_dthetaf =
+              Vmf * (-Gft * sin_thetaft + Bft * cos_thetaft);
+          const double d2Pf_dVmt_dVmf = (Gft * cos_thetaft + Bft * sin_thetaft);
+          const double d2Pf_dVmt_dthetat =
+              Vmf * (Gft * sin_thetaft - Bft * cos_thetaft);
+          const double d2Pf_dVmt_dVmt = 0.0;
+
+          const double d2Qf_dthetaf_dthetaf =
+              Vmf * Vmt * (Bft * cos_thetaft - Gft * sin_thetaft);
+          const double d2Qf_dthetaf_dVmf =
+              Vmt * (Bft * sin_thetaft + Gft * cos_thetaft);
+          const double d2Qf_dthetaf_dthetat =
+              Vmf * Vmt * (-Bft * cos_thetaft + Gft * sin_thetaft);
+          const double d2Qf_dthetaf_dVmt =
+              Vmf * (Bft * sin_thetaft + Gft * cos_thetaft);
+
+          const double d2Qf_dVmf_dthetaf =
+              Vmt * (Bft * sin_thetaft + Gft * cos_thetaft);
+          const double d2Qf_dVmf_dVmf = -2.0 * Bff;
+          const double d2Qf_dVmf_dthetat =
+              Vmt * (-Bft * sin_thetaft - Gft * cos_thetaft);
+          const double d2Qf_dVmf_dVmt =
+              (-Bft * cos_thetaft + Gft * sin_thetaft);
+
+          const double d2Qf_dthetat_dthetaf =
+              Vmf * Vmt * (-Bft * cos_thetaft + Gft * sin_thetaft);
+          const double d2Qf_dthetat_dVmf =
+              Vmt * (-Bft * sin_thetaft - Gft * cos_thetaft);
+          const double d2Qf_dthetat_dthetat =
+              Vmf * Vmt * (Bft * cos_thetaft - Gft * sin_thetaft);
+          const double d2Qf_dthetat_dVmt =
+              Vmf * (-Bft * sin_thetaft - Gft * cos_thetaft);
+
+          const double d2Qf_dVmt_dthetaf =
+              Vmf * (Bft * sin_thetaft + Gft * cos_thetaft);
+          const double d2Qf_dVmt_dVmf =
+              (-Bft * cos_thetaft + Gft * sin_thetaft);
+          const double d2Qf_dVmt_dthetat =
+              Vmf * (-Bft * sin_thetaft - Gft * cos_thetaft);
+          const double d2Qf_dVmt_dVmt = 0.0;
+
+          const double d2Pt_dthetat_dthetat =
+              Vmf * Vmt * (-Gtf * cos_thetatf - Btf * sin_thetatf);
+          const double d2Pt_dthetat_dVmt =
+              Vmf * (-Gtf * sin_thetatf + Btf * cos_thetatf);
+          const double d2Pt_dthetat_dthetaf =
+              Vmf * Vmt * (Gtf * cos_thetatf + Btf * sin_thetatf);
+          const double d2Pt_dthetat_dVmf =
+              Vmt * (-Gtf * sin_thetatf + Btf * cos_thetatf);
+
+          const double d2Pt_dVmt_dthetat =
+              Vmf * (-Gtf * sin_thetatf + Bft * cos_thetatf);
+          const double d2Pt_dVmt_dVmt = 2.0 * Gtt;
+          const double d2Pt_dVmt_dthetaf =
+              Vmf * (Gtf * sin_thetatf - Btf * cos_thetatf);
+          const double d2Pt_dVmt_dVmf =
+              (Gtf * cos_thetatf + Btf * sin_thetatf);
+
+          const double d2Pt_dthetaf_dthetat =
+              Vmf * Vmt * (Gtf * cos_thetatf + Btf * sin_thetatf);
+          const double d2Pt_dthetaf_dVmt =
+              Vmf * (Gtf * sin_thetatf - Btf * cos_thetatf);
+          const double d2Pt_dthetaf_dthetaf =
+              Vmf * Vmt * (-Gtf * cos_thetatf - Btf * sin_thetatf);
+          const double d2Pt_dthetaf_dVmf =
+              Vmt * (Gtf * sin_thetatf - Btf * cos_thetatf);
+
+          const double d2Pt_dVmf_dthetat =
+              Vmt * (-Gtf * sin_thetatf + Btf * cos_thetatf);
+          const double d2Pt_dVmf_dVmt =
+              (Gtf * cos_thetatf + Btf * sin_thetatf);
+          const double d2Pt_dVmf_dthetaf =
+              Vmt * (Gtf * sin_thetatf - Btf * cos_thetatf);
+          const double d2Pt_dVmf_dVmf = 0.0;
+
+          const double d2Qt_dthetat_dthetat =
+              Vmf * Vmt * (Btf * cos_thetatf - Gtf * sin_thetatf);
+          const double d2Qt_dthetat_dVmt =
+              Vmf * (Btf * sin_thetatf + Gtf * cos_thetatf);
+          const double d2Qt_dthetat_dthetaf =
+              Vmf * Vmt * (-Btf * cos_thetatf + Gtf * sin_thetatf);
+          const double d2Qt_dthetat_dVmf =
+              Vmf * (Btf * sin_thetatf + Gtf * cos_thetatf);
+
+          const double d2Qt_dVmt_dthetat =
+              Vmf * (Btf * sin_thetatf + Gtf * cos_thetatf);
+          const double d2Qt_dVmt_dVmt = -2.0 * Btt;
+          const double d2Qt_dVmt_dthetaf =
+              Vmf * (-Btf * sin_thetatf + Gtf * cos_thetatf);
+          const double d2Qt_dVmt_dVmf =
+              (-Btf * cos_thetatf + Gtf * sin_thetatf);
+
+          const double d2Qt_dthetaf_dthetat =
+              Vmf * Vmt * (-Btf * cos_thetatf + Gtf * sin_thetatf);
+          const double d2Qt_dthetaf_dVmt =
+              Vmf * (-Btf * sin_thetatf - Gtf * cos_thetatf);
+          const double d2Qt_dthetaf_dthetaf =
+              Vmf * Vmt * (Btf * cos_thetatf - Gtf * sin_thetatf);
+          const double d2Qt_dthetaf_dVmf =
+              Vmt * (-Btf * sin_thetatf - Gtf * cos_thetatf);
+
+          const double d2Qt_dVmf_dthetat =
+              Vmt * (Btf * sin_thetatf + Gtf * cos_thetatf);
+          const double d2Qt_dVmf_dVmt =
+              (-Btf * cos_thetatf + Gtf * sin_thetatf);
+          const double d2Qt_dVmf_dthetaf =
+              Vmt * (-Btf * sin_thetatf - Gtf * cos_thetatf);
+          const double d2Qt_dVmf_dVmf = 0.0;
+
+          const double dSf2_dPf = 2.0 * Pf;
+          const double dSf2_dQf = 2.0 * Qf;
+          const double dSt2_dPt = 2.0 * Pt;
+          const double dSt2_dQt = 2.0 * Qt;
+
+          const double d2Sf2_00 = 2.0 * dPf_dthetaf * dPf_dthetaf + dSf2_dPf * d2Pf_dthetaf_dthetaf +
+                                  2.0 * dQf_dthetaf * dQf_dthetaf + dSf2_dQf * d2Qf_dthetaf_dthetaf;
+          const double d2Sf2_01 = 2.0 * dPf_dVmf * dPf_dthetaf + dSf2_dPf * d2Pf_dthetaf_dVmf +
+                                  2.0 * dQf_dVmf * dQf_dthetaf + dSf2_dQf * d2Qf_dthetaf_dVmf;
+          const double d2Sf2_02 = 2.0 * dPf_dthetat * dPf_dthetaf + dSf2_dPf * d2Pf_dthetaf_dthetat +
+                                  2.0 * dQf_dthetat * dQf_dthetaf + dSf2_dQf * d2Qf_dthetaf_dthetat;
+          const double d2Sf2_03 = 2.0 * dPf_dVmt * dPf_dthetaf + dSf2_dPf * d2Pf_dthetaf_dVmt +
+                                  2.0 * dQf_dVmt * dQf_dthetaf + dSf2_dQf * d2Qf_dthetaf_dVmt;
+
+          const double d2Sf2_11 = 2.0 * dPf_dVmf * dPf_dVmf + dSf2_dPf * d2Pf_dVmf_dVmf +
+                                  2.0 * dQf_dVmf * dQf_dVmf + dSf2_dQf * d2Qf_dVmf_dVmf;
+          const double d2Sf2_12 = 2.0 * dPf_dthetat * dPf_dVmf + dSf2_dPf * d2Pf_dVmf_dthetat +
+                                  2.0 * dQf_dthetat * dQf_dVmf + dSf2_dQf * d2Qf_dVmf_dthetat;
+          const double d2Sf2_13 = 2.0 * dPf_dVmt * dPf_dVmf + dSf2_dPf * d2Pf_dVmf_dVmt +
+                                  2.0 * dQf_dVmt * dQf_dVmf + dSf2_dQf * d2Qf_dVmf_dVmt;
+
+          const double d2Sf2_22 = 2.0 * dPf_dthetat * dPf_dthetat + dSf2_dPf * d2Pf_dthetat_dthetat +
+                                  2.0 * dQf_dthetat * dQf_dthetat + dSf2_dQf * d2Qf_dthetat_dthetat;
+          const double d2Sf2_23 = 2.0 * dPf_dVmt * dPf_dthetat + dSf2_dPf * d2Pf_dthetat_dVmt +
+                                  2.0 * dQf_dVmt * dQf_dthetat + dSf2_dQf * d2Qf_dthetat_dVmt;
+
+          const double d2Sf2_33 = 2.0 * dPf_dVmt * dPf_dVmt + dSf2_dPf * d2Pf_dVmt_dVmt +
+                                  2.0 * dQf_dVmt * dQf_dVmt + dSf2_dQf * d2Qf_dVmt_dVmt;
+
+          const double d2St2_00 = 2.0 * dPt_dthetaf * dPt_dthetaf + dSt2_dPt * d2Pt_dthetaf_dthetaf +
+                                  2.0 * dQt_dthetaf * dQt_dthetaf + dSt2_dQt * d2Qt_dthetaf_dthetaf;
+          const double d2St2_01 = 2.0 * dPt_dVmf * dPt_dthetaf + dSt2_dPt * d2Pt_dthetaf_dVmf +
+                                  2.0 * dQt_dVmf * dQt_dthetaf + dSt2_dQt * d2Qt_dthetaf_dVmf;
+          const double d2St2_02 = 2.0 * dPt_dthetat * dPt_dthetaf + dSt2_dPt * d2Pt_dthetaf_dthetat +
+                                  2.0 * dQt_dthetat * dQt_dthetaf + dSt2_dQt * d2Qt_dthetaf_dthetat;
+          const double d2St2_03 = 2.0 * dPt_dVmt * dPt_dthetaf + dSt2_dPt * d2Pt_dthetaf_dVmt +
+                                  2.0 * dQt_dVmt * dQt_dthetaf + dSt2_dQt * d2Qt_dthetaf_dVmt;
+
+          const double d2St2_11 = 2.0 * dPt_dVmf * dPt_dVmf + dSt2_dPt * d2Pt_dVmf_dVmf +
+                                  2.0 * dQt_dVmf * dQt_dVmf + dSt2_dQt * d2Qt_dVmf_dVmf;
+          const double d2St2_12 = 2.0 * dPt_dthetat * dPt_dVmf + dSt2_dPt * d2Pt_dVmf_dthetat +
+                                  2.0 * dQt_dthetat * dQt_dVmf + dSt2_dQt * d2Qt_dVmf_dthetat;
+          const double d2St2_13 = 2.0 * dPt_dVmt * dPt_dVmf + dSt2_dPt * d2Pt_dVmf_dVmt +
+                                  2.0 * dQt_dVmt * dQt_dVmf + dSt2_dQt * d2Qt_dVmf_dVmt;
+
+          const double d2St2_22 = 2.0 * dPt_dthetat * dPt_dthetat + dSt2_dPt * d2Pt_dthetat_dthetat +
+                                  2.0 * dQt_dthetat * dQt_dthetat + dSt2_dQt * d2Qt_dthetat_dthetat;
+          const double d2St2_23 = 2.0 * dPt_dVmt * dPt_dthetat + dSt2_dPt * d2Pt_dthetat_dVmt +
+                                  2.0 * dQt_dVmt * dQt_dthetat + dSt2_dQt * d2Qt_dthetat_dVmt;
+
+          const double d2St2_33 = 2.0 * dPt_dVmt * dPt_dVmt + dSt2_dPt * d2Pt_dVmt_dVmt +
+                                  2.0 * dQt_dVmt * dQt_dVmt + dSt2_dQt * d2Qt_dVmt_dVmt;
+
+          const double H00 = lambdai_gloc * d2Sf2_00 + lambdai_gloc1 * d2St2_00;
+          const double H01 = lambdai_gloc * d2Sf2_01 + lambdai_gloc1 * d2St2_01;
+          const double H02 = lambdai_gloc * d2Sf2_02 + lambdai_gloc1 * d2St2_02;
+          const double H03 = lambdai_gloc * d2Sf2_03 + lambdai_gloc1 * d2St2_03;
+          const double H11 = lambdai_gloc * d2Sf2_11 + lambdai_gloc1 * d2St2_11;
+          const double H12 = lambdai_gloc * d2Sf2_12 + lambdai_gloc1 * d2St2_12;
+          const double H13 = lambdai_gloc * d2Sf2_13 + lambdai_gloc1 * d2St2_13;
+          const double H22 = lambdai_gloc * d2Sf2_22 + lambdai_gloc1 * d2St2_22;
+          const double H23 = lambdai_gloc * d2Sf2_23 + lambdai_gloc1 * d2St2_23;
+          const double H33 = lambdai_gloc * d2Sf2_33 + lambdai_gloc1 * d2St2_33;
+
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 0]]], H00);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 1]]], H01);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 2]]], H02);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 3]]], H03);
+
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 4]]], H11);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 5]]], H12);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 6]]], H13);
+
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 7]]], H22);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 8]]], H23);
+
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[line_hesssp_ineq_idx[base + 9]]], H33);
+        });
+  }
+
+  // Power-imbalance objective Hessian (2 diagonal entries)
+  if (opflow->include_powerimbalance_variables) {
+    const int *bus_hesssp_obj_idx = busparams->hesssp_obj_idx_dev_;
+
+    RAJA::forall<exago_raja_exec>(
+        RAJA::RangeSegment(0, busparams->nbus),
+        RAJA_LAMBDA(RAJA::Index_type ibus) {
+          const int base = 2 * ibus;
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[bus_hesssp_obj_idx[base + 0]]], 0.0);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[bus_hesssp_obj_idx[base + 1]]], 0.0);
+        });
+  }
+
+  // Gen objective Hessian (1 diagonal entry)
+  {
+    const double obj_factor = opflow->obj_factor;
+    const double weight = opflow->weight;
+    const double MVAbase = ps->MVAbase;
+
+    const double *gen_cost_alpha = genparams->cost_alpha_dev_;
+    const int *gen_hesssp_obj_idx = genparams->hesssp_obj_idx_dev_;
+
+    if (opflow->objectivetype == MIN_GEN_COST) {
+      RAJA::forall<exago_raja_exec>(
+          RAJA::RangeSegment(0, genparams->ngenON),
+          RAJA_LAMBDA(RAJA::Index_type igen) {
+            const double val = weight * obj_factor * 2.0 *
+                               gen_cost_alpha[igen] * MVAbase * MVAbase;
+            RAJA::atomicAdd<RAJA::auto_atomic>(
+                &hess_dev[perm_dev[gen_hesssp_obj_idx[igen]]], val);
+          });
+    } else if (opflow->objectivetype == MIN_GENSETPOINT_DEVIATION) {
+      RAJA::forall<exago_raja_exec>(
+          RAJA::RangeSegment(0, genparams->ngenON),
+          RAJA_LAMBDA(RAJA::Index_type igen) {
+            const double val = weight * obj_factor * 2.0;
+            RAJA::atomicAdd<RAJA::auto_atomic>(
+                &hess_dev[perm_dev[gen_hesssp_obj_idx[igen]]], val);
+          });
+    }
+  }
+
+  // Load objective Hessian (2 diagonal entries)
+  if (opflow->include_loadloss_variables) {
+    const int *load_hesssp_obj_idx = loadparams->hesssp_obj_idx_dev_;
+
+    RAJA::forall<exago_raja_exec>(
+        RAJA::RangeSegment(0, loadparams->nload),
+        RAJA_LAMBDA(RAJA::Index_type iload) {
+          const int base = 2 * iload;
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[load_hesssp_obj_idx[base + 0]]], 0.0);
+          RAJA::atomicAdd<RAJA::auto_atomic>(
+              &hess_dev[perm_dev[load_hesssp_obj_idx[base + 1]]], 0.0);
+        });
+  }
 }
 
 #endif // EXAGO_ENABLE_HIOP_SPARSE

@@ -115,7 +115,7 @@ int BUSParamsRajaHiop::copy(OPFLOW opflow) {
   xidxpimb_dev_ = xidxpimb;
   gidx_dev_ = gidx;
   eqjacsp_idx_dev_ = eqjacsp_idx;
-  hesssp_eq_idx_dev = hesssp_eq_idx;
+  hesssp_eq_idx_dev_ = hesssp_eq_idx;
   jacsp_idx_dev_ = jacsp_idx;
   jacsq_idx_dev_ = jacsq_idx;
   powerimbalance_penalty_dev_ = powerimbalance_penalty;

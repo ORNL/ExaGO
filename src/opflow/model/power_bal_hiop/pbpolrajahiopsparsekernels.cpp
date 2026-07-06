@@ -986,9 +986,9 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
         (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
 
     int *iRow_temp =
-        (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+        (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
     int *jCol_temp =
-        (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+        (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
 
     PS ps = opflow->ps;
     BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
@@ -1012,24 +1012,24 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
 
       store_entry(lineparams->hesssp_eq_idx[base + 0], xlocf, xlocf, iRow_temp,
                   jCol_temp);
-      store_entry(lineparams->hesssp_eq_idx[base + 1], xlocf, xlocf + 1, iRow_temp,
-                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 1], xlocf, xlocf + 1,
+                  iRow_temp, jCol_temp);
       store_entry(lineparams->hesssp_eq_idx[base + 2], xlocf, xloct, iRow_temp,
                   jCol_temp);
-      store_entry(lineparams->hesssp_eq_idx[base + 3], xlocf, xloct + 1, iRow_temp,
-                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 3], xlocf, xloct + 1,
+                  iRow_temp, jCol_temp);
 
       store_entry(lineparams->hesssp_eq_idx[base + 4], xlocf + 1, xlocf + 1,
                   iRow_temp, jCol_temp);
-      store_entry(lineparams->hesssp_eq_idx[base + 5], xlocf + 1, xloct, iRow_temp,
-                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 5], xlocf + 1, xloct,
+                  iRow_temp, jCol_temp);
       store_entry(lineparams->hesssp_eq_idx[base + 6], xlocf + 1, xloct + 1,
                   iRow_temp, jCol_temp);
 
       store_entry(lineparams->hesssp_eq_idx[base + 7], xloct, xloct, iRow_temp,
                   jCol_temp);
-      store_entry(lineparams->hesssp_eq_idx[base + 8], xloct, xloct + 1, iRow_temp,
-                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 8], xloct, xloct + 1,
+                  iRow_temp, jCol_temp);
 
       store_entry(lineparams->hesssp_eq_idx[base + 9], xloct + 1, xloct + 1,
                   iRow_temp, jCol_temp);
@@ -1092,26 +1092,26 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
       const int xloct = lineparams->xidxt[iline];
       const int base = 10 * imon;
 
-      store_entry(lineparams->hesssp_ineq_idx[base + 0], xlocf, xlocf, iRow_temp,
-                  jCol_temp);
-      store_entry(lineparams->hesssp_ineq_idx[base + 1], xlocf, xlocf + 1, iRow_temp,
-                  jCol_temp);
-      store_entry(lineparams->hesssp_ineq_idx[base + 2], xlocf, xloct, iRow_temp,
-                  jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 0], xlocf, xlocf,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 1], xlocf, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 2], xlocf, xloct,
+                  iRow_temp, jCol_temp);
       store_entry(lineparams->hesssp_ineq_idx[base + 3], xlocf, xloct + 1, iRow,
                   jCol_temp);
 
       store_entry(lineparams->hesssp_ineq_idx[base + 4], xlocf + 1, xlocf + 1,
                   iRow_temp, jCol_temp);
-      store_entry(lineparams->hesssp_ineq_idx[base + 5], xlocf + 1, xloct, iRow_temp,
-                  jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 5], xlocf + 1, xloct,
+                  iRow_temp, jCol_temp);
       store_entry(lineparams->hesssp_ineq_idx[base + 6], xlocf + 1, xloct + 1,
                   iRow_temp, jCol_temp);
 
-      store_entry(lineparams->hesssp_ineq_idx[base + 7], xloct, xloct, iRow_temp,
-                  jCol_temp);
-      store_entry(lineparams->hesssp_ineq_idx[base + 8], xloct, xloct + 1, iRow_temp,
-                  jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 7], xloct, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 8], xloct, xloct + 1,
+                  iRow_temp, jCol_temp);
 
       store_entry(lineparams->hesssp_ineq_idx[base + 9], xloct + 1, xloct + 1,
                   iRow_temp, jCol_temp);
@@ -1196,7 +1196,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
        No H2D, D2H copies: x_dev is already on device, output goes
        straight into MHSS_dev. */
     ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
-        opflow, x_dev, lambda_dev, pbpolrajahiopsparse->perm_hess_dev, MHSS_dev);
+        opflow, x_dev, lambda_dev, lambda_dev + opflow->nconeq,
+        pbpolrajahiopsparse->perm_hess_dev, MHSS_dev);
 
     ierr = PetscLogEventEnd(opflow->hesslogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
