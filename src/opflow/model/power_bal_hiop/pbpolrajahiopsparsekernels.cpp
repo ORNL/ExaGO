@@ -985,7 +985,6 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     int *jCol_temp =
         (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
 
-    PS ps = opflow->ps;
     BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
     GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
     LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
