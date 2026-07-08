@@ -229,8 +229,11 @@ extern PetscErrorCode OPFLOWModelSetUp_PBPOL(OPFLOW);
 
 /** @brief Helper function to ensure Hessian entries are not duplicated
  *
- * @note Some of the diagonal terms are guarantied to never overalap, the
- * uniformly using the helper function looks cleaner.
+ * @note Some of the diagonal terms are guarantied to never overalap, 
+ * but uniformly using the helper function looks cleaner.
+ *
+ * @todo Evaluate the cost of this setup and consider std::unordered_map 
+ * instead of std::map.
  */
 static inline int
 count_entry(std::map<std::pair<int, int>, int> &existing_pairs, int r, int c,
@@ -284,7 +287,7 @@ PetscErrorCode OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE(OPFLOW opflow) {
   PSLINE line;
   PetscInt i, k;
 
-  /* Store the AGC variable index (scalar) */
+  /* Store the automatic generation control (AGC) variable index (scalar) */
   if (opflow->use_agc) {
     pbpolrajahiopsparse->agc_xidx = ps->startxloc;
   } else {

@@ -884,6 +884,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     }
 
     // Sort and permute indices
+    // @todo Evaluate the cost of this for large systems
+    // Consider moving the index storage (and sorting) to GPU
     std::vector<int> perm_temp(opflow->nnz_eqjacsp);
     std::iota(perm_temp.begin(), perm_temp.end(), 0);
     std::sort(perm_temp.begin(), perm_temp.end(), [&](int i, int j) {
@@ -1145,6 +1147,8 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     }
 
     // Sort and permute indices
+    // @todo Evaluate the cost of this for large systems
+    // Consider moving the index storage (and sorting) to GPU
     std::vector<int> perm_temp(opflow->nnz_hesssp);
     std::iota(perm_temp.begin(), perm_temp.end(), 0);
     std::sort(perm_temp.begin(), perm_temp.end(), [&](int i, int j) {
