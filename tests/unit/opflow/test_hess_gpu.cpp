@@ -23,39 +23,38 @@ struct TripletEntry {
   double val;
 };
 
-static void computeReferenceJacobian(OPFLOW opflow, Vec X,
-                                     std::vector<TripletEntry> &entries) {
+static void computeReferenceHessian(OPFLOW opflow,
+                                    std::vector<TripletEntry> &entries) {
   PetscErrorCode ierr;
-  ierr = (*opflow->modelops.computeequalityconstraintjacobian)(opflow, X,
-                                                               opflow->Jac_Ge);
+  ierr = (*opflow->modelops.computehessian)(opflow, opflow->X, opflow->Lambdae,
+                                            opflow->Lambdai, opflow->Hes);
 
   PetscInt nrow, ncol;
-  ierr = MatGetSize(opflow->Jac_Ge, &nrow, &ncol);
+  ierr = MatGetSize(opflow->Hes, &nrow, &ncol);
 
   for (PetscInt i = 0; i < nrow; i++) {
     PetscInt nvals;
     const PetscInt *cols;
     const PetscScalar *vals;
-    ierr = MatGetRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
+    ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
     for (PetscInt j = 0; j < nvals; j++) {
-      entries.push_back({(int)i, (int)cols[j], vals[j]});
+      if (cols[j] >= i) { // upper triangle
+        entries.push_back({(int)i, (int)cols[j], vals[j]});
+      }
     }
-    ierr = MatRestoreRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
+    ierr = MatRestoreRow(opflow->Hes, i, &nvals, &cols, &vals);
   }
 }
 
-static double benchmarkPETSc(OPFLOW opflow, Vec X, int niters) {
+static double benchmarkPETSc(OPFLOW opflow, int niters) {
   PetscErrorCode ierr;
-  PetscScalar *x_arr;
 
-  ierr = VecGetArray(X, &x_arr);
   auto t0 = Clock::now();
   for (int iter = 0; iter < niters; iter++) {
-    ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
-        opflow, X, opflow->Jac_Ge);
+    ierr = (*opflow->modelops.computehessian)(
+        opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
   }
   auto t1 = Clock::now();
-  ierr = VecRestoreArray(X, &x_arr);
 
   return Ms(t1 - t0).count() / niters;
 }
@@ -69,8 +68,7 @@ int main(int argc, char **argv) {
   MPI_Comm comm = MPI_COMM_WORLD;
   int niters = 1000;
 
-  char help[] =
-      "Compare and benchmark PETSc vs GPU equality constraint Jacobian\n";
+  char help[] = "Compare and benchmark PETSc vs GPU Hessian\n";
 
   ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);
   if (ierr) {
@@ -87,7 +85,8 @@ int main(int argc, char **argv) {
 
   /* ----------------------------------------------------------------
    * Set up OPFLOW with PBPOL model (PETSc path) to get
-   * the reference Jacobian and the initial guess X.
+   * the reference Hessian, the initial guess X
+   * and the Lagrange multipliers.
    * ---------------------------------------------------------------- */
   OPFLOW opflow_ref;
   ierr = OPFLOWCreate(PETSC_COMM_WORLD, &opflow_ref);
@@ -107,8 +106,12 @@ int main(int argc, char **argv) {
   ierr = OPFLOWGetSolution(opflow_ref, &X_ref);
   CHKERRQ(ierr);
 
+  Vec Lambda_ref;
+  ierr = OPFLOWGetConstraintMultipliers(opflow_ref, &Lambda_ref);
+  CHKERRQ(ierr);
+
   std::vector<TripletEntry> ref_entries;
-  computeReferenceJacobian(opflow_ref, X_ref, ref_entries);
+  computeReferenceHessian(opflow_ref, ref_entries);
 
   /* ----------------------------------------------------------------
    * Set up OPFLOW with HIOPSPARSE to exercise the GPU path.
@@ -136,15 +139,21 @@ int main(int argc, char **argv) {
   ierr = OPFLOWGetSolution(opflow_gpu, &X_gpu);
   CHKERRQ(ierr);
 
+  Vec Lambda_gpu;
+  ierr = OPFLOWGetConstraintMultipliers(opflow_gpu, &Lambda_gpu);
+  CHKERRQ(ierr);
+
   int nx = opflow_gpu->nx;
-  int nnz_eq = opflow_gpu->nnz_eqjacsp;
+  int nnz_hess = opflow_gpu->nnz_hesssp;
+  int nconeq = opflow_gpu->nconeq;
+  int nconineq = opflow_gpu->nconineq;
 
   printf("\n");
   printf("============================================================\n");
-  printf("  Equality constraint Jacobian: PETSc vs GPU Comparison\n");
+  printf("  Hessian: PETSc vs GPU Comparison\n");
   printf("  Network: %s\n", file.c_str());
-  printf("  nx = %d, nconeq = %d, nnz_eqjac(GPU) = %d, nnz_eqjac(PETSc) = %d\n",
-         nx, opflow_gpu->nconeq, nnz_eq, (int)ref_entries.size());
+  printf("  nx = %d, nnz_hess(GPU) = %d, nnz_hess(PETSc) = %d\n", nx, nnz_hess,
+         (int)ref_entries.size());
   printf("============================================================\n\n");
 
 #if defined(EXAGO_ENABLE_RAJA)
@@ -155,42 +164,56 @@ int main(int argc, char **argv) {
   ierr = VecGetArray(X_gpu, &x_host);
   CHKERRQ(ierr);
 
+  double *lambda_host;
+  ierr = VecGetArray(Lambda_gpu, &lambda_host);
+  CHKERRQ(ierr);
+
   int *iRow, *jCol;
   double *values;
-  iRow = static_cast<int *>(h_allocator.allocate(nnz_eq * sizeof(int)));
-  jCol = static_cast<int *>(h_allocator.allocate(nnz_eq * sizeof(int)));
-  values = static_cast<double *>(h_allocator.allocate(nnz_eq * sizeof(double)));
+  iRow = static_cast<int *>(h_allocator.allocate(nnz_hess * sizeof(int)));
+  jCol = static_cast<int *>(h_allocator.allocate(nnz_hess * sizeof(int)));
+  values =
+      static_cast<double *>(h_allocator.allocate(nnz_hess * sizeof(double)));
 
 #ifdef EXAGO_ENABLE_GPU
   umpire::Allocator d_allocator = resmgr.getAllocator("DEVICE");
 
   double *x_dev =
       static_cast<double *>(d_allocator.allocate(nx * sizeof(double)));
+  double *lambda_dev = static_cast<double *>(
+      d_allocator.allocate((nconeq + nconineq) * sizeof(double)));
   int *iRow_dev =
-      static_cast<int *>(d_allocator.allocate(nnz_eq * sizeof(int)));
+      static_cast<int *>(d_allocator.allocate(nnz_hess * sizeof(int)));
   int *jCol_dev =
-      static_cast<int *>(d_allocator.allocate(nnz_eq * sizeof(int)));
+      static_cast<int *>(d_allocator.allocate(nnz_hess * sizeof(int)));
   double *values_dev =
-      static_cast<double *>(d_allocator.allocate(nnz_eq * sizeof(double)));
+      static_cast<double *>(d_allocator.allocate(nnz_hess * sizeof(double)));
 
   umpire::util::AllocationRecord record_x{x_host, sizeof(double) * nx,
                                           h_allocator.getAllocationStrategy()};
   resmgr.registerAllocation(x_host, record_x);
   resmgr.copy(x_dev, x_host);
+
+  umpire::util::AllocationRecord record_lambda{
+      lambda_host, sizeof(double) * (nconeq + nconineq),
+      h_allocator.getAllocationStrategy()};
+  resmgr.registerAllocation(lambda_host, record_lambda);
+  resmgr.copy(lambda_dev, lambda_host);
 #else
   double *x_dev = x_host;
+  double *lambda_dev = lambda_host;
   int *iRow_dev = iRow;
   int *jCol_dev = jCol;
   double *values_dev = values;
 #endif
 
-  /* Call the sparse eq jac function: first for sparsity, then for values */
-  ierr = (*opflow_gpu->modelops.computesparseequalityconstraintjacobianhiop)(
-      opflow_gpu, x_dev, iRow_dev, jCol_dev, NULL);
+  /* Call the sparse hessian function: first for sparsity, then for values */
+  ierr = (*opflow_gpu->modelops.computesparsehessianhiop)(
+      opflow_gpu, x_dev, lambda_dev, iRow_dev, jCol_dev, NULL);
   CHKERRQ(ierr);
 
-  ierr = (*opflow_gpu->modelops.computesparseequalityconstraintjacobianhiop)(
-      opflow_gpu, x_dev, NULL, NULL, values_dev);
+  ierr = (*opflow_gpu->modelops.computesparsehessianhiop)(
+      opflow_gpu, x_dev, lambda_dev, NULL, NULL, values_dev);
   CHKERRQ(ierr);
 
 #ifdef EXAGO_ENABLE_GPU
@@ -206,7 +229,7 @@ int main(int argc, char **argv) {
     }
   };
   std::unordered_map<std::pair<int, int>, double, PairHash> gpu_map;
-  for (int i = 0; i < nnz_eq; i++) {
+  for (int i = 0; i < nnz_hess; i++) {
     auto key = std::make_pair(iRow[i], jCol[i]);
     gpu_map[key] += values[i];
   }
@@ -215,6 +238,7 @@ int main(int argc, char **argv) {
    * Compare and print results
    * ---------------------------------------------------------------- */
   int n_match = 0, n_mismatch = 0, n_missing_gpu = 0, n_extra_gpu = 0;
+  int n_missing_gpu_zero = 0, n_extra_gpu_zero = 0;
   double max_abs_err = 0.0, max_rel_err = 0.0;
   int worst_row = -1, worst_col = -1;
   double worst_ref = 0, worst_gpu = 0;
@@ -241,8 +265,12 @@ int main(int argc, char **argv) {
     const char *status;
 
     if (!found) {
-      status = "MISSING";
       n_missing_gpu++;
+      if (fabs(e.val) < tol) {
+        n_missing_gpu_zero++;
+      } else {
+        status = "MISSING";
+      }
     } else if (abs_err < tol) {
       status = "OK";
       n_match++;
@@ -260,7 +288,7 @@ int main(int argc, char **argv) {
       worst_gpu = gpu_val;
     }
 
-    if (abs_err >= tol || !found) {
+    if (abs_err >= tol || (!found && fabs(e.val) > tol)) {
       printf("  %-8d %-8d %16.8e %16.8e %12.2e  %s\n", e.row, e.col, e.val,
              gpu_val, abs_err, status);
     }
@@ -270,44 +298,47 @@ int main(int argc, char **argv) {
   if (n_extra_gpu > 0) {
     printf("\n  Extra entries in GPU (not in PETSc reference):\n");
     for (const auto &kv : gpu_map) {
-      printf("  %-8d %-8d %16s %16.8e %12s  EXTRA\n", kv.first.first,
-             kv.first.second, "n/a", kv.second, "n/a");
+      if (fabs(kv.second) < tol) {
+        n_extra_gpu_zero++;
+      } else {
+        printf("  %-8d %-8d %16s %16.8e %12s  EXTRA\n", kv.first.first,
+               kv.first.second, "n/a", kv.second, "n/a");
+      }
     }
   }
+  int result = (n_mismatch == 0) && (n_missing_gpu - n_missing_gpu_zero) == 0 &&
+                       (n_extra_gpu - n_extra_gpu_zero) == 0
+                   ? 0
+                   : 1;
 
   printf("\n");
   printf("============================================================\n");
   printf("  Validation summary\n");
   printf("============================================================\n");
-  printf("  PETSc nnz:         %d\n", (int)ref_entries.size());
-  printf("  GPU nnz:           %d\n", nnz_eq);
-  printf("  Matching:          %d\n", n_match);
-  printf("  Mismatched:        %d\n", n_mismatch);
-  printf("  Missing in GPU:    %d\n", n_missing_gpu);
-  printf("  Extra in GPU:      %d\n", n_extra_gpu);
-  printf("  Max absolute err:  %.2e  at (%d, %d)  ref=%.8e  gpu=%.8e\n",
+  printf("  PETSc nnz:              %d\n", (int)ref_entries.size());
+  printf("  GPU nnz:                %d\n", nnz_hess);
+  printf("  Matching:               %d\n", n_match);
+  printf("  Mismatched:             %d\n", n_mismatch);
+  printf("  Missing in GPU and !=0: %d\n", n_missing_gpu - n_missing_gpu_zero);
+  printf("  Extra in GPU and !=0:   %d\n", n_extra_gpu - n_extra_gpu_zero);
+  printf("  Max absolute err:       %.2e  at (%d, %d)  ref=%.8e  gpu=%.8e\n",
          max_abs_err, worst_row, worst_col, worst_ref, worst_gpu);
-  printf("  Max relative err:  %.2e\n", max_rel_err);
-  printf("  Tolerance:         %.2e\n", tol);
-  printf("  RESULT:            %s\n",
-         (n_mismatch == 0 && n_missing_gpu == 0 && n_extra_gpu == 0) ? "PASS"
-                                                                     : "FAIL");
+  printf("  Max relative err:       %.2e\n", max_rel_err);
+  printf("  Tolerance:              %.2e\n", tol);
+  printf("  RESULT:                 %s\n", result == 0 ? "PASS" : "FAIL");
   printf("============================================================\n\n");
-
-  int result =
-      (n_mismatch == 0 && n_missing_gpu == 0 && n_extra_gpu == 0) ? 0 : 1;
 
   /* ----------------------------------------------------------------
    * Benchmark performance
    * ---------------------------------------------------------------- */
   /* Warmup and benchmark PETSc*/
-  benchmarkPETSc(opflow_ref, X_ref, 5);
-  double petsc_ms = benchmarkPETSc(opflow_ref, X_ref, niters);
+  benchmarkPETSc(opflow_ref, 5);
+  double petsc_ms = benchmarkPETSc(opflow_ref, niters);
 
   /* Warmup the GPU values kernel */
   for (int i = 0; i < 5; i++) {
-    ierr = (*opflow_gpu->modelops.computesparseequalityconstraintjacobianhiop)(
-        opflow_gpu, x_dev, NULL, NULL, values_dev);
+    ierr = (*opflow_gpu->modelops.computesparsehessianhiop)(
+        opflow_gpu, x_dev, lambda_dev, NULL, NULL, values_dev);
     CHKERRQ(ierr);
   }
 
@@ -319,8 +350,8 @@ int main(int argc, char **argv) {
   /* Timed runs */
   auto t0 = Clock::now();
   for (int iter = 0; iter < niters; iter++) {
-    ierr = (*opflow_gpu->modelops.computesparseequalityconstraintjacobianhiop)(
-        opflow_gpu, x_dev, NULL, NULL, values_dev);
+    ierr = (*opflow_gpu->modelops.computesparsehessianhiop)(
+        opflow_gpu, x_dev, lambda_dev, NULL, NULL, values_dev);
     CHKERRQ(ierr);
   }
 
@@ -337,6 +368,7 @@ int main(int argc, char **argv) {
   h_allocator.deallocate(values);
 #ifdef EXAGO_ENABLE_GPU
   d_allocator.deallocate(x_dev);
+  d_allocator.deallocate(lambda_dev);
   d_allocator.deallocate(iRow_dev);
   d_allocator.deallocate(jCol_dev);
   d_allocator.deallocate(values_dev);
@@ -350,7 +382,7 @@ int main(int argc, char **argv) {
    * ---------------------------------------------------------------- */
   printf("\n");
   printf("================================================================\n");
-  printf("  Equality constraint Jacobian — performance comparison\n");
+  printf("  Hessian — performance comparison\n");
   printf("================================================================\n");
   printf("  Iterations:       %d\n", niters);
   printf("----------------------------------------------------------------\n");

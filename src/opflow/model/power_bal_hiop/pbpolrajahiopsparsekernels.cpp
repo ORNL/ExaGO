@@ -600,8 +600,6 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
           (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
       pbpolrajahiopsparse->j_jacineq =
           (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
-      pbpolrajahiopsparse->val_jacineq = (double *)(h_allocator_.allocate(
-          opflow->nnz_ineqjacsp * sizeof(double)));
 
       iRowstart = pbpolrajahiopsparse->i_jacineq;
       jColstart = pbpolrajahiopsparse->j_jacineq;
@@ -886,6 +884,8 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     }
 
     // Sort and permute indices
+    // @todo Evaluate the cost of this for large systems
+    // Consider moving the index storage (and sorting) to GPU
     std::vector<int> perm_temp(opflow->nnz_eqjacsp);
     std::iota(perm_temp.begin(), perm_temp.end(), 0);
     std::sort(perm_temp.begin(), perm_temp.end(), [&](int i, int j) {
@@ -934,6 +934,17 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
+/** @brief Helper function to only store upper trianglular Hessian
+ *
+ */
+static inline void store_entry(const int slot, int r, int c, int *iRow,
+                               int *jCol) {
+  if (r > c)
+    std::swap(r, c);
+  iRow[slot] = r;
+  jCol[slot] = c;
+}
+
 /**
  * @brief Compute the Hessian of the Lagrangian for the PBPOLRAJAHIOPSPARSE
  * model.
@@ -950,23 +961,17 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, const double *lambda_dev, int *iHSS_dev,
     int *jHSS_dev, double *MHSS_dev) {
+
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
+
   PetscErrorCode ierr;
-  PetscInt *iRow, *jCol;
-  PetscScalar *x, *values, *lambda;
-  PetscInt nrow;
-  PetscInt nvals;
-  const PetscInt *cols;
-  const PetscScalar *vals;
-  PetscInt i, j;
-  PetscInt ctr = 0;
+
   auto &resmgr = umpire::ResourceManager::getInstance();
 
   PetscFunctionBegin;
 
   if (iHSS_dev != NULL && jHSS_dev != NULL) {
-
     // Create arrays on host to store i,j, and val arrays
     umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
@@ -974,129 +979,220 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
         (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
     pbpolrajahiopsparse->j_hess =
         (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
-    pbpolrajahiopsparse->val_hess =
-        (double *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(double)));
+    pbpolrajahiopsparse->perm_hess =
+        (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
 
-    iRow = pbpolrajahiopsparse->i_hess;
-    jCol = pbpolrajahiopsparse->j_hess;
+    int *iRow_temp =
+        (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
+    int *jCol_temp =
+        (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
 
-    // Function pointer computehessian points to the function
-    // OPFLOWComputeHessian_PBPOL in PBPOL model.
-    ierr = (*opflow->modelops.computehessian)(
-        opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
-    CHKERRQ(ierr);
-    ierr = MatGetSize(opflow->Hes, &nrow, &nrow);
-    CHKERRQ(ierr);
+    BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
+    GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
+    LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
+    LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
-    // Copy over locations to triplet format
-    //
-    // Note that HIOP requires a upper triangular Hessian as oppposed
-    // to IPOPT which requires a lower triangular Hessian
-    //
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      ctr = 0;
-      for (j = 0; j < nvals; j++) {
-        if (cols[j] >= i) { /* upper triangle */
-          /* save as upper triangle locations */
-          iRow[ctr] = i;
-          jCol[ctr] = cols[j];
-          ctr++;
-        }
-      }
-      iRow += ctr;
-      jCol += ctr;
-      ierr = MatRestoreRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
+    // Compute indices
+    // Bus equality constraint Hessian (1 diagonal entry)
+    for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+      const int xloc = busparams->xidx[ibus];
+      const int slot = busparams->hesssp_eq_idx[ibus];
+      store_entry(slot, xloc + 1, xloc + 1, iRow_temp, jCol_temp);
     }
 
-    // Copy over i_hess and j_hess arrays to device
+    // Line equality constraints Hessian (4x4, 10 upper triangular)
+    for (int iline = 0; iline < lineparams->nlineON; ++iline) {
+      const int xlocf = lineparams->xidxf[iline];
+      const int xloct = lineparams->xidxt[iline];
+      const int base = 10 * iline;
+
+      store_entry(lineparams->hesssp_eq_idx[base + 0], xlocf, xlocf, iRow_temp,
+                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 1], xlocf, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 2], xlocf, xloct, iRow_temp,
+                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 3], xlocf, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_eq_idx[base + 4], xlocf + 1, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 5], xlocf + 1, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 6], xlocf + 1, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_eq_idx[base + 7], xloct, xloct, iRow_temp,
+                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 8], xloct, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_eq_idx[base + 9], xloct + 1, xloct + 1,
+                  iRow_temp, jCol_temp);
+    }
+
+    // Generator AGC inequality constraints Hessian (3 upper triangular entries)
+    if (opflow->has_gensetpoint && opflow->use_agc) {
+      const int xloc_dpsys = pbpolrajahiopsparse->agc_xidx;
+
+      for (int g = 0; g < genparams->ngenON; ++g) {
+        if (genparams->isrenewable[g])
+          continue;
+
+        const int xloc_pg = genparams->xidx[g];
+        const int xloc_dev = genparams->xpdevidx[g];
+        const int base = 3 * g;
+
+        store_entry(genparams->hesssp_ineq_idx[base + 0], xloc_pg, xloc_pg,
+                    iRow_temp, jCol_temp);
+        store_entry(genparams->hesssp_ineq_idx[base + 1], xloc_pg, xloc_dev,
+                    iRow_temp, jCol_temp);
+        store_entry(genparams->hesssp_ineq_idx[base + 2], xloc_pg, xloc_dpsys,
+                    iRow_temp, jCol_temp);
+      }
+    }
+
+    // Set voltage inequality constraints Hessian (1 entry)
+    if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+      for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+        if (!(busparams->ispv[ibus] || busparams->isref[ibus]))
+          continue;
+
+        const int xloc_v = busparams->xidx[ibus] + 1;
+        const int goff = busparams->genoffset[ibus];
+        const int ngen = busparams->ngenONbus[ibus];
+
+        for (int k = 0; k < ngen; ++k) {
+          const int g = goff + k;
+          const int xloc_qg = genparams->xidx[g] + 1;
+
+          const int slot = busparams->hesssp_ineq_idx[g];
+          store_entry(slot, xloc_qg, xloc_v, iRow_temp, jCol_temp);
+        }
+      }
+    }
+
+    // Line inequality constraints Hessian (4x4, 10 upper triangular)
+    for (int imon = 0; imon < lineparams->nlinelim; ++imon) {
+      const int iline = lineparams->linelimidx[imon];
+      if (lineparams->isdcline[iline])
+        continue;
+
+      const int xlocf = lineparams->xidxf[iline];
+      const int xloct = lineparams->xidxt[iline];
+      const int base = 10 * imon;
+
+      store_entry(lineparams->hesssp_ineq_idx[base + 0], xlocf, xlocf,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 1], xlocf, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 2], xlocf, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 3], xlocf, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_ineq_idx[base + 4], xlocf + 1, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 5], xlocf + 1, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 6], xlocf + 1, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_ineq_idx[base + 7], xloct, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 8], xloct, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_ineq_idx[base + 9], xloct + 1, xloct + 1,
+                  iRow_temp, jCol_temp);
+    }
+
+    // Power-imbalance objective Hessian (2 diagonal entries)
+    if (opflow->include_powerimbalance_variables) {
+      for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+        const int xloc = busparams->xidxpimb[ibus];
+        const int base = 2 * ibus;
+
+        store_entry(busparams->hesssp_obj_idx[base + 0], xloc, xloc, iRow_temp,
+                    jCol_temp);
+        store_entry(busparams->hesssp_obj_idx[base + 1], xloc + 1, xloc + 1,
+                    iRow_temp, jCol_temp);
+      }
+    }
+
+    // Gen objective Hessian (1 diagonal entry)
+    if (opflow->objectivetype == MIN_GEN_COST ||
+        opflow->objectivetype == MIN_GENSETPOINT_DEVIATION) {
+      for (int igen = 0; igen < genparams->ngenON; ++igen) {
+        const int xloc = (opflow->objectivetype == MIN_GEN_COST)
+                             ? genparams->xidx[igen]
+                             : genparams->xpdevidx[igen];
+
+        const int slot = genparams->hesssp_obj_idx[igen];
+        store_entry(slot, xloc, xloc, iRow_temp, jCol_temp);
+      }
+    }
+
+    // Load objective Hessian (2 diagonal entries)
+    if (opflow->include_loadloss_variables) {
+      for (int iload = 0; iload < loadparams->nload; ++iload) {
+        const int xloc = loadparams->xidx[iload];
+        const int base = 2 * iload;
+
+        store_entry(loadparams->hesssp_obj_idx[base + 0], xloc, xloc, iRow_temp,
+                    jCol_temp);
+        store_entry(loadparams->hesssp_obj_idx[base + 1], xloc + 1, xloc + 1,
+                    iRow_temp, jCol_temp);
+      }
+    }
+
+    // Sort and permute indices
+    // @todo Evaluate the cost of this for large systems
+    // Consider moving the index storage (and sorting) to GPU
+    std::vector<int> perm_temp(opflow->nnz_hesssp);
+    std::iota(perm_temp.begin(), perm_temp.end(), 0);
+    std::sort(perm_temp.begin(), perm_temp.end(), [&](int i, int j) {
+      return (iRow_temp[i] != iRow_temp[j]) ? iRow_temp[i] < iRow_temp[j]
+                                            : jCol_temp[i] < jCol_temp[j];
+    });
+
+    int *iRow = pbpolrajahiopsparse->i_hess;
+    int *jCol = pbpolrajahiopsparse->j_hess;
+    int *perm = pbpolrajahiopsparse->perm_hess;
+    for (int i = 0; i < opflow->nnz_hesssp; i++) {
+      iRow[i] = iRow_temp[perm_temp[i]];
+      jCol[i] = jCol_temp[perm_temp[i]];
+      perm[perm_temp[i]] = i; // reverse map to store values directly in the
+                              // desired location
+    }
+    h_allocator_.deallocate(iRow_temp);
+    h_allocator_.deallocate(jCol_temp);
+
+    // Copy indices from host to device
     resmgr.copy(iHSS_dev, pbpolrajahiopsparse->i_hess);
     resmgr.copy(jHSS_dev, pbpolrajahiopsparse->j_hess);
-  } else {
 
-    ierr = VecGetArray(opflow->X, &x);
+    // Allocate permutation on device and copy from host
+    umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
+    pbpolrajahiopsparse->perm_hess_dev =
+        (int *)(d_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
+    resmgr.copy(pbpolrajahiopsparse->perm_hess_dev,
+                pbpolrajahiopsparse->perm_hess);
+  }
+
+  if (MHSS_dev != NULL) {
+    ierr = PetscLogEventBegin(opflow->hesslogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
 
-    // Copy from device to host
-    umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-    registerWith(x, opflow->nx, resmgr, h_allocator_);
-    resmgr.copy((double *)x, (double *)x_dev);
+    /* Compute Hessian directly on device.
+       No H2D, D2H copies: x_dev is already on device, output goes
+       straight into MHSS_dev. */
+    ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
+        opflow, x_dev, lambda_dev, lambda_dev + opflow->nconeq,
+        pbpolrajahiopsparse->perm_hess_dev, MHSS_dev);
 
-    ierr = VecRestoreArray(opflow->X, &x);
+    ierr = PetscLogEventEnd(opflow->hesslogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
-
-    ierr = VecGetArray(opflow->Lambda, &lambda);
-
-    registerWith(lambda, opflow->ncon, resmgr, h_allocator_);
-    // copy lambda from device to host
-    resmgr.copy((double *)lambda, (double *)lambda_dev);
-
-    ierr = VecPlaceArray(opflow->Lambdae, lambda);
-    CHKERRQ(ierr);
-    if (opflow->Nconineq) {
-      ierr = VecPlaceArray(opflow->Lambdai, lambda + opflow->nconeq);
-      CHKERRQ(ierr);
-    }
-
-    // Compute Hessian on the host
-    // Function pointer computehessian points to the function
-    // OPFLOWComputeHessian_PBPOL in PBPOL model.
-    ierr = (*opflow->modelops.computehessian)(
-        opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
-    CHKERRQ(ierr);
-
-    ierr = VecResetArray(opflow->Lambdae);
-    CHKERRQ(ierr);
-    if (opflow->Nconineq) {
-      ierr = VecResetArray(opflow->Lambdai);
-      CHKERRQ(ierr);
-    }
-
-    ierr = VecRestoreArray(opflow->Lambda, &lambda);
-    CHKERRQ(ierr);
-
-    // It does not seem that computeauxhessian is set, so this if
-    // condition will evaluate to false.
-    if (opflow->modelops.computeauxhessian) {
-      ierr = VecGetArray(opflow->X, &x);
-      CHKERRQ(ierr);
-      ierr = (*opflow->modelops.computeauxhessian)(opflow, x, opflow->Hes,
-                                                   opflow->userctx);
-      CHKERRQ(ierr);
-      ierr = VecRestoreArray(opflow->X, &x);
-      CHKERRQ(ierr);
-
-      ierr = MatAssemblyBegin(opflow->Hes, MAT_FINAL_ASSEMBLY);
-      CHKERRQ(ierr);
-      ierr = MatAssemblyEnd(opflow->Hes, MAT_FINAL_ASSEMBLY);
-      CHKERRQ(ierr);
-    }
-
-    /* Copy over values */
-    ierr = MatGetSize(opflow->Hes, &nrow, &nrow);
-    CHKERRQ(ierr);
-
-    values = pbpolrajahiopsparse->val_hess;
-
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      ctr = 0;
-      for (j = 0; j < nvals; j++) {
-        if (cols[j] >= i) { /* Upper triangle values (same as lower triangle) */
-          values[ctr] = vals[j];
-          ctr++;
-        }
-      }
-      values += ctr;
-      ierr = MatRestoreRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-    }
-
-    // Copy over val_ineq to device
-    resmgr.copy(MHSS_dev, pbpolrajahiopsparse->val_hess);
   }
 
   PetscFunctionReturn(0);
@@ -1121,6 +1217,7 @@ PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
 
   ierr = VecGetArray(opflow->X, &x);
   CHKERRQ(ierr);
+
   /* Copy xsol from device to host */
   resmgr.copy(x, (double *)xsol);
   ierr = VecRestoreArray(opflow->X, &x);
