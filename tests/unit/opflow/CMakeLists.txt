@@ -32,6 +32,12 @@ if(EXAGO_ENABLE_HIOP_SPARSE AND EXAGO_ENABLE_GPU)
   target_include_directories(
     test_eqjac_gpu PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow
   )
+
+  add_executable(test_hess_gpu test_hess_gpu.cpp)
+  target_link_libraries(test_hess_gpu ExaGO::OPFLOW)
+  target_include_directories(
+    test_hess_gpu PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow
+  )
 endif()
 
 if(EXAGO_RUN_TESTS)
@@ -75,6 +81,22 @@ if(EXAGO_RUN_TESTS)
     COMMAND
     ${RUNCMD}
     $<TARGET_FILE:test_ineqjac_gpu>
+    -opflow_genbusvoltage
+    VARIABLE_WITHIN_BOUNDS
+    NETFILES
+    ${network_files}
+  )
+
+  exago_add_test(
+    NAME
+    "UNIT_TESTS_OPFLOW_HESSIAN_GPU"
+    DEPENDS
+    GPU
+    HIOP_SPARSE
+    RAJA
+    COMMAND
+    ${RUNCMD}
+    $<TARGET_FILE:test_hess_gpu>
     -opflow_genbusvoltage
     VARIABLE_WITHIN_BOUNDS
     NETFILES
