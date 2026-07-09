@@ -1254,7 +1254,7 @@ PetscErrorCode OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLHIOP(
     dPt_dthetat_dVmf = Vmt * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
 
     /* dPt_Vmt  = 2*Gtt*Vmt + Vmf*(Gtf*cos(thetatf) + Btf*sin(thetatf)); */
-    dPt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Bft * cos(thetatf));
+    dPt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
     dPt_dVmt_dVmt = 2 * Gtt;
     dPt_dVmt_dthetaf = Vmf * (Gtf * sin(thetatf) - Btf * cos(thetatf));
     dPt_dVmt_dVmf = (Gtf * cos(thetatf) + Btf * sin(thetatf));
@@ -1544,7 +1544,7 @@ PetscErrorCode OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLHIOP(
     d2Pt_dthetat_dVmf = Vmt * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
 
     /* dPt_Vmt  = 2*Gtt*Vmt + Vmf*(Gtf*cos(thetatf) + Btf*sin(thetatf)); */
-    d2Pt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Bft * cos(thetatf));
+    d2Pt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
     d2Pt_dVmt_dVmt = 2 * Gtt;
     d2Pt_dVmt_dthetaf = Vmf * (Gtf * sin(thetatf) - Btf * cos(thetatf));
     d2Pt_dVmt_dVmf = (Gtf * cos(thetatf) + Btf * sin(thetatf));
