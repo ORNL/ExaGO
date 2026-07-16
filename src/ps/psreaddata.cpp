@@ -1040,7 +1040,7 @@ PetscErrorCode PSReadMatPowerData(PS ps, const char netfile[]) {
       loadcosti++;
     }
 
-    PetscScalar fuel_ramp_min;
+    PetscScalar fuel_ramp_rate_per_min;
 
     /* Read generator fuel data */
     if (i >= genfuel_start_line && i < genfuel_end_line) {
@@ -1052,11 +1052,11 @@ PetscErrorCode PSReadMatPowerData(PS ps, const char netfile[]) {
       }
       if (strstr(line, "coal") != NULL) {
         Gen[genfueli].genfuel_type = GENFUEL_COAL;
-        fuel_ramp_min = GENRAMPRATE_COAL;
+        fuel_ramp_rate_per_min = GENRAMPRATE_COAL;
         ps->ngencoal++;
       } else if (strstr(line, "wind") != NULL) {
         Gen[genfueli].genfuel_type = GENFUEL_WIND;
-        fuel_ramp_min = GENRAMPRATE_WIND;
+        fuel_ramp_rate_per_min = GENRAMPRATE_WIND;
         Gen[genfueli].pb = 0.0; /* Set lower Pg limit to 0.0 so that power
                                    can be curtailed if need be */
 
@@ -1065,11 +1065,11 @@ PetscErrorCode PSReadMatPowerData(PS ps, const char netfile[]) {
         Gen[genfueli].isrenewable = PETSC_TRUE;
       } else if (strstr(line, "ng") != NULL) {
         Gen[genfueli].genfuel_type = GENFUEL_NG;
-        fuel_ramp_min = GENRAMPRATE_NG;
+        fuel_ramp_rate_per_min = GENRAMPRATE_NG;
         ps->ngenng++;
       } else if (strstr(line, "solar") != NULL) {
         Gen[genfueli].genfuel_type = GENFUEL_SOLAR;
-        fuel_ramp_min = GENRAMPRATE_SOLAR;
+        fuel_ramp_rate_per_min = GENRAMPRATE_SOLAR;
         Gen[genfueli].pb = 0.0; /* Set lower Pg limit to 0.0 so that power
                                    can be curtailed if need be */
         ps->ngensolar++;
@@ -1077,22 +1077,22 @@ PetscErrorCode PSReadMatPowerData(PS ps, const char netfile[]) {
         Gen[genfueli].isrenewable = PETSC_TRUE;
       } else if (strstr(line, "nuclear") != NULL) {
         Gen[genfueli].genfuel_type = GENFUEL_NUCLEAR;
-        fuel_ramp_min = GENRAMPRATE_NUCLEAR;
+        fuel_ramp_rate_per_min = GENRAMPRATE_NUCLEAR;
         ps->ngennuclear++;
       } else if (strstr(line, "hydro") != NULL) {
         Gen[genfueli].genfuel_type = GENFUEL_HYDRO;
-        fuel_ramp_min = GENRAMPRATE_HYDRO;
+        fuel_ramp_rate_per_min = GENRAMPRATE_HYDRO;
         ps->ngenhydro++;
         ps->ngenrenew++;
         Gen[genfueli].isrenewable = PETSC_TRUE;
       } else {
         Gen[genfueli].genfuel_type = GENFUEL_UNDEFINED;
-        fuel_ramp_min = GENRAMPRATE_COAL; /* Defaults to COAL ramp rate */
+        fuel_ramp_rate_per_min = GENRAMPRATE_COAL; /* Defaults to COAL ramp rate */
         ps->ngenundefined++;
       }
       double ramp_rate_min_error = 0.0;
       if (IsEqual(Gen[genfueli].ramp_rate_min, 0.0, 1e-12, ramp_rate_min_error)) {
-        Gen[genfueli].ramp_rate_min = fuel_ramp_min / ps->MVAbase;
+        Gen[genfueli].ramp_rate_min = fuel_ramp_rate_per_min / ps->MVAbase;
         Gen[genfueli].ramp_rate_10min = Gen[genfueli].ramp_rate_min * 10;
         Gen[genfueli].ramp_rate_30min = Gen[genfueli].ramp_rate_min * 30;
       }
