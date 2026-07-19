@@ -176,6 +176,14 @@ def load_session(save_dir: Path) -> dict[str, Any]:
             num_steps=entry_data.get("num_steps", 0),
             num_scenarios=entry_data.get("num_scenarios", 0),
             explored_variants=entry_data.get("explored_variants"),
+            # Previously dropped on resume — restore so sweep/contingency/reserve
+            # metadata survives a save/load round-trip (dataclass defaults keep
+            # older sessions loadable).
+            candidate_count=entry_data.get("candidate_count", 0),
+            feasible_buses=entry_data.get("feasible_buses"),
+            exago_command=entry_data.get("exago_command"),
+            contingency_meta=entry_data.get("contingency_meta"),
+            reserve_meta=entry_data.get("reserve_meta"),
         )
         journal_entries.append(entry)
 

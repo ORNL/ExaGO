@@ -193,11 +193,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Session-level load scaling factor for PFLOW (e.g., 1.23). Auto-injected into every run.",
     )
     parser.add_argument(
+        "--set",
+        dest="set_overrides",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help="Override any config value via dotted key, e.g. "
+             "--set report.network_summary_max_generators=40 (repeatable)",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
     )
     return parser
+
+
+def _coerce_override_value(raw: str) -> Any:
+    """Coerce a --set string value to int/float/bool, else leave as string."""
+    low = raw.strip().lower()
+    if low in ("true", "false"):
+        return low == "true"
+    for caster in (int, float):
+        try:
+            return caster(raw)
+        except ValueError:
+            continue
+    return raw
 
 
 def _cli_overrides(args: argparse.Namespace) -> dict[str, Any]:
@@ -252,6 +274,12 @@ def _cli_overrides(args: argparse.Namespace) -> dict[str, Any]:
     # base_case is set via positional arg (may be None if --resume is used)
     if args.base_case is not None:
         overrides["search.base_case"] = args.base_case
+    # Generic dotted overrides (applied last so they win over the typed flags).
+    for item in getattr(args, "set_overrides", None) or []:
+        if "=" not in item:
+            raise SystemExit(f"--set expects KEY=VALUE, got: {item!r}")
+        key, _, value = item.partition("=")
+        overrides[key.strip()] = _coerce_override_value(value)
     return overrides
 
 
@@ -365,8 +393,61 @@ def run_search(cfg: AppConfig, goal: str, quiet: bool = False) -> None:
     controller.run(cfg.search.base_case, goal)
 
 
+def run_regenerate_report(argv: list[str] | None = None) -> None:
+    """Offline `regenerate-report` subcommand: rebuild analysis+PDF from a journal.
+
+    Reads a saved journal export (top-level export_json schema) and renders the
+    PDF without re-solving. ``--no-analysis`` skips the LLM classification and
+    renders from deterministic journal data only.
+    """
+    from agentigrid.backends import create_backend
+    from agentigrid.engine.regenerate_report import regenerate_from_journal
+
+    sub = argparse.ArgumentParser(
+        prog="agentigrid regenerate-report",
+        description="Regenerate analysis + PDF from a saved journal export (offline; no ExaGO).",
+    )
+    sub.add_argument("--journal", required=True, help="Path to the export_json journal file")
+    sub.add_argument("--config", default="configs/default_config.yaml",
+                     help="Path to config YAML file (default: configs/default_config.yaml)")
+    sub.add_argument("--out", required=True, help="Output directory for the PDF")
+    sub.add_argument("--goal", required=True, help="Original natural-language search goal")
+    sub.add_argument("--backend", choices=["openai", "anthropic", "ollama", "ollama-cloud"],
+                     help="LLM backend (overrides config; only used unless --no-analysis)")
+    sub.add_argument("--model", help="Model name (overrides config)")
+    sub.add_argument("--no-analysis", action="store_true",
+                     help="Render from deterministic journal data only (no LLM call)")
+    args = sub.parse_args(argv)
+
+    overrides: dict[str, Any] = {}
+    if args.backend:
+        overrides["llm.backend"] = args.backend
+    if args.model:
+        overrides["llm.model"] = args.model
+    cfg = load_config(Path(args.config), cli_overrides=overrides)
+    setup_logging(cfg.output.logs_dir, verbose=cfg.output.verbose)
+
+    generate_analysis = not args.no_analysis
+    backend = create_backend(cfg.llm) if generate_analysis else None
+
+    out_path = regenerate_from_journal(
+        journal_json_path=Path(args.journal),
+        config=cfg,
+        backend=backend,
+        out_dir=Path(args.out),
+        goal=args.goal,
+        generate_analysis=generate_analysis,
+    )
+    print(f"Report regenerated: {out_path}")
+
+
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "regenerate-report":
+        run_regenerate_report(argv[1:])
+        return
+
     parser = build_parser()
     args = parser.parse_args(argv)
 

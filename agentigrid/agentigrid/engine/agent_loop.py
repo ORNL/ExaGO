@@ -32,7 +32,7 @@ from agentigrid.engine.explore import (
 )
 from agentigrid.engine.journal import JournalEntry, ObjectiveEntry, SearchJournal
 from agentigrid.engine.metric_extractor import available_metrics, available_metrics_for_app, extract_all_metrics
-from agentigrid.engine.modifier import apply_modifications
+from agentigrid.engine.modifier import apply_modifications, build_index_maps
 from agentigrid.engine import sweep_metrics
 from agentigrid.engine.objective_parser import (
     build_objective_extraction_prompt,
@@ -935,7 +935,10 @@ class AgentLoopController:
         logger.info("Parsing base case: %s", base_case)
         self._base_network = parse_matpower(base_case)
         self._current_network = self._base_network
-        net_summary_text = network_summary(self._base_network)
+        net_summary_text = network_summary(
+            self._base_network,
+            max_generators=self._config.report.network_summary_max_generators,
+        )
         net_metadata_text = network_metadata(self._base_network)
         self._network_metadata_text = net_metadata_text
 
@@ -2184,7 +2187,11 @@ class AgentLoopController:
         if self._on_phase:
             self._on_phase(iteration, "applying_commands")
 
-        # Pre-compute bus limits after applying the vlimits command (same for all candidates)
+        # Pre-compute bus limits after applying the vlimits command (same for all
+        # candidates). On success, _vlimits_net already carries the all-bus vlimits,
+        # so each candidate applies ONLY its single per-bus mutation (COW). If this
+        # falls back to base_network, the per-candidate path re-applies vlimits.
+        _vlimits_applied = True
         try:
             _vlimits_parsed = parse_command(
                 {"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax}
@@ -2196,6 +2203,7 @@ class AgentLoopController:
         except Exception:
             _vlimits_net = self._base_network
             bus_limits_for_sweep = _bus_limits_from_network(self._base_network)
+            _vlimits_applied = False
 
         # C3: metrics like max_delta_v need the base-case operating point. Solve it
         # once (sequentially, before the parallel batch) so every candidate compares
@@ -2213,17 +2221,28 @@ class AgentLoopController:
                     base_sim, application="opflow", bus_limits=bus_limits_for_sweep,
                 )
 
-        # 2. Build per-candidate sim tasks
+        # 2. Build per-candidate sim tasks.
+        # The per-candidate base (_vlimits_net) is INVARIANT across candidates, so its
+        # O(1) index maps are built ONCE here and reused in every apply_modifications
+        # call below — avoiding an O(N) map rebuild per candidate (the O(N²) regression).
+        sweep_maps = build_index_maps(_vlimits_net)
+
         sim_tasks: list[tuple[MATNetwork, str, int, list[str] | None]] = []
         cand_indices_for_tasks: list[int] = []  # task_idx → candidate_idx
         skipped_cand_indices: set[int] = set()
         build_errors: list[str] = []
 
         for cand_idx, bus_id in enumerate(candidates):
-            raw_cmds = [
-                {"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax},
-                dict(mutation_template, bus=bus_id),
-            ]
+            # Hoist: when _vlimits_net already carries the all-bus vlimits, apply
+            # only the single per-bus mutation here (COW makes this ~O(1)). The
+            # vlimits-parse-failure fallback re-applies vlimits per candidate.
+            if _vlimits_applied:
+                raw_cmds = [dict(mutation_template, bus=bus_id)]
+            else:
+                raw_cmds = [
+                    {"action": "set_all_bus_vlimits", "Vmin": vmin, "Vmax": vmax},
+                    dict(mutation_template, bus=bus_id),
+                ]
             commands = []
             parse_ok = True
             for raw in raw_cmds:
@@ -2239,7 +2258,8 @@ class AgentLoopController:
                 continue
 
             modified_net, _ = apply_modifications(
-                self._base_network, commands, application="opflow",
+                _vlimits_net, commands, application="opflow", copy_mode="cow",
+                index_maps=sweep_maps,
             )
             cand_iter = -(iteration * 10000 + cand_idx)
             sim_tasks.append((modified_net, "opflow", cand_iter, self._build_extra_args()))
@@ -3962,7 +3982,10 @@ class AgentLoopController:
         )
         # Rebuild system prompt to reflect the new load factor note
         from agentigrid.prompts.system_prompt import format_benchmark_for_prompt as _fmt_bench
-        net_summary_text = network_summary(self._base_network)
+        net_summary_text = network_summary(
+            self._base_network,
+            max_generators=self._config.report.network_summary_max_generators,
+        )
         net_metadata_text = self._network_metadata_text
         benchmark_text = _fmt_bench(self._benchmark_result) if self._benchmark_result else None
         self._system_prompt = build_system_prompt(
@@ -4461,7 +4484,8 @@ class AgentLoopController:
                 goal=session.goal,
                 termination_reason=session.termination_reason,
                 stats=raw_stats,
-                journal_formatted=self._journal.format_detailed(),
+                # Bounded digest avoids context overflow on large sweeps.
+                journal_formatted=self._journal.format_for_classification(),
                 total_tokens=total_tokens,
                 objective_registry=self._journal.objective_registry.to_dict_list(),
                 preference_history=self._journal.objective_registry.history,
@@ -4711,7 +4735,10 @@ class AgentLoopController:
         self._current_network = saved["current_network"] or self._base_network
 
         # Rebuild system prompt
-        net_summary_text = network_summary(self._base_network)
+        net_summary_text = network_summary(
+            self._base_network,
+            max_generators=self._config.report.network_summary_max_generators,
+        )
         net_metadata_text = network_metadata(self._base_network)
         self._network_metadata_text = net_metadata_text
         # Restore load_factor from journal if saved

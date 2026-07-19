@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from agentigrid.parsers.opflow_results import OPFLOWResult
 
+# Cap the per-period table so a long horizon cannot blow up the LLM prompt. The
+# aggregated-metrics block above the table already spans ALL periods (min/max
+# voltage, load, generation, worst loading), so truncating the table tail loses
+# no extremes. Chosen comfortably above typical horizons (e.g. 24h hourly, 96
+# 15-min steps stays under with room) so normal runs are unaffected.
+_MAX_PERIOD_ROWS = 96
+
 
 def tcopflow_results_summary(
     result: OPFLOWResult,
@@ -89,13 +96,19 @@ def tcopflow_results_summary(
             f"{'Vmin(pu)':>8} | {'Vmax(pu)':>8} | {'MaxLoad%':>8}"
         )
         lines.append("-" * 62)
-        for p in period_data:
+        for p in period_data[:_MAX_PERIOD_ROWS]:
             loss_flag = " *" if p["losses_mw"] < 0 and p["total_load_mw"] > 0 else ""
             lines.append(
                 f"{p['period']:>6} | {p['total_load_mw']:>9.1f} | "
                 f"{p['total_gen_mw']:>9.1f} | {p['voltage_min']:>8.3f} | "
                 f"{p['voltage_max']:>8.3f} | {p['max_line_loading_pct']:>7.1f}%"
                 f"{loss_flag}"
+            )
+        omitted_periods = len(period_data) - _MAX_PERIOD_ROWS
+        if omitted_periods > 0:
+            lines.append(
+                f"  ... ({omitted_periods} more periods omitted; "
+                "aggregates above span all periods)"
             )
         lines.append("  * = negative losses (generation < load)")
         lines.append("")

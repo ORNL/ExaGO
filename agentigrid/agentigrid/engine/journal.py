@@ -758,6 +758,159 @@ class SearchJournal:
 
         return "\n".join(parts)
 
+    # ------------------------------------------------------------------
+    # Bounded digest for the goal classifier (avoids context overflow)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _candidate_reduction_key(variants: list[dict]) -> Optional[str]:
+        """Which field carries a candidate's 'reduction value' for this entry.
+
+        Preference: cost (feasibility sweeps) > metric_value (custom-metric
+        sweeps) > max_feasible_mw (boundary sweeps). Returns None when no
+        candidate exposes a numeric reduction value (e.g. contingency/reserve).
+        """
+        for key in ("cost", "metric_value", "max_feasible_mw"):
+            if any(isinstance(v.get(key), (int, float)) for v in variants):
+                return key
+        return None
+
+    def _format_sweep_candidate_block(
+        self, e: JournalEntry, max_candidates: int,
+    ) -> list[str]:
+        """Ranked, truncated candidate lines for a sweep entry (bounded)."""
+        variants = e.explored_variants or []
+        n_feas = len(e.feasible_buses) if e.feasible_buses is not None else sum(
+            1 for v in variants if v.get("feasible")
+        )
+        lines = [
+            f"  candidates: {e.candidate_count} total, {n_feas} feasible"
+        ]
+
+        key = self._candidate_reduction_key(variants)
+        feasible = [
+            v for v in variants
+            if v.get("feasible") and isinstance(v.get(key), (int, float))
+        ] if key is not None else []
+
+        if not feasible:
+            lines.append("  (no feasible candidates with a numeric reduction value)")
+            return lines
+
+        # For hosting-capacity (max_feasible_mw), larger is better; for cost /
+        # metric_value, smaller is better. Sort best-first deterministically.
+        higher_is_better = key == "max_feasible_mw"
+        ranked = sorted(
+            feasible,
+            key=lambda v: (float(v[key]), v.get("bus", 0)),
+            reverse=higher_is_better,
+        )
+        lines.append(
+            f"  ranked by {key} ({'higher' if higher_is_better else 'lower'} is better):"
+        )
+
+        def _line(v: dict) -> str:
+            return (
+                f"    bus={v.get('bus')} {key}={float(v[key]):,.4g} "
+                f"feasible={bool(v.get('feasible'))}"
+            )
+
+        best, worst = ranked[0], ranked[-1]
+        if len(ranked) <= max_candidates:
+            for v in ranked:
+                lines.append(_line(v))
+        else:
+            # Show top-N best, then always keep the single worst feasible extreme.
+            shown = ranked[:max_candidates]
+            omitted = len(ranked) - len(shown) - 1  # -1 for the worst we re-add
+            for v in shown:
+                lines.append(_line(v))
+            if omitted > 0:
+                lines.append(f"    ... ({omitted} more omitted)")
+            lines.append(f"    (worst feasible) {_line(worst).strip()}")
+        # Make the extremes explicit and impossible to lose.
+        lines.append(
+            f"  best: bus={best.get('bus')} {key}={float(best[key]):,.4g}; "
+            f"worst: bus={worst.get('bus')} {key}={float(worst[key]):,.4g}"
+        )
+        return lines
+
+    def _format_screen_candidate_block(
+        self, e: JournalEntry, max_candidates: int,
+    ) -> list[str]:
+        """Bounded candidate lines for a contingency / reserve screen entry."""
+        variants = e.explored_variants or []
+        lines: list[str] = []
+        if e.contingency_meta:
+            lines.append(f"  contingency_meta: {json.dumps(e.contingency_meta, sort_keys=True)}")
+        if e.reserve_meta:
+            lines.append(f"  reserve_meta: {json.dumps(e.reserve_meta, sort_keys=True)}")
+
+        passed = [v for v in variants if v.get("passed")]
+        failed = [v for v in variants if not v.get("passed")]
+        lines.append(
+            f"  screened: {e.candidate_count} total, "
+            f"{len(passed)} passed, {len(failed)} failed"
+        )
+
+        def _line(v: dict) -> str:
+            label = v.get("label", v.get("bus", "?"))
+            return f"    {label} passed={bool(v.get('passed'))}"
+
+        # Failed cases are the actionable ones — show them first, bounded.
+        shown = failed[:max_candidates]
+        for v in shown:
+            lines.append(_line(v))
+        remaining = len(failed) - len(shown)
+        if remaining > 0:
+            lines.append(f"    ... ({remaining} more failed omitted)")
+        return lines
+
+    def format_for_classification(
+        self,
+        max_sweep_candidates_per_entry: int = 40,
+        max_llm_reasoning_chars: int = 200,
+    ) -> str:
+        """Bounded journal digest for the goal classifier.
+
+        Unlike ``format_detailed`` (which dumps every ``explored_variants`` entry
+        as one JSON line and overflows the model context on large sweeps), this
+        reuses the compact ``format_for_prompt`` table and appends, per
+        sweep/contingency/reserve entry, only a ranked and truncated candidate
+        block. The single best and worst feasible candidates are always kept so
+        the extremes survive truncation; per-entry counts and the small
+        contingency/reserve meta dicts are included in full. Output is
+        deterministic for identical journals.
+        """
+        base = self.format_for_prompt()
+        blocks: list[str] = [base]
+
+        for e in self._entries:
+            if e.mode not in ("sweep", "contingency", "reserve"):
+                continue
+            variants = e.explored_variants or []
+            if not variants and not e.contingency_meta and not e.reserve_meta:
+                continue
+
+            entry_lines = [f"--- Iteration {e.iteration} ({e.mode}) candidate detail ---"]
+            if e.llm_reasoning:
+                reason = e.llm_reasoning
+                if len(reason) > max_llm_reasoning_chars:
+                    reason = reason[:max_llm_reasoning_chars] + "..."
+                entry_lines.append(f"  reasoning: {reason}")
+
+            if e.mode == "sweep":
+                entry_lines.extend(
+                    self._format_sweep_candidate_block(e, max_sweep_candidates_per_entry)
+                )
+            else:  # contingency / reserve
+                entry_lines.extend(
+                    self._format_screen_candidate_block(e, max_sweep_candidates_per_entry)
+                )
+            blocks.append("\n".join(entry_lines))
+
+        return "\n\n".join(blocks)
+
     def format_multi_objective_summary(self, max_entries: int | None = None) -> str:
         """Format a multi-objective tracking table for LLM prompt injection.
 

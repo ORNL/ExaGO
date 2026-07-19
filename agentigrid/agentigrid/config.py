@@ -93,6 +93,7 @@ DEFAULTS: dict[str, Any] = {
     "report": {
         "cost_min_top_k": 10,
         "near_optimal_abs_tol": 5.0,
+        "network_summary_max_generators": 40,
     },
 }
 
@@ -192,6 +193,9 @@ class OutputConfig:
 class ReportConfig:
     cost_min_top_k: int = 10        # Top-K cheapest buses shown in cost-min sweep ranking
     near_optimal_abs_tol: float = 5.0  # $/h threshold below which top candidates are equivalently optimal
+    network_summary_max_generators: int = 40  # max generators listed in the
+        # network summary sent to the LLM; larger networks truncate to the
+        # top-N by Pmax. Bounds system-prompt size at scale.
 
 
 @dataclass(frozen=True)
