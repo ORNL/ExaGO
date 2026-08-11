@@ -521,7 +521,7 @@ PetscErrorCode ExaGOPrintHelpVersionInfo(int *argc, char ***argv,
   for (; args_it != args.end(); args_it++) {
     /* Help message */
     if (*args_it == "--help" or *args_it == "-help" or *args_it == "-h") {
-      (*PetscHelpPrintf)(MPI_COMM_NULL, (appname ? appname : ""));
+      (*PetscHelpPrintf)(MPI_COMM_NULL, "%s", (appname ? appname : ""));
     }
 
     if (*args_it == "-c" or *args_it == "--config" or *args_it == "-config") {
