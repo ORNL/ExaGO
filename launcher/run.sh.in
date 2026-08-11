@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ExaGO Launcher - Streamlit Application
 # Optional: activate conda environment
 # conda activate exago312

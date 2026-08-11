@@ -211,7 +211,7 @@ if(EXAGO_ENABLE_PETSC)
   # Include petsc package path in pkg_config_path
   set(PKG_CONFIG_PATH_save $ENV{PKG_CONFIG_PATH})
   set(ENV{PKG_CONFIG_PATH}
-      ${PETSC_DIR}/lib/pkgconfig:${PETSC_DIR}/${PETSC_ARCH}/lib/pkgconfig
+      ${PETSC_DIR}/lib/pkgconfig:${PETSC_DIR}/${PETSC_ARCH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}
   )
   pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc>=3.24)
   set(EXAGO_HAVE_PETSC 1)

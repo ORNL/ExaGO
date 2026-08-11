@@ -1,7 +1,7 @@
-import countydata from "../geo_data/counties.json";
 import { center, convex, bbox } from "@turf/turf";
 import us from "us";
 
+const countydata = await fetch("/assets/data/counties.json").then(r => r.json());
 const codeDict = us.mapping("fips", "abbr");
 
 function getCountyNodes(data) {
@@ -145,7 +145,7 @@ function ExtractFlowData(data) {
 
   const uniq2 = new Set(reactive_flows.map((e) => JSON.stringify(e)));
   const res2 = Array.from(uniq2).map((e) => JSON.parse(e));
-  
+
   return [
     {
       locations: locations,
