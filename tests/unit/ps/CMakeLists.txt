@@ -5,7 +5,7 @@ execute_process(
           ${CMAKE_CURRENT_BINARY_DIR}/data
 )
 add_test(
-  NAME psse_parser
+  NAME UNIT_TESTS_PSSE_PARSER
   COMMAND test_psse_parser
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/data
 )

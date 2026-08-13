@@ -170,10 +170,10 @@ PetscErrorCode OPFLOWSetConstraintBoundsArray_PBPOLHIOP(OPFLOW opflow,
   /* Inequality constraints */
   for (i = 0; i < lineparams->nlinelim; i++) {
     int j = lineparams->linelimidx[i];
-    gl[lineparams->gbineqidx[i]] = 0.0;
+    gl[lineparams->gbineqidx[i]] = PETSC_NINFINITY;
     gu[lineparams->gbineqidx[i]] = (lineparams->rateA[j] / ps->MVAbase) *
                                    (lineparams->rateA[j] / ps->MVAbase);
-    gl[lineparams->gbineqidx[i] + 1] = 0.0;
+    gl[lineparams->gbineqidx[i] + 1] = PETSC_NINFINITY;
     gu[lineparams->gbineqidx[i] + 1] = (lineparams->rateA[j] / ps->MVAbase) *
                                        (lineparams->rateA[j] / ps->MVAbase);
   }
@@ -1056,7 +1056,7 @@ PetscErrorCode OPFLOWComputeDenseInequalityConstraintJacobian_PBPOLHIOP(
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLHIOP(
+PetscErrorCode OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLHIOP(
     OPFLOW opflow, const double *x, const double *lambda, double *HDD) {
   PetscErrorCode ierr;
   PBPOLHIOP pbpolhiop = (PBPOLHIOP)opflow->model;
@@ -1254,7 +1254,7 @@ PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLHIOP(
     dPt_dthetat_dVmf = Vmt * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
 
     /* dPt_Vmt  = 2*Gtt*Vmt + Vmf*(Gtf*cos(thetatf) + Btf*sin(thetatf)); */
-    dPt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Bft * cos(thetatf));
+    dPt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
     dPt_dVmt_dVmt = 2 * Gtt;
     dPt_dVmt_dthetaf = Vmf * (Gtf * sin(thetatf) - Btf * cos(thetatf));
     dPt_dVmt_dVmf = (Gtf * cos(thetatf) + Btf * sin(thetatf));
@@ -1385,7 +1385,7 @@ PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLHIOP(
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode OPFLOWComputeDenseInequalityConstraintHessian_PBPOLHIOP(
+PetscErrorCode OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLHIOP(
     OPFLOW opflow, const double *x, const double *lambda, double *HDD) {
   int i;
   PBPOLHIOP pbpolhiop = (PBPOLHIOP)opflow->model;
@@ -1544,7 +1544,7 @@ PetscErrorCode OPFLOWComputeDenseInequalityConstraintHessian_PBPOLHIOP(
     d2Pt_dthetat_dVmf = Vmt * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
 
     /* dPt_Vmt  = 2*Gtt*Vmt + Vmf*(Gtf*cos(thetatf) + Btf*sin(thetatf)); */
-    d2Pt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Bft * cos(thetatf));
+    d2Pt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
     d2Pt_dVmt_dVmt = 2 * Gtt;
     d2Pt_dVmt_dthetaf = Vmf * (Gtf * sin(thetatf) - Btf * cos(thetatf));
     d2Pt_dVmt_dVmf = (Gtf * cos(thetatf) + Btf * sin(thetatf));
@@ -1829,12 +1829,12 @@ PetscErrorCode OPFLOWComputeDenseHessian_PBPOLHIOP(OPFLOW opflow,
     HDD[i] = 0.0;
 
   /* Equality constraint Hessian */
-  ierr = OPFLOWComputeDenseEqualityConstraintHessian_PBPOLHIOP(opflow, x,
-                                                               lambda, HDD);
+  ierr = OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLHIOP(opflow, x,
+                                                                lambda, HDD);
   CHKERRQ(ierr);
 
   if (opflow->nconineq) {
-    ierr = OPFLOWComputeDenseInequalityConstraintHessian_PBPOLHIOP(
+    ierr = OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLHIOP(
         opflow, x, lambda + opflow->nconeq, HDD);
     CHKERRQ(ierr);
   }

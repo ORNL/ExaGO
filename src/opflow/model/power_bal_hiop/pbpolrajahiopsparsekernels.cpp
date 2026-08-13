@@ -14,7 +14,21 @@
 #include <private/opflowimpl.h>
 #include "pbpolrajahiopsparsekernels.hpp"
 #include "pbpolrajahiopsparse.hpp"
+#include "pbpolrajahiopsparse_gpu.hpp"
 
+#include <algorithm>
+#include <numeric>
+#include <vector>
+
+/**
+ * @brief Set the initial guess array for the PBPOLRAJAHIOPSPARSE model.
+ *
+ * Sets the inital guess on the host and copies it to `x0_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param x0_dev The device array for the initial guess.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWSetInitialGuessArray_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                                               double *x0_dev) {
   PetscErrorCode ierr;
@@ -43,6 +57,17 @@ PetscErrorCode OPFLOWSetInitialGuessArray_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Set the variable bounds arrays for the PBPOLRAJAHIOPSPARSE model.
+ *
+ * Sets lower and upper variable bounds on the host and copies them to `xl_dev`
+ * and `xu_dev`, respectively.
+ *
+ * @param opflow The OPFLOW object.
+ * @param xl_dev The device array for the lower constraint bounds.
+ * @param xu_dev The device array for the upper constraint bounds.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode
 OPFLOWSetVariableBoundsArray_PBPOLRAJAHIOPSPARSE(OPFLOW opflow, double *xl_dev,
                                                  double *xu_dev) {
@@ -75,6 +100,17 @@ OPFLOWSetVariableBoundsArray_PBPOLRAJAHIOPSPARSE(OPFLOW opflow, double *xl_dev,
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Set the constraint bounds arrays for the PBPOLRAJAHIOPSPARSE model.
+ *
+ * Sets the constraint bounds on the host and copies them to `gl_dev` and
+ * `gu_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param gl_dev The device array for the lower constraint bounds.
+ * @param gu_dev The device array for the upper constraint bounds.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWSetConstraintBoundsArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, double *gl_dev, double *gu_dev) {
 
@@ -110,11 +146,24 @@ PetscErrorCode OPFLOWSetConstraintBoundsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
-/** EQUALITY CONSTRAINTS */
+/**
+ * @brief Compute the equality constraints residual for the PBPOLRAJAHIOPSPARSE
+ * model.
+ *
+ * Computes the equality constraints on the device using the current iterate
+ * `x_dev` and stores the result in `ge_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param x_dev The device array for the current solutioniterate.
+ * @param ge_dev The device array for the equality constraint residuals.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWComputeEqualityConstraintsArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, double *ge_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
+
+  // Get device pointers for model parameters
   BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
   GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
   LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
@@ -128,7 +177,7 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionBegin;
   //  PetscPrintf(MPI_COMM_SELF,"Entered Equality constraints\n");
 
-  // Zero out array
+  // Zero out array with constraint residuals
   auto &resmgr = umpire::ResourceManager::getInstance();
   resmgr.memset(ge_dev, 0, opflow->nconeq * sizeof(double));
 
@@ -263,7 +312,18 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
-/** INEQUALITY CONSTRAINTS **/
+/**
+ * @brief Compute the inequality constraints residual for the
+ * PBPOLRAJAHIOPSPARSE model.
+ *
+ * Computes the inequality constraints on the device using the current solution
+ * iterate `x_dev` and stores the result in `gi_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param x_dev The device array for the current solution iterate.
+ * @param gi_dev The device array for the inequality constraint residuals.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWComputeInequalityConstraintsArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, double *gi_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
@@ -275,7 +335,7 @@ PetscErrorCode OPFLOWComputeInequalityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionBegin;
   //  PetscPrintf(MPI_COMM_SELF,"Entered Inequality Constraints\n");
 
-  // Zero out array
+  // Zero out residual array
   auto &resmgr = umpire::ResourceManager::getInstance();
   resmgr.memset(gi_dev, 0, opflow->nconineq * sizeof(double));
 
@@ -329,10 +389,24 @@ PetscErrorCode OPFLOWComputeInequalityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
-/** OBJECTIVE FUNCTION **/
-// Note: This kernel (and all the kernels for this model assume that the data
-// has been already allocated on the device. x_dev is pointer to array on the
-// GPU
+/** @brief Compute the objective function value for the PBPOLRAJAHIOPSPARSE
+ * model.
+ *
+ * Computes the objective function value on the device using the current
+ * solution iterate `x_dev` and stores the result in `obj`.
+ *
+ * @param[inout] opflow The OPFLOW object.
+ * @param[in] x_dev The device array for the current solution iterate.
+ * @param[out] obj The pointer to the scalar with the objective function value.
+ * @return PetscErrorCode indicating success or failure.
+ *
+ * @note This kernel (and all the kernels for this model assume that the data
+ * has been already allocated on the device. x_dev is pointer to array on the
+ * GPU.
+ *
+ * @todo We need to figure out how to manage PetscScalar vs double types in
+ * these kernels.
+ */
 PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, double *obj) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
@@ -356,10 +430,10 @@ PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
   int *l_xidx = loadparams->xidx_dev_;
   int *b_xidxpimb = busparams->xidxpimb_dev_;
 
-  /* Generator objective function contributions */
   // Set up reduce sum object
   RAJA::ReduceSum<exago_raja_reduce, double> obj_val_sum(0.0);
-  // Compute reduction on CUDA device
+
+  // Generation cost contributions to the objective function
   RAJA::forall<exago_raja_exec>(
       RAJA::RangeSegment(0, genparams->ngenON),
       RAJA_LAMBDA(RAJA::Index_type i) {
@@ -368,6 +442,7 @@ PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
                                         cost_beta[i] * Pg + cost_gamma[i]);
       });
 
+  // Load loss contributions to the objective function
   if (opflow->include_loadloss_variables) {
     RAJA::forall<exago_raja_exec>(
         RAJA::RangeSegment(0, loadparams->nload),
@@ -392,6 +467,7 @@ PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
         });
   }
 
+  // Copy value of the sum reduction to the output value.
   *obj = static_cast<double>(obj_val_sum.get());
   ierr = PetscLogFlops(genparams->ngenON * 8.0);
   CHKERRQ(ierr);
@@ -400,7 +476,17 @@ PetscErrorCode OPFLOWComputeObjectiveArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
-/** GRADIENT **/
+/** @brief Compute the gradient of the objective function for the
+ * PBPOLRAJAHIOPSPARSE model.
+ *
+ * Computes the objective function gradient on the device using the
+ * current solution iterate `x_dev` and stores the result in `grad_dev`.
+ *
+ * @param opflow The OPFLOW object.
+ * @param x_dev The device array with the current solution iterate.
+ * @param grad_dev The device array for the objective function gradient.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWComputeGradientArray_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, double *grad_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
@@ -468,6 +554,23 @@ PetscErrorCode OPFLOWComputeGradientArray_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Compute the Jacobian of the inequality constraints for the
+ * PBPOLRAJAHIOPSPARSE model.
+ *
+ * Takes current iterate of the solution vector x_dev and computes the
+ * Jacobian of the inequality constraints. The solution is stored in triplet
+ * format on the device in vectors iJacS_dev, jJacS_dev, and MJacS_dev,
+ * respectively.
+ *
+ * @param[inout] opflow The OPFLOW object.
+ * @param[in] x_dev The device array with the current solution iterate.
+ * @param[out] iJacS_dev The device array for the row indices of the Jacobian.
+ * @param[out] jJacS_dev The device array for the column indices of the
+ * Jacobian.
+ * @param[out] MJacS_dev The device array for the values of the Jacobian.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode
 OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, int *iJacS_dev, int *jJacS_dev,
@@ -475,7 +578,6 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
   PetscErrorCode ierr;
-  double *x, *values;
   PetscInt *iRowstart, *jColstart;
   PetscInt roffset, coffset;
   PetscInt nrow, ncol;
@@ -487,19 +589,17 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
 
   PetscFunctionBegin;
 
-  if (MJacS_dev == NULL) {
-    /* Set locations only */
+  // If sparsity pattern does not exist, create it!
+  if (iJacS_dev != NULL && jJacS_dev != NULL) {
 
+    // Create arrays on host to store i,j, and val arrays
     if (opflow->Nconineq) {
-      // Create arrays on host to store i,j, and val arrays
       umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
       pbpolrajahiopsparse->i_jacineq =
           (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
       pbpolrajahiopsparse->j_jacineq =
           (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
-      pbpolrajahiopsparse->val_jacineq = (double *)(h_allocator_.allocate(
-          opflow->nnz_ineqjacsp * sizeof(double)));
 
       iRowstart = pbpolrajahiopsparse->i_jacineq;
       jColstart = pbpolrajahiopsparse->j_jacineq;
@@ -540,45 +640,20 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
     }
-  } else {
+  }
+
+  // TODO: This is bad! If MJacS_dev is NULL, this function will quietly do
+  // nothing. We should at least throw an error or warning.
+  if (MJacS_dev != NULL) {
     if (opflow->Nconineq) {
       ierr = PetscLogEventBegin(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
 
-      ierr = VecGetArray(opflow->X, &x);
-      CHKERRQ(ierr);
-
-      // Copy from device to host
-      umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-      registerWith(x, opflow->nx, resmgr, h_allocator_);
-      resmgr.copy((double *)x, (double *)x_dev);
-
-      ierr = VecRestoreArray(opflow->X, &x);
-      CHKERRQ(ierr);
-
-      /* Compute inequality constraint jacobian */
-      ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
-          opflow, opflow->X, opflow->Jac_Gi);
-      CHKERRQ(ierr);
-
-      ierr = MatGetSize(opflow->Jac_Gi, &nrow, &ncol);
-      CHKERRQ(ierr);
-
-      values = pbpolrajahiopsparse->val_jacineq;
-      /* Copy over values */
-      for (i = 0; i < nrow; i++) {
-        ierr = MatGetRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
-        CHKERRQ(ierr);
-        for (j = 0; j < nvals; j++) {
-          values[j] = vals[j];
-        }
-        values += nvals;
-        ierr = MatRestoreRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
-        CHKERRQ(ierr);
-      }
-      // Copy over val_jacineq to device
-      resmgr.copy(MJacS_dev + opflow->nnz_eqjacsp,
-                  pbpolrajahiopsparse->val_jacineq);
+      /* KS: Compute inequality constraint Jacobian directly on device.
+         No H2D, D2H copies: x_dev is already on device, output goes
+         straight into the ineq portion of MJacS_dev. */
+      ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(
+          opflow, x_dev, MJacS_dev + opflow->nnz_eqjacsp);
 
       ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);
@@ -588,6 +663,23 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
+/**
+ * @brief Compute the Jacobian of the equality constraints for the
+ * PBPOLRAJAHIOPSPARSE model.
+ *
+ * Takes current iterate of the solution vector x_dev and computes the
+ * Jacobian of the equality constraints. The solution is stored in triplet
+ * format on the device in vectors iJacS_dev, jJacS_dev, and MJacS_dev,
+ * respectively.
+ *
+ * @param[inout] opflow The OPFLOW object.
+ * @param[in]  x_dev The device array with the current solution iterate.
+ * @param[out] iJacS_dev The device array for the row indices of the Jacobian.
+ * @param[out] jJacS_dev The device array for the column indices of the
+ * Jacobian.
+ * @param[out] MJacS_dev The device array for the values of the Jacobian.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode
 OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, int *iJacS_dev, int *jJacS_dev,
@@ -595,101 +687,245 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
   PetscErrorCode ierr;
-  PetscInt *iRowstart, *jColstart;
-  PetscScalar *x, *values;
   PetscInt roffset, coffset;
-  PetscInt nrow, ncol;
-  PetscInt nvals;
-  const PetscInt *cols;
-  const PetscScalar *vals;
-  PetscInt i, j;
   auto &resmgr = umpire::ResourceManager::getInstance();
 
   PetscFunctionBegin;
 
-  if (MJacS_dev == NULL) {
-    /* Set locations only */
-
+  // If sparsity pattern has not been created, create it.
+  // This only needs to be done once since the sparsity pattern of the Jacobian
+  // does not change during the optimization.
+  if (iJacS_dev != NULL && jJacS_dev != NULL) {
+    // Compute sparsity pattern on host, matching the flat-array layout
+    // defined during setup in OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE.
     roffset = 0;
     coffset = 0;
 
-    // Create arrays on host to store i,j, and val arrays
     umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
     pbpolrajahiopsparse->i_jaceq =
         (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
     pbpolrajahiopsparse->j_jaceq =
         (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
-    pbpolrajahiopsparse->val_jaceq =
-        (double *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(double)));
+    pbpolrajahiopsparse->perm_jaceq =
+        (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
 
-    iRowstart = pbpolrajahiopsparse->i_jaceq;
-    jColstart = pbpolrajahiopsparse->j_jaceq;
+    int *iRow_temp =
+        (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+    int *jCol_temp =
+        (int *)(h_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
 
-    ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
-        opflow, opflow->X, opflow->Jac_Ge);
-    CHKERRQ(ierr);
+    PS ps = opflow->ps;
+    BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
+    GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
+    LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
+    LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
-    ierr = MatGetSize(opflow->Jac_Ge, &nrow, &ncol);
-    CHKERRQ(ierr);
+    int geni = 0, loadi = 0;
+    /*KS: not worth moving this to the gpu */
+    for (int ibus = 0; ibus < ps->nbus; ibus++) {
+      PSBUS bus = &ps->bus[ibus];
+      int P_row = roffset + busparams->gidx[ibus];
+      int Q_row = P_row + 1;
+      int theta_col = coffset + busparams->xidx[ibus];
+      int Vm_col = theta_col + 1;
+      int base;
 
-    /* Copy over locations to triplet format */
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      for (j = 0; j < nvals; j++) {
-        iRowstart[j] = roffset + i;
-        jColstart[j] = coffset + cols[j];
+      /* P-row self-admittance */
+      base = busparams->eqjacsp_idx[2 * ibus];
+      iRow_temp[base] = P_row;
+      jCol_temp[base] = theta_col;
+      iRow_temp[base + 1] = P_row;
+      jCol_temp[base + 1] = Vm_col;
+
+      if (bus->ide == ISOLATED_BUS) {
+        /* Q-row self-admittance for isolated bus */
+        base = busparams->eqjacsp_idx[2 * ibus + 1];
+        iRow_temp[base] = Q_row;
+        jCol_temp[base] = theta_col;
+        iRow_temp[base + 1] = Q_row;
+        jCol_temp[base + 1] = Vm_col;
+        continue;
       }
-      /* Increment iRow,jCol pointers */
-      iRowstart += nvals;
-      jColstart += nvals;
-      ierr = MatRestoreRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
+
+      /* P-row power imbalance */
+      if (opflow->include_powerimbalance_variables) {
+        base = busparams->jacsp_idx[ibus];
+        int pimb_col = coffset + busparams->xidxpimb[ibus];
+        iRow_temp[base] = P_row;
+        jCol_temp[base] = pimb_col;
+        iRow_temp[base + 1] = P_row;
+        jCol_temp[base + 1] = pimb_col + 1;
+      }
+
+      /* P-row gen Pg */
+      int gi = 0;
+      for (int k = 0; k < bus->ngen; k++) {
+        PSGEN gen;
+        PSBUSGetGen(bus, k, &gen);
+        if (!gen->status)
+          continue;
+        base = genparams->eqjacspbus_idx[geni + gi];
+        iRow_temp[base] = P_row;
+        jCol_temp[base] = coffset + genparams->xidx[geni + gi];
+        gi++;
+      }
+
+      /* P-row load loss */
+      if (opflow->include_loadloss_variables) {
+        for (int k = 0; k < bus->nload; k++) {
+          base = loadparams->jacsp_idx[loadi + k];
+          iRow_temp[base] = P_row;
+          jCol_temp[base] = coffset + loadparams->xidx[loadi + k];
+        }
+      }
+
+      /* Q-row self-admittance */
+      base = busparams->eqjacsp_idx[2 * ibus + 1];
+      iRow_temp[base] = Q_row;
+      jCol_temp[base] = theta_col;
+      iRow_temp[base + 1] = Q_row;
+      jCol_temp[base + 1] = Vm_col;
+
+      /* Q-row power imbalance */
+      if (opflow->include_powerimbalance_variables) {
+        base = busparams->jacsq_idx[ibus];
+        int pimb_col = coffset + busparams->xidxpimb[ibus];
+        iRow_temp[base] = Q_row;
+        jCol_temp[base] = pimb_col + 2;
+        iRow_temp[base + 1] = Q_row;
+        jCol_temp[base + 1] = pimb_col + 3;
+      }
+
+      /* Q-row gen Qg */
+      gi = 0;
+      for (int k = 0; k < bus->ngen; k++) {
+        PSGEN gen;
+        PSBUSGetGen(bus, k, &gen);
+        if (!gen->status)
+          continue;
+        base = genparams->eqjacsqbus_idx[geni + gi];
+        iRow_temp[base] = Q_row;
+        jCol_temp[base] = coffset + genparams->xidx[geni + gi] + 1;
+        gi++;
+      }
+
+      /* Q-row load loss */
+      if (opflow->include_loadloss_variables) {
+        for (int k = 0; k < bus->nload; k++) {
+          base = loadparams->jacsq_idx[loadi + k];
+          iRow_temp[base] = Q_row;
+          jCol_temp[base] = coffset + loadparams->xidx[loadi + k] + 1;
+        }
+      }
+
+      geni += bus->ngenON;
+      loadi += bus->nload;
     }
 
-    // Copy over i_jaceq and j_jaceq arrays to device
+    /* Line off-diagonal entries */
+    for (int l = 0; l < lineparams->nlineON; l++) {
+      if (lineparams->isdcline[l])
+        continue;
+
+      int base = lineparams->eqjacsp_idx[l];
+      int Pf_row = roffset + lineparams->geqidxf[l];
+      int Qf_row = Pf_row + 1;
+      int Pt_row = roffset + lineparams->geqidxt[l];
+      int Qt_row = Pt_row + 1;
+      int thetat_col = coffset + lineparams->xidxt[l];
+      int Vmt_col = thetat_col + 1;
+      int thetaf_col = coffset + lineparams->xidxf[l];
+      int Vmf_col = thetaf_col + 1;
+
+      /* From-bus off-diagonal: Pf w.r.t. thetat, Vmt */
+      iRow_temp[base + 0] = Pf_row;
+      jCol_temp[base + 0] = thetat_col;
+      iRow_temp[base + 1] = Pf_row;
+      jCol_temp[base + 1] = Vmt_col;
+      /* Qf w.r.t. thetat, Vmt */
+      iRow_temp[base + 2] = Qf_row;
+      jCol_temp[base + 2] = thetat_col;
+      iRow_temp[base + 3] = Qf_row;
+      jCol_temp[base + 3] = Vmt_col;
+      /* To-bus off-diagonal: Pt w.r.t. thetaf, Vmf */
+      iRow_temp[base + 4] = Pt_row;
+      jCol_temp[base + 4] = thetaf_col;
+      iRow_temp[base + 5] = Pt_row;
+      jCol_temp[base + 5] = Vmf_col;
+      /* Qt w.r.t. thetaf, Vmf */
+      iRow_temp[base + 6] = Qt_row;
+      jCol_temp[base + 6] = thetaf_col;
+      iRow_temp[base + 7] = Qt_row;
+      jCol_temp[base + 7] = Vmf_col;
+    }
+
+    /* Generator set-point equality constraint entries */
+    if (opflow->has_gensetpoint) {
+      for (int g = 0; g < genparams->ngenON; g++) {
+        if (genparams->isrenewable[g])
+          continue;
+        int base = genparams->eqjacspgen_idx[g];
+        int row0 = roffset + genparams->geqidxgen[g];
+        int row1 = row0 + 1;
+        int Pg_col = coffset + genparams->xidx[g];
+        int delPg_col = coffset + genparams->xpdevidx[g];
+        int Pset_col = coffset + genparams->xpsetidx[g];
+
+        iRow_temp[base + 0] = row0;
+        jCol_temp[base + 0] = Pg_col;
+        iRow_temp[base + 1] = row0;
+        jCol_temp[base + 1] = delPg_col;
+        iRow_temp[base + 2] = row0;
+        jCol_temp[base + 2] = Pset_col;
+        iRow_temp[base + 3] = row1;
+        jCol_temp[base + 3] = Pset_col;
+      }
+    }
+
+    // Sort and permute indices
+    // @todo Evaluate the cost of this for large systems
+    // Consider moving the index storage (and sorting) to GPU
+    std::vector<int> perm_temp(opflow->nnz_eqjacsp);
+    std::iota(perm_temp.begin(), perm_temp.end(), 0);
+    std::sort(perm_temp.begin(), perm_temp.end(), [&](int i, int j) {
+      return (iRow_temp[i] != iRow_temp[j]) ? iRow_temp[i] < iRow_temp[j]
+                                            : jCol_temp[i] < jCol_temp[j];
+    });
+
+    int *iRow = pbpolrajahiopsparse->i_jaceq;
+    int *jCol = pbpolrajahiopsparse->j_jaceq;
+    int *perm = pbpolrajahiopsparse->perm_jaceq;
+    for (int i = 0; i < opflow->nnz_eqjacsp; i++) {
+      iRow[i] = iRow_temp[perm_temp[i]];
+      jCol[i] = jCol_temp[perm_temp[i]];
+      perm[perm_temp[i]] = i; // reverse map to store values directly in the
+                              // desired location
+    }
+    h_allocator_.deallocate(iRow_temp);
+    h_allocator_.deallocate(jCol_temp);
+
+    // Copy indices from host to device
     resmgr.copy(iJacS_dev, pbpolrajahiopsparse->i_jaceq);
     resmgr.copy(jJacS_dev, pbpolrajahiopsparse->j_jaceq);
-  } else {
+
+    // Allocate permutation on device and copy from host
+    umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
+    pbpolrajahiopsparse->perm_jaceq_dev =
+        (int *)(d_allocator_.allocate(opflow->nnz_eqjacsp * sizeof(int)));
+    resmgr.copy(pbpolrajahiopsparse->perm_jaceq_dev,
+                pbpolrajahiopsparse->perm_jaceq);
+  }
+
+  if (MJacS_dev != NULL) {
     ierr = PetscLogEventBegin(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
 
-    ierr = VecGetArray(opflow->X, &x);
-    CHKERRQ(ierr);
-
-    // Copy from device to host
-    umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-    registerWith(x, opflow->nx, resmgr, h_allocator_);
-    resmgr.copy((double *)x, (double *)x_dev);
-
-    ierr = VecRestoreArray(opflow->X, &x);
-    CHKERRQ(ierr);
-
-    /* Compute equality constraint jacobian */
-    ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
-        opflow, opflow->X, opflow->Jac_Ge);
-    CHKERRQ(ierr);
-
-    ierr = MatGetSize(opflow->Jac_Ge, &nrow, &ncol);
-    CHKERRQ(ierr);
-
-    values = pbpolrajahiopsparse->val_jaceq;
-
-    /* Copy over values */
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      for (j = 0; j < nvals; j++) {
-        values[j] = vals[j];
-      }
-      values += nvals;
-      ierr = MatRestoreRow(opflow->Jac_Ge, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-    }
-
-    // Copy over val_ineq to device
-    resmgr.copy(MJacS_dev, pbpolrajahiopsparse->val_jaceq);
+    /* KS: Compute equality constraint Jacobian directly on device.
+       No H2D, D2H copies: x_dev is already on device, output goes
+       straight into MJacS_dev. */
+    ComputeEqJacValuesGPU_PBPOLRAJAHIOPSPARSE(
+        opflow, x_dev, pbpolrajahiopsparse->perm_jaceq_dev, MJacS_dev);
 
     ierr = PetscLogEventEnd(opflow->eqconsjaclogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
@@ -698,26 +934,44 @@ OPFLOWComputeSparseEqualityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PetscFunctionReturn(0);
 }
 
+/** @brief Helper function to only store upper trianglular Hessian
+ *
+ */
+static inline void store_entry(const int slot, int r, int c, int *iRow,
+                               int *jCol) {
+  if (r > c)
+    std::swap(r, c);
+  iRow[slot] = r;
+  jCol[slot] = c;
+}
+
+/**
+ * @brief Compute the Hessian of the Lagrangian for the PBPOLRAJAHIOPSPARSE
+ * model.
+ *
+ * @param[inout] opflow The OPFLOW object.
+ * @param[in]  x_dev The device array with the current solution iterate.
+ * @param[out] lambda_dev The device array with the current Lagrange
+ * multipliers.
+ * @param[out] iHSS_dev The device array for the row indices of the Hessian.
+ * @param[out] jHSS_dev The device array for the column indices of the Hessian.
+ * @param[out] MHSS_dev The device array for the values of the Hessian.
+ * @return PetscErrorCode indicating success or failure.
+ */
 PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
     OPFLOW opflow, const double *x_dev, const double *lambda_dev, int *iHSS_dev,
     int *jHSS_dev, double *MHSS_dev) {
+
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
+
   PetscErrorCode ierr;
-  PetscInt *iRow, *jCol;
-  PetscScalar *x, *values, *lambda;
-  PetscInt nrow;
-  PetscInt nvals;
-  const PetscInt *cols;
-  const PetscScalar *vals;
-  PetscInt i, j;
-  PetscInt ctr = 0;
+
   auto &resmgr = umpire::ResourceManager::getInstance();
 
   PetscFunctionBegin;
 
   if (iHSS_dev != NULL && jHSS_dev != NULL) {
-
     // Create arrays on host to store i,j, and val arrays
     umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
@@ -725,122 +979,220 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOPSPARSE(
         (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
     pbpolrajahiopsparse->j_hess =
         (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
-    pbpolrajahiopsparse->val_hess =
-        (double *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(double)));
+    pbpolrajahiopsparse->perm_hess =
+        (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
 
-    iRow = pbpolrajahiopsparse->i_hess;
-    jCol = pbpolrajahiopsparse->j_hess;
+    int *iRow_temp =
+        (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
+    int *jCol_temp =
+        (int *)(h_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
 
-    ierr = (*opflow->modelops.computehessian)(
-        opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
-    CHKERRQ(ierr);
-    ierr = MatGetSize(opflow->Hes, &nrow, &nrow);
-    CHKERRQ(ierr);
+    BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
+    GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
+    LOADParamsRajaHiop *loadparams = &pbpolrajahiopsparse->loadparams;
+    LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
 
-    /* Copy over locations to triplet format */
-    /* Note that HIOP requires a upper triangular Hessian as oppposed
-       to IPOPT which requires a lower triangular Hessian
-    */
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      ctr = 0;
-      for (j = 0; j < nvals; j++) {
-        if (cols[j] >= i) { /* upper triangle */
-          /* save as upper triangle locations */
-          iRow[ctr] = i;
-          jCol[ctr] = cols[j];
-          ctr++;
-        }
-      }
-      iRow += ctr;
-      jCol += ctr;
-      ierr = MatRestoreRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
+    // Compute indices
+    // Bus equality constraint Hessian (1 diagonal entry)
+    for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+      const int xloc = busparams->xidx[ibus];
+      const int slot = busparams->hesssp_eq_idx[ibus];
+      store_entry(slot, xloc + 1, xloc + 1, iRow_temp, jCol_temp);
     }
 
-    // Copy over i_hess and j_hess arrays to device
+    // Line equality constraints Hessian (4x4, 10 upper triangular)
+    for (int iline = 0; iline < lineparams->nlineON; ++iline) {
+      const int xlocf = lineparams->xidxf[iline];
+      const int xloct = lineparams->xidxt[iline];
+      const int base = 10 * iline;
+
+      store_entry(lineparams->hesssp_eq_idx[base + 0], xlocf, xlocf, iRow_temp,
+                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 1], xlocf, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 2], xlocf, xloct, iRow_temp,
+                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 3], xlocf, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_eq_idx[base + 4], xlocf + 1, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 5], xlocf + 1, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 6], xlocf + 1, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_eq_idx[base + 7], xloct, xloct, iRow_temp,
+                  jCol_temp);
+      store_entry(lineparams->hesssp_eq_idx[base + 8], xloct, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_eq_idx[base + 9], xloct + 1, xloct + 1,
+                  iRow_temp, jCol_temp);
+    }
+
+    // Generator AGC inequality constraints Hessian (3 upper triangular entries)
+    if (opflow->has_gensetpoint && opflow->use_agc) {
+      const int xloc_dpsys = pbpolrajahiopsparse->agc_xidx;
+
+      for (int g = 0; g < genparams->ngenON; ++g) {
+        if (genparams->isrenewable[g])
+          continue;
+
+        const int xloc_pg = genparams->xidx[g];
+        const int xloc_dev = genparams->xpdevidx[g];
+        const int base = 3 * g;
+
+        store_entry(genparams->hesssp_ineq_idx[base + 0], xloc_pg, xloc_pg,
+                    iRow_temp, jCol_temp);
+        store_entry(genparams->hesssp_ineq_idx[base + 1], xloc_pg, xloc_dev,
+                    iRow_temp, jCol_temp);
+        store_entry(genparams->hesssp_ineq_idx[base + 2], xloc_pg, xloc_dpsys,
+                    iRow_temp, jCol_temp);
+      }
+    }
+
+    // Set voltage inequality constraints Hessian (1 entry)
+    if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+      for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+        if (!(busparams->ispv[ibus] || busparams->isref[ibus]))
+          continue;
+
+        const int xloc_v = busparams->xidx[ibus] + 1;
+        const int goff = busparams->genoffset[ibus];
+        const int ngen = busparams->ngenONbus[ibus];
+
+        for (int k = 0; k < ngen; ++k) {
+          const int g = goff + k;
+          const int xloc_qg = genparams->xidx[g] + 1;
+
+          const int slot = busparams->hesssp_ineq_idx[g];
+          store_entry(slot, xloc_qg, xloc_v, iRow_temp, jCol_temp);
+        }
+      }
+    }
+
+    // Line inequality constraints Hessian (4x4, 10 upper triangular)
+    for (int imon = 0; imon < lineparams->nlinelim; ++imon) {
+      const int iline = lineparams->linelimidx[imon];
+      if (lineparams->isdcline[iline])
+        continue;
+
+      const int xlocf = lineparams->xidxf[iline];
+      const int xloct = lineparams->xidxt[iline];
+      const int base = 10 * imon;
+
+      store_entry(lineparams->hesssp_ineq_idx[base + 0], xlocf, xlocf,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 1], xlocf, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 2], xlocf, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 3], xlocf, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_ineq_idx[base + 4], xlocf + 1, xlocf + 1,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 5], xlocf + 1, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 6], xlocf + 1, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_ineq_idx[base + 7], xloct, xloct,
+                  iRow_temp, jCol_temp);
+      store_entry(lineparams->hesssp_ineq_idx[base + 8], xloct, xloct + 1,
+                  iRow_temp, jCol_temp);
+
+      store_entry(lineparams->hesssp_ineq_idx[base + 9], xloct + 1, xloct + 1,
+                  iRow_temp, jCol_temp);
+    }
+
+    // Power-imbalance objective Hessian (2 diagonal entries)
+    if (opflow->include_powerimbalance_variables) {
+      for (int ibus = 0; ibus < busparams->nbus; ++ibus) {
+        const int xloc = busparams->xidxpimb[ibus];
+        const int base = 2 * ibus;
+
+        store_entry(busparams->hesssp_obj_idx[base + 0], xloc, xloc, iRow_temp,
+                    jCol_temp);
+        store_entry(busparams->hesssp_obj_idx[base + 1], xloc + 1, xloc + 1,
+                    iRow_temp, jCol_temp);
+      }
+    }
+
+    // Gen objective Hessian (1 diagonal entry)
+    if (opflow->objectivetype == MIN_GEN_COST ||
+        opflow->objectivetype == MIN_GENSETPOINT_DEVIATION) {
+      for (int igen = 0; igen < genparams->ngenON; ++igen) {
+        const int xloc = (opflow->objectivetype == MIN_GEN_COST)
+                             ? genparams->xidx[igen]
+                             : genparams->xpdevidx[igen];
+
+        const int slot = genparams->hesssp_obj_idx[igen];
+        store_entry(slot, xloc, xloc, iRow_temp, jCol_temp);
+      }
+    }
+
+    // Load objective Hessian (2 diagonal entries)
+    if (opflow->include_loadloss_variables) {
+      for (int iload = 0; iload < loadparams->nload; ++iload) {
+        const int xloc = loadparams->xidx[iload];
+        const int base = 2 * iload;
+
+        store_entry(loadparams->hesssp_obj_idx[base + 0], xloc, xloc, iRow_temp,
+                    jCol_temp);
+        store_entry(loadparams->hesssp_obj_idx[base + 1], xloc + 1, xloc + 1,
+                    iRow_temp, jCol_temp);
+      }
+    }
+
+    // Sort and permute indices
+    // @todo Evaluate the cost of this for large systems
+    // Consider moving the index storage (and sorting) to GPU
+    std::vector<int> perm_temp(opflow->nnz_hesssp);
+    std::iota(perm_temp.begin(), perm_temp.end(), 0);
+    std::sort(perm_temp.begin(), perm_temp.end(), [&](int i, int j) {
+      return (iRow_temp[i] != iRow_temp[j]) ? iRow_temp[i] < iRow_temp[j]
+                                            : jCol_temp[i] < jCol_temp[j];
+    });
+
+    int *iRow = pbpolrajahiopsparse->i_hess;
+    int *jCol = pbpolrajahiopsparse->j_hess;
+    int *perm = pbpolrajahiopsparse->perm_hess;
+    for (int i = 0; i < opflow->nnz_hesssp; i++) {
+      iRow[i] = iRow_temp[perm_temp[i]];
+      jCol[i] = jCol_temp[perm_temp[i]];
+      perm[perm_temp[i]] = i; // reverse map to store values directly in the
+                              // desired location
+    }
+    h_allocator_.deallocate(iRow_temp);
+    h_allocator_.deallocate(jCol_temp);
+
+    // Copy indices from host to device
     resmgr.copy(iHSS_dev, pbpolrajahiopsparse->i_hess);
     resmgr.copy(jHSS_dev, pbpolrajahiopsparse->j_hess);
-  } else {
 
-    ierr = VecGetArray(opflow->X, &x);
+    // Allocate permutation on device and copy from host
+    umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
+    pbpolrajahiopsparse->perm_hess_dev =
+        (int *)(d_allocator_.allocate(opflow->nnz_hesssp * sizeof(int)));
+    resmgr.copy(pbpolrajahiopsparse->perm_hess_dev,
+                pbpolrajahiopsparse->perm_hess);
+  }
+
+  if (MHSS_dev != NULL) {
+    ierr = PetscLogEventBegin(opflow->hesslogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
 
-    // Copy from device to host
-    umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-    registerWith(x, opflow->nx, resmgr, h_allocator_);
-    resmgr.copy((double *)x, (double *)x_dev);
+    /* Compute Hessian directly on device.
+       No H2D, D2H copies: x_dev is already on device, output goes
+       straight into MHSS_dev. */
+    ComputeHessValuesGPU_PBPOLRAJAHIOPSPARSE(
+        opflow, x_dev, lambda_dev, lambda_dev + opflow->nconeq,
+        pbpolrajahiopsparse->perm_hess_dev, MHSS_dev);
 
-    ierr = VecRestoreArray(opflow->X, &x);
+    ierr = PetscLogEventEnd(opflow->hesslogger, 0, 0, 0, 0);
     CHKERRQ(ierr);
-
-    ierr = VecGetArray(opflow->Lambda, &lambda);
-
-    registerWith(lambda, opflow->ncon, resmgr, h_allocator_);
-    // copy lambda from device to host
-    resmgr.copy((double *)lambda, (double *)lambda_dev);
-
-    ierr = VecPlaceArray(opflow->Lambdae, lambda);
-    CHKERRQ(ierr);
-    if (opflow->Nconineq) {
-      ierr = VecPlaceArray(opflow->Lambdai, lambda + opflow->nconeq);
-      CHKERRQ(ierr);
-    }
-
-    /* Compute Hessian */
-    ierr = (*opflow->modelops.computehessian)(
-        opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
-    CHKERRQ(ierr);
-
-    ierr = VecResetArray(opflow->Lambdae);
-    CHKERRQ(ierr);
-    if (opflow->Nconineq) {
-      ierr = VecResetArray(opflow->Lambdai);
-      CHKERRQ(ierr);
-    }
-
-    ierr = VecRestoreArray(opflow->Lambda, &lambda);
-    CHKERRQ(ierr);
-
-    if (opflow->modelops.computeauxhessian) {
-      ierr = VecGetArray(opflow->X, &x);
-      CHKERRQ(ierr);
-      ierr = (*opflow->modelops.computeauxhessian)(opflow, x, opflow->Hes,
-                                                   opflow->userctx);
-      CHKERRQ(ierr);
-      ierr = VecRestoreArray(opflow->X, &x);
-      CHKERRQ(ierr);
-
-      ierr = MatAssemblyBegin(opflow->Hes, MAT_FINAL_ASSEMBLY);
-      CHKERRQ(ierr);
-      ierr = MatAssemblyEnd(opflow->Hes, MAT_FINAL_ASSEMBLY);
-      CHKERRQ(ierr);
-    }
-
-    /* Copy over values */
-    ierr = MatGetSize(opflow->Hes, &nrow, &nrow);
-    CHKERRQ(ierr);
-
-    values = pbpolrajahiopsparse->val_hess;
-
-    for (i = 0; i < nrow; i++) {
-      ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-      ctr = 0;
-      for (j = 0; j < nvals; j++) {
-        if (cols[j] >= i) { /* Upper triangle values (same as lower triangle) */
-          values[ctr] = vals[j];
-          ctr++;
-        }
-      }
-      values += ctr;
-      ierr = MatRestoreRow(opflow->Hes, i, &nvals, &cols, &vals);
-      CHKERRQ(ierr);
-    }
-
-    // Copy over val_ineq to device
-    resmgr.copy(MHSS_dev, pbpolrajahiopsparse->val_hess);
   }
 
   PetscFunctionReturn(0);
@@ -865,6 +1217,7 @@ PetscErrorCode OPFLOWSolutionCallback_PBPOLRAJAHIOPSPARSE(
 
   ierr = VecGetArray(opflow->X, &x);
   CHKERRQ(ierr);
+
   /* Copy xsol from device to host */
   resmgr.copy(x, (double *)xsol);
   ierr = VecRestoreArray(opflow->X, &x);

@@ -19,3 +19,5 @@ myenv/
 *.DS_Store
 launcher/config.yaml
 launcher/run.sh
+*.warning
+*ipynb

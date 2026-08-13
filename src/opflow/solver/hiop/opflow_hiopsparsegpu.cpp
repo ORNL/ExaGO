@@ -55,48 +55,9 @@ bool OPFLOWHIOPSPARSEGPUInterface::get_sparse_blocks_info(
   MatInfo info_eq, info_ineq, info_hes;
 
   nx = opflow->nx;
-
-  /* Compute nonzeros for the Jacobian */
-  /* Equality constraint Jacobian */
-  ierr = (*opflow->modelops.computeequalityconstraintjacobian)(
-      opflow, opflow->X, opflow->Jac_Ge);
-  CHKERRQ(ierr);
-  ierr = MatSetOption(opflow->Jac_Ge, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE);
-  CHKERRQ(ierr);
-
-  ierr = MatGetInfo(opflow->Jac_Ge, MAT_LOCAL, &info_eq);
-  CHKERRQ(ierr);
-
-  nnz_sparse_Jaceq = opflow->nnz_eqjacsp = info_eq.nz_used;
-
-  nnz_sparse_Jacineq = 0;
-  if (opflow->Nconineq) {
-    ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
-        opflow, opflow->X, opflow->Jac_Gi);
-    CHKERRQ(ierr);
-    ierr =
-        MatSetOption(opflow->Jac_Gi, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE);
-    CHKERRQ(ierr);
-
-    ierr = MatGetInfo(opflow->Jac_Gi, MAT_LOCAL, &info_ineq);
-    CHKERRQ(ierr);
-
-    nnz_sparse_Jacineq = opflow->nnz_ineqjacsp = info_ineq.nz_used;
-  }
-
-  /* Compute non-zeros for Hessian */
-  ierr = (*opflow->modelops.computehessian)(opflow, opflow->X, opflow->Lambdae,
-                                            opflow->Lambdai, opflow->Hes);
-  CHKERRQ(ierr);
-  ierr = MatSetOption(opflow->Hes, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE);
-  CHKERRQ(ierr);
-
-  ierr = MatGetInfo(opflow->Hes, MAT_LOCAL, &info_hes);
-  CHKERRQ(ierr);
-
-  nnz_sparse_Hess_Lagr = (info_hes.nz_used - opflow->nx) / 2 + opflow->nx;
-
-  opflow->nnz_hesssp = nnz_sparse_Hess_Lagr;
+  nnz_sparse_Jaceq = opflow->nnz_eqjacsp;
+  nnz_sparse_Jacineq = opflow->nnz_ineqjacsp;
+  nnz_sparse_Hess_Lagr = opflow->nnz_hesssp;
 
   return true;
 }
