@@ -11,7 +11,7 @@ from typing import Optional
 
 import plotly.graph_objects as go
 
-from agentigrid.engine.journal import SearchJournal
+from agentigrid.engine.journal import SearchJournal, is_solve_iteration
 from agentigrid.parsers.opflow_results import OPFLOWResult
 
 # ── Color Palette ────────────────────────────────────────────────────────────
@@ -60,6 +60,7 @@ def convergence_chart(
     highlight_best: bool = True,
     height: int = 400,
     best_iteration: int | None = None,
+    solve_only: bool = True,
 ) -> go.Figure:
     """Line+scatter chart of objective value across iterations.
 
@@ -69,11 +70,16 @@ def convergence_chart(
         height: Chart height in pixels.
         best_iteration: If provided, annotate this iteration as "best"
             instead of the lowest-cost feasible iteration.
+        solve_only: When True (default), only real solve iterations are plotted;
+            analyze/complete control markers (zeroed rows) are excluded so they
+            do not flatten or empty the chart.
 
     Returns:
         Plotly Figure.
     """
     entries = journal.entries
+    if solve_only:
+        entries = [e for e in entries if is_solve_iteration(e)]
     if not entries:
         return _empty_figure("No data available", height)
 
@@ -181,6 +187,7 @@ def voltage_range_chart(
     v_min_limit: float = 0.95,
     v_max_limit: float = 1.05,
     height: int = 400,
+    solve_only: bool = True,
 ) -> go.Figure:
     """Area chart showing voltage min/max envelope across iterations.
 
@@ -189,11 +196,15 @@ def voltage_range_chart(
         v_min_limit: Lower voltage limit reference line (p.u.).
         v_max_limit: Upper voltage limit reference line (p.u.).
         height: Chart height in pixels.
+        solve_only: When True (default), only real solve iterations are plotted;
+            analyze/complete control markers (zeroed rows) are excluded.
 
     Returns:
         Plotly Figure.
     """
     entries = journal.entries
+    if solve_only:
+        entries = [e for e in entries if is_solve_iteration(e)]
     if not entries:
         return _empty_figure("No data available", height)
 

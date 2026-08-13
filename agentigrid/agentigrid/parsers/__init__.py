@@ -41,7 +41,11 @@ from agentigrid.parsers.sopflow_parser import (
     parse_sopflow_simulation_result,
 )
 from agentigrid.parsers.sopflow_summary import sopflow_results_summary
-from agentigrid.parsers.sopflow_dispatch import compute_wind_absorption
+from agentigrid.parsers.sopflow_dispatch import (
+    compute_wind_absorption,
+    compute_scenario_voltage_spread,
+    all_scenarios_converged,
+)
 from agentigrid.parsers.pflow_parser import (
     parse_pflow_output,
     parse_pflow_simulation_result,
@@ -229,6 +233,8 @@ __all__ = [
     "parse_sopflow_simulation_result",
     "parse_sopflow_metadata",
     "compute_wind_absorption",
+    "compute_scenario_voltage_spread",
+    "all_scenarios_converged",
     "parse_pflow_output",
     "parse_pflow_simulation_result",
     "parse_pflow_metadata",

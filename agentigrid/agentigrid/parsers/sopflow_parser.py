@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Optional
 
 from agentigrid.parsers.opflow_parser import parse_opflow_output, _is_marginal_exit, _is_near_boundary
 from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.parsers.sopflow_dispatch import all_scenarios_converged
 
 logger = logging.getLogger("agentigrid.parsers.sopflow")
 
@@ -20,6 +22,71 @@ _IGNORE_LINEFLOW_RE = re.compile(r"^Ignore line flow constraints\s+(\S+)", re.MU
 _CONVERGENCE_RE = re.compile(r"^Convergence status\s+(.+)$", re.MULTILINE)
 _OBJC_VALUE_RE = re.compile(r"^Objective value\s+(?:\(base\)\s+)?([\d.eE+-]+)", re.MULTILINE)
 _SOLVER_RE = re.compile(r"^Solver\s+(\S+)", re.MULTILINE)
+
+# Voltage band used only when no per-bus limits are available (case fallback).
+_VMIN_FALLBACK = 0.9
+_VMAX_FALLBACK = 1.1
+
+# Marginal annotation reusing the "marginal convergence … use with caution" vocabulary
+# of the SCOPFLOW / PFLOW / TCOPFLOW paths, specialized for EMPAR's advisory flags.
+_EMPAR_MARGINAL_NOTE = (
+    "Marginal: EMPAR reported partial per-scenario non-convergence, but the "
+    "base-case solution checks (power balance, voltage band, no violations, "
+    "positive objective) all pass — treated as feasible (marginal); use with caution."
+)
+
+
+def _enforced_voltage_band(
+    bus_limits: dict[int, tuple[float, float]] | None,
+) -> tuple[float, float]:
+    """A single (Vmin, Vmax) band from the active per-bus limits, else case fallback.
+
+    Uses the enforced envelope (min of the per-bus Vmin floors, max of the Vmax
+    ceilings); for the usual uniform band this is exactly that band.
+    """
+    if bus_limits:
+        vmins = [lim[0] for lim in bus_limits.values()]
+        vmaxs = [lim[1] for lim in bus_limits.values()]
+        if vmins and vmaxs:
+            return min(vmins), max(vmaxs)
+    return _VMIN_FALLBACK, _VMAX_FALLBACK
+
+
+def sopflow_solution_feasible(
+    result: OPFLOWResult,
+    bus_limits: dict[int, tuple[float, float]] | None = None,
+) -> tuple[bool, dict]:
+    """Judge SOPFLOW base-case feasibility from the SOLUTION, not from flags.
+
+    EMPAR's header status and per-scenario ``mpc.converged`` flags are unreliable
+    in both directions (falsely CONVERGED, falsely non-converged), so feasibility
+    is decided from the parsed base-case metrics:
+
+    - ``balanced``      generation within 5% of load (covers losses; catches the
+                         old unsolved-echo where gen ran ~45% over load).
+    - ``within_band``   aggregate voltage min/max inside the enforced band.
+    - ``no_violations`` the parser found no bus/branch/power-balance violation.
+    - ``has_objective`` a positive objective was parsed (not None / not 0).
+
+    Returns ``(feasible, checks)`` where ``checks`` is the per-check breakdown.
+    """
+    load = result.total_load_mw
+    gen = result.total_gen_mw
+    balanced = abs(gen - load) / max(load, 1e-6) <= 0.05
+    vmin_band, vmax_band = _enforced_voltage_band(bus_limits)
+    within_band = (
+        result.voltage_min >= vmin_band - 1e-3
+        and result.voltage_max <= vmax_band + 1e-3
+    )
+    no_violations = result.num_violations == 0
+    has_objective = result.objective_value is not None and result.objective_value > 0
+    checks = {
+        "balanced": balanced,
+        "within_band": within_band,
+        "no_violations": no_violations,
+        "has_objective": has_objective,
+    }
+    return (balanced and within_band and no_violations and has_objective), checks
 
 
 def parse_sopflow_output(
@@ -146,7 +213,55 @@ def parse_sopflow_simulation_result(
         return None
 
     try:
-        return parse_sopflow_output(sim_result.stdout, bus_limits=bus_limits)
+        result, metadata = parse_sopflow_output(sim_result.stdout, bus_limits=bus_limits)
     except ValueError as exc:
         logger.warning("Failed to parse SOPFLOW output: %s", exc)
         return None
+
+    # Solution-based feasibility for EMPAR (and any non-IPOPT solver). EMPAR's
+    # header status and per-scenario mpc.converged flags are unreliable in BOTH
+    # directions — falsely CONVERGED at the header, and falsely non-converged per
+    # scenario (an identical problem re-solved under IPOPT returns Optimal). So we
+    # judge feasibility from the SOLUTION, never from the flags. IPOPT's status is
+    # reliable and its solutions pass these same checks, so IPOPT is left untouched.
+    solver = (metadata.get("solver") or result.solver or "").strip().upper()
+    workdir = getattr(sim_result, "workdir", None)
+    if solver != "IPOPT":
+        feasible, checks = sopflow_solution_feasible(result, bus_limits)
+        if feasible:
+            result.converged = True
+            result.convergence_status = "CONVERGED"
+            result.feasibility_detail = "feasible"  # keep parsed objective_value
+            metadata["convergence_status"] = "CONVERGED"
+            metadata["sopflow_solution_feasible"] = True
+            metadata["solution_checks"] = checks
+            # Per-scenario flags are ADVISORY: if EMPAR flagged partial
+            # non-convergence but the solution checks pass, keep feasible and
+            # annotate as marginal — never downgrade a good solution to FAILED.
+            if solver == "EMPAR" and workdir is not None:
+                if all_scenarios_converged(Path(workdir)) is False:
+                    logger.info(
+                        "SOPFLOW/EMPAR flagged partial per-scenario non-convergence "
+                        "in %s, but the base-case solution checks pass — feasible "
+                        "(marginal).", workdir,
+                    )
+                    result.convergence_status = "CONVERGED (marginal)"
+                    metadata["convergence_status"] = "CONVERGED (marginal)"
+                    metadata["empar_marginal"] = True
+                    metadata["marginal_note"] = _EMPAR_MARGINAL_NOTE
+        else:
+            # Genuine infeasibility (imbalanced, out-of-band, violations, or no
+            # positive objective): never report feasible or a $0.00 base cost.
+            logger.warning(
+                "SOPFLOW/%s base case fails solution checks %s — marking DID NOT "
+                "CONVERGE (objective N/A).", solver or "?", checks,
+            )
+            result.converged = False
+            result.convergence_status = "DID NOT CONVERGE"
+            result.feasibility_detail = "infeasible"
+            result.objective_value = None  # NOT 0.0 — no feasible base cost exists
+            metadata["convergence_status"] = "DID NOT CONVERGE"
+            metadata["sopflow_solution_feasible"] = False
+            metadata["solution_checks"] = checks
+
+    return result, metadata

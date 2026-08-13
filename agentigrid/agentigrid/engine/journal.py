@@ -14,6 +14,13 @@ from agentigrid.parsers.opflow_results import OPFLOWResult
 
 logger = logging.getLogger("agentigrid.engine.journal")
 
+# Modes that correspond to a real ExaGO solve iteration (a single scalar solve),
+# as opposed to analyze/complete control markers or sweep/explore aggregate entries.
+SOLVE_MODES = frozenset({"fresh", "accumulative"})
+# convergence_status values that never denote a single scalar solve. Mirrors the
+# non-simulation set used by the report's iteration-log table.
+NON_SOLVE_STATUSES = frozenset({"ANALYSIS", "COMPLETE", "EXPLORE", "SWEEP", "CONTINGENCY"})
+
 
 @dataclass
 class JournalEntry:
@@ -47,6 +54,25 @@ class JournalEntry:
     exago_command: Optional[dict] = None  # Reproducible ExaGO invocation record (JSON journal only; see add_* methods)
     contingency_meta: Optional[dict] = None  # C.5: target bus, neighbors, order, pass/fail counts
     reserve_meta: Optional[dict] = None  # C.8: hot-reserve / N-1 generator security accounting
+
+
+def is_solve_iteration(entry: JournalEntry) -> bool:
+    """True only for entries that are a real ExaGO solve iteration.
+
+    A solve iteration ran a single scalar ExaGO solve: its ``mode`` is a solve
+    mode (fresh/accumulative), its ``convergence_status`` is not a non-solve
+    marker (ANALYSIS/COMPLETE/EXPLORE/SWEEP/CONTINGENCY), and an ExaGO run
+    actually executed (``exago_command`` present). This is the shared predicate
+    used to exclude analyze queries and completion markers from feasible/
+    infeasible tallies, convergence charts, and the completion narrative — they
+    are control/analysis entries, not failed solves. A genuinely infeasible
+    solve still qualifies (it ran ExaGO and carries an ``exago_command``).
+    """
+    return (
+        entry.mode in SOLVE_MODES
+        and entry.convergence_status not in NON_SOLVE_STATUSES
+        and entry.exago_command is not None
+    )
 
 
 @dataclass
@@ -638,6 +664,18 @@ class SearchJournal:
                 f"{e.iteration:>4} | {desc} | {'SWEEP':>14} |  N/A  | "
                 f"{feas_summary:<13} |      N/A"
             )
+        elif e.convergence_status == "ANALYSIS":
+            # An analysis query, not a solve — never render as infeasible "No".
+            return (
+                f"{e.iteration:>4} | {desc} | {'ANALYSIS':>14} |   —   | "
+                f"{'analysis query':<13} |      N/A"
+            )
+        elif e.convergence_status == "COMPLETE":
+            # End-of-search marker, not a solve.
+            return (
+                f"{e.iteration:>4} | {desc} | {'COMPLETE':>14} |   —   | "
+                f"{'completion':<13} |      N/A"
+            )
         elif e.feasible and e.objective_value is not None:
             cost = f"{e.objective_value:>12,.2f}"
             feas = "Yes"
@@ -885,6 +923,43 @@ class SearchJournal:
         base = self.format_for_prompt()
         blocks: list[str] = [base]
 
+        # Solve-only feasibility tally + explicit labeling of non-solve entries, so
+        # the classifier never reads an analyze query or the completion marker as a
+        # failed/infeasible solve or as a solver-breaking modification.
+        solve_entries = [e for e in self._entries if is_solve_iteration(e)]
+        n_feas = sum(1 for e in solve_entries if e.feasible)
+        n_infeas = sum(1 for e in solve_entries if not e.feasible)
+        control_entries = [e for e in self._entries if not is_solve_iteration(e)]
+        summary_lines = [
+            "--- Iteration accounting (solve vs control) ---",
+            f"  Real solve iterations: {len(solve_entries)} "
+            f"(feasible {n_feas}, infeasible {n_infeas}).",
+        ]
+        for e in control_entries:
+            if e.convergence_status == "ANALYSIS":
+                result = (e.llm_reasoning or "").strip()
+                if len(result) > 400:
+                    result = result[:400] + "..."
+                summary_lines.append(
+                    f"  Iteration {e.iteration}: analysis query "
+                    f"({e.description}) — NOT a solve; returned: {result or '(no text)'}"
+                )
+            elif e.convergence_status == "COMPLETE":
+                summary_lines.append(
+                    f"  Iteration {e.iteration}: search completed by LLM — "
+                    "NOT a solve, not a failure."
+                )
+            elif e.convergence_status not in ("SWEEP", "EXPLORE", "CONTINGENCY"):
+                summary_lines.append(
+                    f"  Iteration {e.iteration}: {e.mode} / {e.convergence_status} "
+                    "— control entry, not a solve."
+                )
+        summary_lines.append(
+            "  Do NOT treat analysis/completion entries as infeasible solves or as "
+            "modifications that broke the solver."
+        )
+        blocks.append("\n".join(summary_lines))
+
         for e in self._entries:
             if e.mode not in ("sweep", "contingency", "reserve"):
                 continue
@@ -1067,6 +1142,9 @@ class SearchJournal:
                 "best_bus": None,
                 "feasible_count": 0,
                 "infeasible_count": 0,
+                "solve_feasible_count": 0,
+                "solve_infeasible_count": 0,
+                "control_count": 0,
                 "objective_trend": [],
                 "voltage_range_trend": [],
                 "goal_type": goal_type,
@@ -1077,6 +1155,14 @@ class SearchJournal:
         feasible = [e for e in self._entries if e.feasible and e.objective_value is not None]
         infeasible_count = sum(1 for e in self._entries if not e.feasible)
         marginal_count = sum(1 for e in self._entries if e.feasibility_detail == "marginal")
+
+        # Solve-only tallies: analyze queries and completion markers are control
+        # entries, not failed solves, so they must not inflate the infeasible
+        # count. ``control_count`` is everything that is not a real solve.
+        solve_entries = [e for e in self._entries if is_solve_iteration(e)]
+        solve_feasible_count = sum(1 for e in solve_entries if e.feasible)
+        solve_infeasible_count = sum(1 for e in solve_entries if not e.feasible)
+        control_count = len(self._entries) - len(solve_entries)
 
         # Use override if provided and valid
         best_bus = None
@@ -1114,6 +1200,10 @@ class SearchJournal:
             "feasible_count": len(feasible),
             "infeasible_count": infeasible_count,
             "marginal_count": marginal_count,
+            # Solve-only counts (analyze/complete/sweep control entries excluded).
+            "solve_feasible_count": solve_feasible_count,
+            "solve_infeasible_count": solve_infeasible_count,
+            "control_count": control_count,
             "objective_trend": [e.objective_value for e in self._entries],
             "voltage_range_trend": [
                 (e.voltage_min, e.voltage_max) for e in self._entries

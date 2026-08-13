@@ -915,6 +915,71 @@ class AgentLoopController:
 
         return args if args else None
 
+    def _normalize_sopflow_wind_base(self) -> None:
+        """REVIEW (Slaven sign-off): model base-case wind as curtailable for SOPFLOW.
+
+        case_ACTIVSg200 ships wind generators as must-run (Pmin = Pmax = nameplate),
+        so any scenario whose wind availability is below nameplate is infeasible in
+        the second stage (the Pmin floor cannot be met). Wind is physically
+        curtailable, so lower each wind generator's Pmin to 0 (Pmax unchanged) before
+        the base solve. This is a modeling decision, gated by
+        ``search.sopflow_curtailable_wind_base`` (default on); it is a no-op for
+        non-SOPFLOW applications or when the flag is off.
+
+        Wind generators are identified the same way as the rest of the codebase:
+        ``genfuel == "wind"`` (aligned by index with the generator list), falling
+        back to the scenario CSV's wind-bus set.
+        """
+        if self._config.search.application != "sopflow":
+            return
+        if not getattr(self._config.search, "sopflow_curtailable_wind_base", True):
+            return
+        net = self._base_network
+        if net is None or not net.generators:
+            return
+
+        # Primary: genfuel labels, one per generator (same parse as network_summary).
+        fuels: list[str] = []
+        raw = net.extra_sections.get("genfuel", "")
+        for line in raw.split("\n"):
+            stripped = line.strip().strip("';")
+            if (stripped and not stripped.startswith("%")
+                    and not stripped.startswith("mpc.") and stripped not in ("{", "}")):
+                fuels.append(stripped)
+        wind_idx = {
+            i for i in range(len(net.generators))
+            if i < len(fuels) and fuels[i].strip().lower() == "wind"
+        }
+
+        # Fallback: CSV wind-bus set (columns like "<bus>_Wind_<id>").
+        if not wind_idx:
+            scenario = self._sopflow_scenario_override or self._config.search.scenario_file
+            if scenario:
+                try:
+                    from agentigrid.parsers.sopflow_dispatch import _parse_wind_columns
+                    _cols, bus_map = _parse_wind_columns(Path(str(scenario)))
+                    wind_buses = set(bus_map.values())
+                    wind_idx = {
+                        i for i, g in enumerate(net.generators) if g.bus in wind_buses
+                    }
+                except Exception:  # noqa: BLE001 — fallback must never break the base solve
+                    wind_idx = set()
+
+        if not wind_idx:
+            return
+
+        lowered = 0
+        for i in wind_idx:
+            g = net.generators[i]
+            if g.Pmin != 0.0:
+                g.Pmin = 0.0
+                lowered += 1
+        self._print(
+            f"[Iter 0] SOPFLOW curtailable-wind base: lowered Pmin→0 on {lowered} of "
+            f"{len(wind_idx)} wind generator(s), Pmax unchanged "
+            "[REVIEW: base-case wind modeling — search.sopflow_curtailable_wind_base]"
+        )
+
     # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
@@ -935,6 +1000,10 @@ class AgentLoopController:
         logger.info("Parsing base case: %s", base_case)
         self._base_network = parse_matpower(base_case)
         self._current_network = self._base_network
+        # REVIEW (Slaven sign-off): model base-case wind as curtailable for SOPFLOW
+        # so scenarios with sub-nameplate wind are feasible (see the method + the
+        # search.sopflow_curtailable_wind_base flag). No-op for non-SOPFLOW / disabled.
+        self._normalize_sopflow_wind_base()
         net_summary_text = network_summary(
             self._base_network,
             max_generators=self._config.report.network_summary_max_generators,
@@ -1105,9 +1174,11 @@ class AgentLoopController:
                     f"computed cost=${computed_cost:,.2f}"
                 )
             else:
+                _obj0 = opflow.objective_value
+                _cost0 = "N/A" if _obj0 is None else f"${_obj0:,.2f}"
                 self._print(
                     f"[Iter 0] Base case: {opflow.convergence_status}, "
-                    f"cost=${opflow.objective_value:,.2f}"
+                    f"cost={_cost0}"
                 )
         else:
             self._latest_results_text = None
@@ -1475,10 +1546,12 @@ class AgentLoopController:
                     f"{opflow.convergence_status}, computed cost=${computed_cost:,.2f}"
                 )
             else:
+                _obji = opflow.objective_value
+                _costi = "N/A" if _obji is None else f"${_obji:,.2f}"
                 self._print(
                     f"[Iter {iteration}] Simulation completed in "
                     f"{sim_result.elapsed_seconds:.2f}s — "
-                    f"{opflow.convergence_status}, cost=${opflow.objective_value:,.2f}"
+                    f"{opflow.convergence_status}, cost={_costi}"
                 )
         else:
             self._latest_results_text = None
@@ -3874,6 +3947,8 @@ class AgentLoopController:
     ) -> tuple[str, bool]:
         """Handle an 'analyze' action from the LLM."""
         query_type = (data.get("query_type") or "").strip().lower()
+        if query_type == "scenario_voltage_spread":
+            return self._handle_scenario_voltage_spread(iteration, data)
         if query_type:
             return self._handle_topology_analyze(iteration, data, query_type)
 
@@ -3952,6 +4027,90 @@ class AgentLoopController:
         self._latest_results_text = result_text
         self._print(f"[Iter {iteration}] LLM action: analyze (topology) — {query_desc}")
         logger.info("Topology query %s result:\n%s", query_desc, result_text)
+
+        self._journal.add_analysis(
+            iteration=iteration,
+            query=query_desc,
+            result_summary=result_text[:200],
+        )
+
+        return "analyze", True
+
+    def _handle_scenario_voltage_spread(
+        self, iteration: int, data: dict
+    ) -> tuple[str, bool]:
+        """Handle an ``analyze`` with query_type ``scenario_voltage_spread``.
+
+        Ranks the buses most affected by wind variability — those whose voltage
+        swings most across the SOPFLOW second-stage scenarios — for the current
+        (most recent) SOPFLOW iteration's on-disk workdir. Deterministic; no
+        LLM/backend call. Fully guarded so a missing/cleaned workdir just yields
+        an informative error instead of crashing.
+        """
+        from agentigrid.parsers import compute_scenario_voltage_spread
+
+        if self._config.search.application != "sopflow":
+            self._error_feedback = (
+                "query_type 'scenario_voltage_spread' is only available for the "
+                "SOPFLOW application (it reads per-scenario second-stage output)."
+            )
+            return "error", True
+
+        raw_k = data.get("k", 10)
+        try:
+            k = int(raw_k)
+        except (TypeError, ValueError):
+            self._error_feedback = f"'k' must be a positive integer, got {raw_k!r}."
+            return "error", True
+        if k <= 0:
+            k = 10
+
+        # Most recent simulation iteration's workdir (same exago_command cwd
+        # approach the report's absorption/variability blocks use).
+        cwd = None
+        for e in reversed(self._journal.entries):
+            if e.mode not in ("fresh", "accumulative"):
+                continue
+            cmd = e.exago_command or {}
+            if cmd.get("cwd"):
+                cwd = cmd["cwd"]
+                break
+
+        spread_rows = None
+        if cwd:
+            try:
+                spread_rows = compute_scenario_voltage_spread(Path(cwd))
+            except Exception:  # noqa: BLE001 — never crash the loop on a bad workdir
+                spread_rows = None
+
+        if not spread_rows:
+            self._error_feedback = (
+                "No per-scenario second-stage voltages are available on disk for "
+                "the current SOPFLOW iteration (need >=2 sopflowout/scen_*.m "
+                "files). Run a SOPFLOW solve first, then query "
+                "scenario_voltage_spread."
+            )
+            return "error", True
+
+        top = spread_rows[:k]
+        n_sc = top[0].get("n_scenarios", 0)
+        lines = [
+            f"Buses most affected by wind variability (voltage spread across "
+            f"{n_sc} scenarios), top {len(top)} of {len(spread_rows)} buses:",
+            f"{'Bus':>6} | {'V_min':>7} | {'V_max':>7} | {'V_range':>7} | {'V_std':>7}",
+            f"{'-' * 6}-+-{'-' * 7}-+-{'-' * 7}-+-{'-' * 7}-+-{'-' * 7}",
+        ]
+        for r in top:
+            lines.append(
+                f"{r['bus']:>6} | {r['v_min']:>7.4f} | {r['v_max']:>7.4f} | "
+                f"{r['v_range']:>7.4f} | {r['v_std']:>7.4f}"
+            )
+        result_text = "\n".join(lines)
+        query_desc = f"scenario_voltage_spread k={k}"
+
+        self._latest_results_text = result_text
+        self._print(f"[Iter {iteration}] LLM action: analyze (SOPFLOW) — {query_desc}")
+        logger.info("Scenario voltage spread result:\n%s", result_text)
 
         self._journal.add_analysis(
             iteration=iteration,
@@ -4069,13 +4228,20 @@ class AgentLoopController:
                         f"total {wind_pg:.2f} MW / {wind_pmax:.2f} MW capacity "
                         f"({wind_util:.0f}% utilization)"
                     )
+                _obj_sc = opf.objective_value
+                _cost_sc = "N/A (did not converge)" if _obj_sc is None else f"${_obj_sc:,.2f}"
                 lines = [
                     f"SOPFLOW scenario summary ({self._sopflow_num_scenarios} scenarios):",
                     f"Solver: {opf.solver}",
                     wind_info,
-                    f"Base-case dispatch cost: ${opf.objective_value:,.2f}",
+                    f"Base-case dispatch cost: {_cost_sc}",
                 ]
-                if opf.num_violations > 0:
+                if not opf.converged:
+                    lines.append(
+                        "Base case DID NOT CONVERGE — one or more scenarios are "
+                        "infeasible; results are not usable."
+                    )
+                elif opf.num_violations > 0:
                     lines.append(f"Constraints violated in base case: {opf.num_violations}")
                 else:
                     lines.append("All scenarios satisfied network constraints (base case feasible).")
@@ -4228,7 +4394,9 @@ class AgentLoopController:
                 )
                 lines = [f"Generation cost breakdown (computed: ${computed_cost:,.2f}):"]
             else:
-                lines = [f"Generation cost breakdown (total: ${opf.objective_value:,.2f}):"]
+                _obj_bd = opf.objective_value
+                _total_bd = "N/A" if _obj_bd is None else f"${_obj_bd:,.2f}"
+                lines = [f"Generation cost breakdown (total: {_total_bd}):"]
             for fuel, mw in sorted(fuel_mw.items(), key=lambda x: -x[1]):
                 lines.append(f"  {fuel:15s}: {mw:8.2f} MW")
             return "\n".join(lines)

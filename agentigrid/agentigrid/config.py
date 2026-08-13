@@ -58,6 +58,7 @@ DEFAULTS: dict[str, Any] = {
         "scenario_file": None,
         "sopflow_solver": "IPOPT",
         "sopflow_iscoupling": 0,
+        "sopflow_curtailable_wind_base": True,
         "application": "opflow",
         "search_mode": "standard",
         "concurrent_pflow": False,
@@ -151,6 +152,13 @@ class SearchConfig:
     scenario_file: Optional[Path] = None  # Wind scenario CSV for SOPFLOW
     sopflow_solver: str = "IPOPT"  # Solver for SOPFLOW: IPOPT or EMPAR
     sopflow_iscoupling: int = 0  # Coupling between first/second stage (0=off, 1=on) for SOPFLOW
+    # REVIEW (Slaven sign-off): base-case wind modeling decision. Wind generators in
+    # case_ACTIVSg200 ship as must-run (Pmin=Pmax=nameplate); scenarios with wind
+    # availability below nameplate are then infeasible in the second stage. Wind is
+    # physically curtailable, so for SOPFLOW we lower each wind generator's Pmin to 0
+    # (Pmax unchanged) before the base solve. Default on; set false to keep the raw
+    # must-run bounds.
+    sopflow_curtailable_wind_base: bool = True
     benchmark_opflow: bool = False  # Run OPFLOW benchmark after PFLOW search
     concurrent_pflow: bool = False  # Enable concurrent explore/select for PFLOW
     max_variants: int = 8  # Max variants per explore action (range: 2-16)

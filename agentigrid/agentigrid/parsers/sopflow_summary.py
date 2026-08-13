@@ -23,9 +23,20 @@ def sopflow_results_summary(
     lines.append(f"Status: {result.convergence_status}")
     if result.feasibility_detail:
         lines.append(f"Feasibility: {result.feasibility_detail}")
+    # Reuse the "marginal … use with caution" vocabulary: EMPAR flagged partial
+    # per-scenario non-convergence but the solution checks pass (feasible).
+    if "marginal" in (result.convergence_status or "").lower():
+        lines.append(
+            "Note: EMPAR reported partial per-scenario non-convergence, but the "
+            "base-case solution checks (power balance, voltage band, no violations, "
+            "positive objective) all pass — treated as feasible (marginal); "
+            "use with caution."
+        )
     if result.ipopt_exit_status:
         lines.append(f"Solver exit: {result.ipopt_exit_status}")
-    lines.append(f"Objective value (base case cost): ${result.objective_value:,.2f}")
+    _obj = result.objective_value
+    _obj_str = "N/A (did not converge)" if _obj is None else f"${_obj:,.2f}"
+    lines.append(f"Objective value (base case cost): {_obj_str}")
     lines.append(f"Solver: {result.solver}")
     lines.append(f"Wind scenarios: {num_scenarios}")
     lines.append(

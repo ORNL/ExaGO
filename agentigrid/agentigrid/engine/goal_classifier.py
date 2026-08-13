@@ -111,13 +111,22 @@ def build_classification_prompts(
     app_context = _APP_CONTEXT.get(application)
     if app_context:
         system_prompt = system_prompt + " " + app_context
+    # Feasible/Infeasible are counted over REAL solve iterations only — analyze
+    # queries and completion markers are control steps, not failed solves, so they
+    # must never be read as "iterations that went infeasible". Fall back to the
+    # legacy counts if solve-only keys are absent (e.g. hand-built stats dicts).
+    solve_feasible = stats.get("solve_feasible_count", stats["feasible_count"])
+    solve_infeasible = stats.get("solve_infeasible_count", stats["infeasible_count"])
+    control_count = stats.get("control_count", 0)
     user_prompt = (
         f"Search goal: {goal}\n"
         f"Termination reason: {termination_reason}\n"
         f"Total iterations: {stats['total_iterations']}\n"
-        f"Feasible: {stats['feasible_count']} / "
-        f"Infeasible: {stats['infeasible_count']}"
+        f"Feasible solves: {solve_feasible} / "
+        f"Infeasible solves: {solve_infeasible}"
     )
+    if control_count > 0:
+        user_prompt += f" / Analysis+control steps (not solves): {control_count}"
     if stats.get("marginal_count", 0) > 0:
         user_prompt += f" / Marginal: {stats['marginal_count']}"
     _best_bus = stats.get("best_bus")

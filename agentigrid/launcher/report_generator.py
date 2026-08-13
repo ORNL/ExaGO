@@ -23,6 +23,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 from agentigrid.engine.agent_loop import SearchSession
+from agentigrid.engine.journal import is_solve_iteration
 from agentigrid.parsers.opflow_results import OPFLOWResult
 
 try:
@@ -703,15 +704,23 @@ class ReportGenerator:
                 elements.extend(self._render_summary_text(summary_text))
             return elements
 
-        # Key results
+        # Key results. Feasible/Infeasible are counted over REAL solve iterations
+        # only — analyze queries and completion markers are control steps, not
+        # failed solves, so they are reported separately and never as infeasible.
+        solve_entries = [e for e in session.journal.entries if is_solve_iteration(e)]
+        solve_feasible = sum(1 for e in solve_entries if e.feasible)
+        solve_infeasible = sum(1 for e in solve_entries if not e.feasible)
+        control_steps = len(session.journal.entries) - len(solve_entries)
         marginal_count = sum(
-            1 for e in session.journal.entries if e.feasibility_detail == "marginal"
+            1 for e in solve_entries if e.feasibility_detail == "marginal"
         )
         lines = [
             f"Total iterations: {stats['total_iterations']}",
-            f"Feasible solutions: {stats['feasible_count']}",
-            f"Infeasible: {stats['infeasible_count']}",
+            f"Feasible solutions: {solve_feasible}",
+            f"Infeasible: {solve_infeasible}",
         ]
+        if control_steps > 0:
+            lines.append(f"Analysis / control steps: {control_steps}")
         if marginal_count > 0:
             lines.append(f"Marginal convergence: {marginal_count}")
         if session.application == "tcopflow":
@@ -2164,6 +2173,85 @@ class ReportGenerator:
 
     # ── SOPFLOW Stochastic Analysis ──────────────────────────────────────
 
+    def _sopflow_absorption_rows(self, session) -> list:
+        """(entry, wind_absorption_dict) for each SOPFLOW simulation iteration
+        whose second-stage output is still on disk. Returns [] if none available."""
+        # Lazy import to match the codebase's defensive import style and avoid
+        # any top-level import cost/cycle.
+        from pathlib import Path
+        from agentigrid.parsers import compute_wind_absorption
+
+        rows = []
+        for e in session.journal.entries:
+            # Only real simulation iterations carry sopflowout/ + a scenfile.
+            if e.mode not in ("fresh", "accumulative"):
+                continue
+            cmd = e.exago_command
+            if not cmd:
+                continue
+            cwd = cmd.get("cwd")
+            argv = cmd.get("argv") or []
+            scenfile = None
+            if "-scenfile" in argv:
+                idx = argv.index("-scenfile")
+                if idx + 1 < len(argv):
+                    scenfile = argv[idx + 1]
+            # Fallback: parse from the flat command string if argv lacked it.
+            if scenfile is None and isinstance(cmd.get("command"), str):
+                toks = cmd["command"].split()
+                if "-scenfile" in toks:
+                    j = toks.index("-scenfile")
+                    if j + 1 < len(toks):
+                        scenfile = toks[j + 1]
+            if not cwd or not scenfile:
+                continue
+            try:
+                wa = compute_wind_absorption(Path(cwd), Path(scenfile))
+            except Exception:  # never let report rendering fail on a bad workdir
+                wa = None
+            if wa:
+                rows.append((e, wa))
+        return rows
+
+    def _sopflow_voltage_spread(self, session):
+        """(entry, spread_rows) for a representative feasible SOPFLOW iteration
+        whose per-scenario voltages are still on disk, or None if unavailable.
+
+        Prefers the latest feasible iteration whose scenario files carry real
+        per-bus voltage variation (some iterations — e.g. an unscaled baseline —
+        save a flat 1.0 profile that has zero spread and is uninformative). Falls
+        back to any iteration with a computable spread. Fully guarded."""
+        from pathlib import Path
+        from agentigrid.parsers import compute_scenario_voltage_spread
+
+        sim_entries = [
+            e for e in session.journal.entries
+            if e.mode in ("fresh", "accumulative") and e.exago_command
+        ]
+        # Latest feasible first (the most refined, representative result), then
+        # any remaining iteration as a fallback.
+        feasible = [e for e in sim_entries if getattr(e, "feasible", False)]
+        others = [e for e in sim_entries if not getattr(e, "feasible", False)]
+        ordered = list(reversed(feasible)) + list(reversed(others))
+
+        fallback = None  # first computable spread, even if flat (all-zero range)
+        for e in ordered:
+            cwd = (e.exago_command or {}).get("cwd")
+            if not cwd:
+                continue
+            try:
+                spread_rows = compute_scenario_voltage_spread(Path(cwd))
+            except Exception:  # never let report rendering fail on a bad workdir
+                spread_rows = None
+            if not spread_rows:
+                continue
+            if fallback is None:
+                fallback = (e, spread_rows)
+            # spread_rows is sorted by v_range desc, so [0] carries the max swing.
+            if spread_rows[0].get("v_range", 0.0) > 0.0:
+                return e, spread_rows
+        return fallback
+
     def _build_sopflow_stochastic_section(
         self,
         session: SearchSession,
@@ -2221,5 +2309,112 @@ class ReportGenerator:
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]))
             elements.append(summary_table)
+
+        # --- Wind Absorption (Second Stage) ---
+        # Recomputed at report time from each iteration's on-disk sopflowout/;
+        # fully guarded so a missing/cleaned workdir just skips the block.
+        elements.append(Spacer(1, 0.5 * cm))
+        elements.append(Paragraph("Wind Absorption (Second Stage)", s["heading2"]))
+
+        rows = self._sopflow_absorption_rows(session)
+        if not rows:
+            elements.append(Paragraph(
+                "Per-scenario second-stage output was not found on disk for this "
+                "run (e.g. an offline regeneration after workdirs were cleaned), "
+                "so absorption could not be recomputed.",
+                s["caption"],
+            ))
+        else:
+            abs_data = [[
+                "Iter", "Offered (MW)", "Dispatched (MW)",
+                "Curtailed (MW)", "Curtailed (%)",
+            ]]
+            for e, wa in rows:
+                abs_data.append([
+                    str(e.iteration),
+                    f"{wa['total_available_mw']:,.1f}",
+                    f"{wa['total_dispatched_mw']:,.1f}",
+                    f"{wa['total_curtailment_mw']:,.1f}",
+                    f"{wa['curtailment_pct']:.1f}",
+                ])
+
+            abs_col_widths = [2 * cm, 3.5 * cm, 3.5 * cm, 3.5 * cm, 3.5 * cm]
+            abs_table = Table(abs_data, colWidths=abs_col_widths, repeatRows=1)
+            abs_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3498db")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("FONTNAME", (0, 1), (-1, -1), self._font),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8f9fa")]),
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(abs_table)
+            elements.append(Paragraph(
+                "Offered wind is the scaled scenario input; dispatched (absorbed) wind "
+                "saturates at the network's absorption capacity P* as offered wind "
+                "rises, with the surplus curtailed at zero cost. A rising offered "
+                "column against a flat dispatched column is the signature of the "
+                "absorption ceiling — there is no finite 'maximum feasible wind scale'.",
+                s["caption"],
+            ))
+
+        # --- Wind Variability by Bus (voltage spread across scenarios) ---
+        # Recomputed from a representative feasible iteration's on-disk
+        # sopflowout/; fully guarded so a missing/cleaned workdir just skips it.
+        elements.append(Spacer(1, 0.5 * cm))
+        elements.append(Paragraph(
+            "Wind Variability by Bus (voltage spread across scenarios)", s["heading2"]
+        ))
+
+        spread = self._sopflow_voltage_spread(session)
+        if not spread:
+            elements.append(Paragraph(
+                "Per-scenario second-stage voltages were not found on disk for "
+                "this run (e.g. an offline regeneration after workdirs were "
+                "cleaned), so per-bus wind variability could not be recomputed.",
+                s["caption"],
+            ))
+            return elements
+
+        _entry, spread_rows = spread
+        var_data = [["Bus", "V_min (pu)", "V_max (pu)", "V_range (pu)", "V_std (pu)"]]
+        for r in spread_rows[:15]:
+            var_data.append([
+                str(r["bus"]),
+                f"{r['v_min']:.4f}",
+                f"{r['v_max']:.4f}",
+                f"{r['v_range']:.4f}",
+                f"{r['v_std']:.4f}",
+            ])
+
+        var_col_widths = [3 * cm, 3.25 * cm, 3.25 * cm, 3.25 * cm, 3.25 * cm]
+        var_table = Table(var_data, colWidths=var_col_widths, repeatRows=1)
+        var_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3498db")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), self._font_bold),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("FONTNAME", (0, 1), (-1, -1), self._font),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8f9fa")]),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(var_table)
+        elements.append(Paragraph(
+            "Voltage spread (V_max − V_min) of each bus across the wind scenarios "
+            "measures how strongly wind variability moves that bus. The buses at "
+            "the top of this table are the most wind-affected — they are where "
+            "reactive support or reinforcement most reduces scenario-to-scenario "
+            "voltage swing.",
+            s["caption"],
+        ))
 
         return elements
