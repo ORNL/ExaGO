@@ -1091,6 +1091,7 @@ PetscErrorCode PSReadMatPowerData(PS ps, const char netfile[]) {
         ps->ngenundefined++;
       }
       double ramp_rate_min_error = 0.0;
+      // If ramp rate min is not defined (==0), then set it to fuel default (scaled by MVA base)
       if (IsEqual(Gen[genfueli].ramp_rate_min, 0.0, 1e-12, ramp_rate_min_error)) {
         Gen[genfueli].ramp_rate_min = fuel_ramp_rate_per_min / ps->MVAbase;
         Gen[genfueli].ramp_rate_10min = Gen[genfueli].ramp_rate_min * 10;

@@ -119,7 +119,7 @@ PetscErrorCode TCOPFLOWSetConstraintBounds_GENRAMP(TCOPFLOW tcopflow, Vec Gl,
           /* Ramp constraints */
           gli[opflow->ncon + ctr] = -gen->ramp_rate_min * tcopflow->dT;
           gui[opflow->ncon + ctr] = gen->ramp_rate_min * tcopflow->dT;
-          
+
           ctr++;
         }
       }
@@ -279,30 +279,35 @@ PetscErrorCode TCOPFLOWComputeJacobian_GENRAMP(TCOPFLOW tcopflow, Vec X,
 
     ierr = VecResetArray(opflow->X);
     CHKERRQ(ierr);
-
+    // if there are inequality coupling constraints
     if (tcopflow->nconineqcoup[i]) {
       ctr = 0;
       ps = opflow->ps;
       pstpre = opflowtpre->ps;
 
+      // for each bus
       for (j = 0; j < ps->nbus; j++) {
         bus = &ps->bus[j];
         bustpre = &pstpre->bus[j];
 
+        // for each generator at that bus
         for (k = 0; k < bus->ngen; k++) {
           ierr = PSBUSGetGen(bus, k, &gen);
           CHKERRQ(ierr);
           ierr = PSBUSGetGen(bustpre, k, &gentpre);
           CHKERRQ(ierr);
 
+          // if generator is off at this timestep or previous, skip
           if (!gen->status || !gentpre->status)
             continue;
 
           row = roffset + ctr;
 
+          // get global locations of power variables at this timestep and
+          // previous
           xtpreloc = tcopflow->xstarti[i - 1] + gentpre->startxpowlocglob;
-          xiloc    = tcopflow->xstarti[i]     + gen->startxpowlocglob;
-  
+          xiloc = tcopflow->xstarti[i] + gen->startxpowlocglob;
+
           col = xtpreloc;
           val = -1.;
           ierr = MatSetValues(J, 1, &row, 1, &col, &val, INSERT_VALUES);
@@ -317,6 +322,7 @@ PetscErrorCode TCOPFLOWComputeJacobian_GENRAMP(TCOPFLOW tcopflow, Vec X,
         }
       }
 
+      // if the number of times looped != number of constraints, error
       if (ctr != tcopflow->nconineqcoup[i]) {
         SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ,
                 "GENRAMP Jacobian coupling constraint count mismatch");
@@ -405,18 +411,18 @@ PetscErrorCode TCOPFLOWComputeConstraints_GENRAMP(TCOPFLOW tcopflow, Vec X,
           if (!gen->status || !gentpre->status)
             continue;
 
-          gi[ctr] =
-            xi[gen->startxpowloc] - xtpre[gentpre->startxpowloc];
+          gi[ctr] = /* PG(t) - PG(t-dT) */
+              xi[gen->startxpowloc] - xtpre[gentpre->startxpowloc];
 
           ctr++;
         }
       }
 
-  if (ctr != tcopflow->nconineqcoup[i]) {
-    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ,
-            "GENRAMP value coupling constraint count mismatch");
-  }
-}
+      if (ctr != tcopflow->nconineqcoup[i]) {
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ,
+                "GENRAMP value coupling constraint count mismatch");
+      }
+    }
 
     ierr = VecResetArray(opflow->X);
     CHKERRQ(ierr);
