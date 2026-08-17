@@ -497,7 +497,8 @@ struct _p_PS {
 
   PetscBool setupcalled; /* Is setup called on PS? */
 
-  PetscLogDouble solve_real_time;
+  PetscLogDouble solve_real_time; /* Solve time */
+  PetscInt numits; /* Number of solver iterations */
 };
 
 extern PetscErrorCode PSCheckTopology(PS);
