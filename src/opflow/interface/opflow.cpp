@@ -1059,7 +1059,7 @@ PetscErrorCode OPFLOWSetTolerance(OPFLOW opflow, PetscReal tol) {
  */
 PetscErrorCode OPFLOWGetNumIterations(OPFLOW opflow, PetscInt *its) {
   PetscFunctionBegin;
-  *its = opflow->numits;
+  *its = opflow->number_iterations;
   PetscFunctionReturn(0);
 }
 
@@ -3207,7 +3207,7 @@ PetscErrorCode OPFLOWSetSummaryStats(OPFLOW opflow) {
   CHKERRQ(ierr);
 
   ps->solve_real_time = opflow->solve_real_time;
-  ps->numits = opflow->numits;
+  ps->number_iterations = opflow->number_iterations;
 
   PetscFunctionReturn(0);
 }
