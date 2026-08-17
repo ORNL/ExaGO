@@ -265,7 +265,7 @@ Bool TCOPFLOWSolverMonitor_IPOPT(ipindex alg_mod, ipindex iter_count,
   (void)user_data;
 
   TCOPFLOW tcopflow = (TCOPFLOW)user_data;
-  tcopflow->numiter = iter_count;
+  tcopflow->number_iterations = iter_count;
   return 1;
 }
 

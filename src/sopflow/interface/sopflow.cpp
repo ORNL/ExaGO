@@ -1428,7 +1428,7 @@ PetscErrorCode SOPFLOWGetConvergenceStatus(SOPFLOW sopflow, PetscBool *status) {
 */
 PetscErrorCode SOPFLOWGetNumIterations(SOPFLOW sopflow, PetscInt *iter) {
   PetscFunctionBegin;
-  *iter = sopflow->numiter;
+  *iter = sopflow->number_iterations;
   PetscFunctionReturn(0);
 }
 
