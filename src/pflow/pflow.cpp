@@ -1611,10 +1611,10 @@ PetscErrorCode PFLOWAddBusShunt(PFLOW pflow, PetscInt busnum, PetscScalar Gs,
 /*
   PFLOWGetNumIterations - Returns the number of iterations for given solver
 */
-PetscErrorCode PFLOWGetNumIterations(PFLOW pflow, PetscInt *numiter) {
+PetscErrorCode PFLOWGetNumIterations(PFLOW pflow, PetscInt *number_iterations) {
   PetscErrorCode ierr;
   PetscFunctionBegin;
-  ierr = SNESGetIterationNumber(pflow->snes, numiter);
+  ierr = SNESGetIterationNumber(pflow->snes, number_iterations);
   CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }

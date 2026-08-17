@@ -372,7 +372,7 @@ PetscErrorCode SCOPFLOWSolverSolve_HIOP(SCOPFLOW scopflow) {
   CHKERRQ(ierr);
 
   /* Get number of iterations */
-  scopflow->numiter = hiop->pridecsolver->getNumIterations();
+  scopflow->number_iterations = hiop->pridecsolver->getNumIterations();
 
   PetscFunctionReturn(0);
 }
