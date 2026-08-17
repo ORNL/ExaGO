@@ -267,7 +267,7 @@ Bool SCOPFLOWSolverMonitor_IPOPT(ipindex alg_mod, ipindex iter_count,
   (void)ls_trials;
 
   SCOPFLOW scopflow = (SCOPFLOW)user_data;
-  scopflow->numiter = iter_count;
+  scopflow->number_iterations = iter_count;
   return 1;
 }
 
