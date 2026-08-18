@@ -1087,12 +1087,15 @@ PetscErrorCode PSReadMatPowerData(PS ps, const char netfile[]) {
         Gen[genfueli].isrenewable = PETSC_TRUE;
       } else {
         Gen[genfueli].genfuel_type = GENFUEL_UNDEFINED;
-        fuel_ramp_rate_per_min = GENRAMPRATE_COAL; /* Defaults to COAL ramp rate */
+        fuel_ramp_rate_per_min =
+            GENRAMPRATE_COAL; /* Defaults to COAL ramp rate */
         ps->ngenundefined++;
       }
       double ramp_rate_min_error = 0.0;
-      // If ramp rate min is not defined (==0), then set it to fuel default (scaled by MVA base)
-      if (IsEqual(Gen[genfueli].ramp_rate_min, 0.0, 1e-12, ramp_rate_min_error)) {
+      // If ramp rate min is not defined (==0), then set it to fuel default
+      // (scaled by MVA base)
+      if (IsEqual(Gen[genfueli].ramp_rate_min, 0.0, 1e-12,
+                  ramp_rate_min_error)) {
         Gen[genfueli].ramp_rate_min = fuel_ramp_rate_per_min / ps->MVAbase;
         Gen[genfueli].ramp_rate_10min = Gen[genfueli].ramp_rate_min * 10;
         Gen[genfueli].ramp_rate_30min = Gen[genfueli].ramp_rate_min * 30;
