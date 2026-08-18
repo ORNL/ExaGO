@@ -2102,15 +2102,15 @@ PetscErrorCode OPFLOWSetInitialGuess(OPFLOW opflow, Vec X, Vec Lambda) {
 */
 PetscErrorCode OPFLOWSolve(OPFLOW opflow) {
   PetscErrorCode ierr;
-  PetscLogDouble real1 = 0.0, real2 = 0.0;
-  PetscLogDouble cpu1 = 0.0, cpu2 = 0.0;
+  PetscLogDouble real_time1 = 0.0, real_time2 = 0.0;
+  PetscLogDouble cpu_time1 = 0.0, cpu_time2 = 0.0;
   PetscBool conv_status;
   OPFLOW *opflowaddr = opflow->address;
   PetscFunctionBegin;
 
-  ierr = PetscTime(&real1);
+  ierr = PetscTime(&real_time1);
   CHKERRQ(ierr);
-  ierr = PetscGetCPUTime(&cpu1);
+  ierr = PetscGetCPUTime(&cpu_time1);
   CHKERRQ(ierr);
 
   if (!opflow->setupcalled) {
@@ -2214,12 +2214,12 @@ PetscErrorCode OPFLOWSolve(OPFLOW opflow) {
     }
   }
 
-  ierr = PetscTime(&real2);
+  ierr = PetscTime(&real_time2);
   CHKERRQ(ierr);
-  ierr = PetscGetCPUTime(&cpu2);
+  ierr = PetscGetCPUTime(&cpu_time2);
   CHKERRQ(ierr);
 
-  opflow->solve_real_time = real2 - real1;
+  opflow->solve_real_time = real_time2 - real_time1;
 
   /* Get convergence status */
   ierr = OPFLOWGetConvergenceStatus(opflow, &conv_status);
