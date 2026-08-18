@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [develop]
 
+## [2.0]
+
 ### General
+- Move to C++17 standard
+- Removed Ipopt and PETSc deprecation warnings.
+- Added ExaGO launcher with a web-based GUI
 
 ### Build system
 - Upgraded to Spack v1+
@@ -17,13 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### PS
 
 - Added improved parser for RAW file format.
-- Added support for PSS/E contingecy file format
+- Added support for PSS/E contingency file format
 
 ### PFLOW
 
 - Added unit tests for PFLOW
+- Print/save PFLOW output
 
 ### OPFLOW
+
+- Added HVDC line model
 
 ### TCOPFLOW
 
@@ -33,9 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Expanded documentation for TCOPFLOW
+- Updated documentation to new build requirements and dependencies
+
 ### Testing
 
-### Miscallenous
+- Overhauled testing and fixed a number of bugs in the process
+
+### Miscellaneous
+
+- Updated to Spack v1.1.1
+- Improved visualization and AI support.
 
 
 ## [1.6.0]
@@ -69,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add CI on Incline with Spack module pipelines (AMD / HIP GPU machine at PNNL)
 - Add Spack module pipelines to Ascent, with Crusher pipelines to come in 1.6.1
 
-### Miscallenous
+### Miscellaneous
 - Cleaned up string output formatting and removed duplicate test output from parallel MPI tests
 
 ## [1.5.1]
@@ -105,7 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Ascent pipeline status to GitLab for MRs only, using a push mirror instead of pull mirror
 - CI was substantially re-factored, with ability to re-build testing dependencies at PNNL through commit messages.
   
-### Miscallenous
+### Miscellaneous
 - Updated issue and MR templates
 - Updated main README with viz and graphics, and fix pipeline status badge
 
@@ -146,7 +162,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add tests for OPFLOW Objective function for a known network and reference solution
 - Convert to using pytest for Python tests
 
-### Miscallenous
+### Miscellaneous
 - Add template profiling scripts from SRP HPC Summer Project
 - Update Authors
 
@@ -188,7 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 - Added testing for python with mpi4py, but still require testing without MPI.
 - Re-enabled python tests on Ascent.
-- Convert existing smoke tests for SCOPLFOW and SOPFLOW to toml based testing.
+- Convert existing smoke tests for SCOPFLOW and SOPFLOW to toml based testing.
 
 ## [v1.3.0]
 
@@ -211,10 +227,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native Python bindings to the PFLOW ExaGO library have been extended.
 
 ### SCOPFLOW
-- Defaults to corrective mode of operaation
+- Defaults to corrective mode of operation
 
 ### SOPFLOW
-- Defaults to corrective mode o operation
+- Defaults to corrective mode of operation
 - Added translator for converting native .cont contingency format to .con PSSE format.	
 
 ### Documentation
@@ -228,7 +244,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added unit test for new internal logging api.
 - Misc fixes for more robust continuous integration.
 
-### Miscallenous
+### Miscellaneous
 - Updated case9mod_gen3_wind.m to (a) have no reactive power for wind generator, (b) tighter bounds on generator bus voltages.
 - Added case9mod_loadloss.m as a test network for non-zero load loss.
 
@@ -261,7 +277,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 - Updated tests for OPFLOW, SCOPFLOW, and SOPFLOW
 
-### Miscallenous
+### Miscellaneous
 - Added a new object `scenariolist` to manage scenarios.
 - Updated object `contingencylist` to manage contingencies
 
@@ -278,7 +294,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v1.1.0]
 
 ### General
-- Third-party library compatibiity changes
+- Third-party library compatibility changes
     - HiOp - 0.5.1
     - Umpire - 0.14.0
     - RAJA - 6.0.0
@@ -296,7 +312,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New API functions
     - PSSet/GetGenStatus - Set/get generator status
     - PSSet/GetLineStatus - Set/get line status
-    - PSSett/GeGenPowerLimits - Set/get generator real and reactive power limits
+    - PSSet/GetGenPowerLimits - Set/get generator real and reactive power limits
     - PSGetGenDispatch - Get generator dispatch
 
 
@@ -355,7 +371,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added TOML-based testing system for applications
 - Remove CMake-based functionality tests
 
-### Miscallenous
+### Miscellaneous
 - Added change log file CHANGELOG.md
 
 ## [v1.0.0] - 3-31-2021

@@ -158,7 +158,7 @@ $ ../buildsystem/tools/all.pl
 
 This will format all the C++ source code in the ExaGO source tree.
 
-There are some instances in which is makes sense to go over 80 characters per line, or to otherwise contradict our clang format configuration.
+There are some instances in which it makes sense to go over 80 characters per line, or to otherwise contradict our clang format configuration.
 If this is the case, add `// clang-format off` before the snippet and `// clang-format on` after.
 For the vast majority of cases, just use the clang-format configuration.
 
@@ -182,16 +182,16 @@ Otherwise, your MR must pass our continuous integration pipelines before being m
 
 CI tests rely on Spack generated tcl modules in order to build and test ExaGO on target platforms.
 In order to rebuild the modules for a given platform to update CI environments, you must do the following in an active MR (this workflow does not work in branches):
-1. Update the spack submodule in [/tpl/spack](./tpl) to point to your desired spack commit. This may be necessary when incoporating new software versions, or when undertaking spack development.
+1. Update the spack submodule in [/tpl/spack](./tpl) to point to your desired spack commit. This may be necessary when incorporating new software versions, or when undertaking spack development.
 1. Update the relevant `spack.yaml(s)` in [/buildsystem/spack/](./buildsystem/spack/) for each platform that you are building for. Currently only [Newell, Deception, Ascent] support automatic re-building.
-1. Add a commit to to your MR with `[<clusterame>-rebuild]` where `<clustername>` is replaced by and desired platform. Add multiple `[<clusterame>-rebuild]` into the commit message for each platform you want to rebuild for. 
+1. Add a commit to your MR with `[<clustername>-rebuild]` where `<clustername>` is replaced by the desired platform. Add multiple `[<clustername>-rebuild]` into the commit message for each platform you want to rebuild for. 
 
 This should be done semi-regularly in order to incorporate new versions of packages, and to update ExaGO's `package.py` with any new conflicts found in spack's develop branch.
 
 #### P012: Patches Should Be Small
 
 ***IMPORTANT: Patches should be rather small***.
-Extremely large merge requests are helpful as proofs-of-concept, but when merging into key development branches, large merge requests should be broken into smaller ones. Smaller merge requests are easier to review and test, and when something goes wrong it's much easier to track down a bug. Rarely is a patch *too small* to constitute it's own MR.
+Extremely large merge requests are helpful as proofs-of-concept, but when merging into key development branches, large merge requests should be broken into smaller ones. Smaller merge requests are easier to review and test, and when something goes wrong it's much easier to track down a bug. Rarely is a patch *too small* to constitute its own MR.
 A notable exception to this rule is when merging key development branches back into develop and/or master. It's hard to avoid large MRs in this case.
 
 #### P013: MRs Resolve Issues

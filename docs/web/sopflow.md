@@ -57,7 +57,7 @@ There are two types of uncertainties supported: Wind generation and load (curren
 Scenarios are specified in a native format. See `datafiles/case9/10scenarios_9bus.csv` as an example of a scenario file that describes wind generation scenarios for the 9-bus case.
 
 #### Solver
-SOPFLOW supports solving the problem using Ipopt, HiOP, or EMPAR solvers. With Ipopt, SOPFLOW can be only run on one processor (N = 1) as Ipopt only supports single process execution. HiOp supports solving the problem in parallel using a primal-decomposition algorithm. EMPAR is a parallel solver, however it merely executes an embarassingly parallel solver, i.e., all the scenarios are solved independently via optimal power flow.
+SOPFLOW supports solving the problem using Ipopt, HiOP, or EMPAR solvers. With Ipopt, SOPFLOW can be only run on one processor (N = 1) as Ipopt only supports single process execution. HiOp supports solving the problem in parallel using a primal-decomposition algorithm. EMPAR is a parallel solver, however it merely executes an embarrassingly parallel solver, i.e., all the scenarios are solved independently via optimal power flow.
 
 #### Mode 
 Set SOPFLOW to either run in `preventive` (0) or `corrective` (1) mode. In preventive mode, the base-case and scenario real-power dispatch is equal for the PV and PQ generators. Any power surplus/deficit is contributed by the swing generator only. In the corrective mode, the scenario real-power dispatch for all generators is allowed to deviate from the base-case limited by its 30-min ramping limit.

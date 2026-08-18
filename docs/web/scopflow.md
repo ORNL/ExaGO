@@ -14,7 +14,7 @@ SCOPFLOW solves a contingency-constrained optimal power flow problem. The proble
 
 where $`N_c`$ is the number of contingencies. The total number of scenarios equals $`N_c + 1`$, i.e., the base-case + $`N_c`$ contingencies. Each scenario is an optimal power flow formulation. See [OPFLOW](opflow.md). The last equation is the coupling between the 2nd stage contingency scenarios and the first-stage.  Each contingency scenario can either be single-period or multi-period. In the multi-period mode, additional data files for the load and wind generation profiles can be set via command line options. Multi-period SCOPFLOW is activated either by setting the command line option `-scopflow_enable_multiperiod` OR calling `SCOPFLOWEnableMultiPeriod`.
 
-Depending on the `mode`, SCOPFLOW can either be `preventive` (mode = 0) or `corrective` (mode = 1). In the preventive mode, the PV and PQ generator real power is fixed to its correspoinding base-case values. Any power offset/make-up is done by the swing bus generators. The corrective mode allows deviation of the PV and PQ generator real power from the base-case dispatch, constrained by its 30-min. ramp rate capability.
+Depending on the `mode`, SCOPFLOW can either be `preventive` (mode = 0) or `corrective` (mode = 1). In the preventive mode, the PV and PQ generator real power is fixed to its corresponding base-case values. Any power offset/make-up is done by the swing bus generators. The corrective mode allows deviation of the PV and PQ generator real power from the base-case dispatch, constrained by its 30-min. ramp rate capability.
 
 ### Dependency
 To use this application, one must have ExaGO built with Ipopt. Even when using HiOp as the main solver, this application still uses Ipopt (to solve the base subproblem).
@@ -56,7 +56,7 @@ Contingencies can either be specified in PTI format (.con file) or a native form
 #### Solver
 SCOPFLOW can be solved with either Ipopt, HiOp, or EMPAR. With Ipopt, SCOPFLOW can be only run on one processor (N = 1) as Ipopt only supports single process execution. HiOp supports a distributed solution allowing SCOPFLOW to be solved in parallel. It uses a two-stage primal decomposition algorithm for solving the problem. 
 
-In addition, one can solve SCOPFLOW in an embarrasingly parallel model with the EMPAR solver. With EMPAR, the base case and the contingencies are solved independently, i.e, there is no coupling.
+In addition, one can solve SCOPFLOW in an embarrassingly parallel model with the EMPAR solver. With EMPAR, the base case and the contingencies are solved independently, i.e, there is no coupling.
 
 #### Mode
-Set SCOPFLOW to either run in `preventive` (0) or `corrective` (1) mode. In preventive mode, any power deficit or surplus in the contingency problem is provided by the swing bus only. In the corrective mode, in addition to the swing bus, thhe generators at PV/PQ buses contribute to the deficit/surplus. The contribution amount is decided by the optimization with the constraint that the real power dispatch for these generators should be within 30-min ramping limit. 
+Set SCOPFLOW to either run in `preventive` (0) or `corrective` (1) mode. In preventive mode, any power deficit or surplus in the contingency problem is provided by the swing bus only. In the corrective mode, in addition to the swing bus, the generators at PV/PQ buses contribute to the deficit/surplus. The contribution amount is decided by the optimization with the constraint that the real power dispatch for these generators should be within 30-min ramping limit. 

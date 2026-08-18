@@ -1,15 +1,15 @@
 \section{System requirements}
 
-\exago is currently only built on 64b OSX and Linux machines, compiled with GCC $>= 7.3$.
-We build \exago on Intel, AMD, and IBM Power9 architectures.
+\exago is currently only built on MacOSX and Linux operating systems and requires C++17 compliant compiler.
+We build \exago on x86\_64, Arm, and IBM Power9 architectures.
 
 \section{Prerequisites}
 
 This section assumes that you already have the \exago source code, and that the environment variable \texttt{EXAGODIR} is the directory of the \exago source code.
-\exago may be acquired via \href{https://gitlab.pnnl.gov/exasgd/frameworks/exago}{the PNNL git repository linked here}, like so:
+\exago may be acquired via the ORNL GitHub \href{https://github.com/ORNL/exago}{repository}:
 
 \begin{lstlisting}[language=bash]
-> git clone https://gitlab.pnnl.gov/exasgd/frameworks/exago.git exago
+> git clone https://github.com/ORNL/exago.git exago
 > export EXAGODIR=$PWD/exago
 \end{lstlisting}
 
@@ -26,15 +26,16 @@ For example, \texttt{/path/to/cuda} is a placeholder for a path to a valid \text
     \hline
     \textbf{Dependency} & \textbf{Version Constraints} & \textbf{Mandatory} & \textbf{Notes} \\
     \hline
-    \petsc & 3.16.x & \checkmark & Core dependency \\ \hline
-    \cmake & 3.18 & \checkmark & Only a build dependency \\ \hline
-    MPI & 4.1 & & Only tested with \texttt{openmpi} and \texttt{spectrummpi} \\ \hline
-    \ipopt & 3.12 & & \\ \hline
-    \hiop & 0.7.1 & & Prefer dynamically linked \\ \hline
-    \raja & 0.14.0 & & \\ \hline
-    \href{https://github.com/LLNL/umpire}{Umpire \cite{umpire}} & 6.0.0 & & Only when RAJA is enabled \\ \hline
-    \magma & 2.6.1 & & Only when GPU acceleration is enabled \\ \hline
-    \cuda &  11.4 & & Only when GPU acceleration is enabled \\
+    \petsc & $\geq 3.24$ & \checkmark & Core dependency \\ \hline
+    \cmake & $\geq 3.18$ & \checkmark & Only a build dependency \\ \hline
+    MPI & $\geq 4.1$ & & Only tested with \texttt{openmpi} and \texttt{spectrummpi} \\ \hline
+    \ipopt & $\geq 3.14$ & & \\ \hline
+    \hiop & $\geq 1.0$ & & Prefer dynamically linked \\ \hline
+    \raja & $\geq 0.14$ & & \\ \hline
+    \href{https://github.com/LLNL/umpire}{Umpire \cite{umpire}} & $\geq 6.0$ & & Only when RAJA is enabled \\ \hline
+    \magma & $\geq 2.6.2$ & & Only when GPU acceleration is enabled \\ \hline
+    \cuda &  $\geq 11.4$ & & Only when NVIDIA support is enabled \\ \hline
+    \rocm &  $\geq 6.4$ & & Only when AMD accelerators support is enabled \\
     \hline
   \end{tabular}
   
@@ -135,7 +136,7 @@ other platforms.
 > module load cuda/11.4
 > module load python/miniconda3.8
 > module load cmake/3.19.6
-> git clone https://gitlab.pnnl.gov/exasgd/frameworks/exago.git exago
+> git clone https://github.com/ORNL/exago.git exago
 > export EXAGODIR=$PWD/exago
 > cd $EXAGODIR
 > export BUILDDIR=$PWD/build INSTALLDIR=$PWD/install
@@ -174,6 +175,7 @@ Each \exago application has the following format for execution
 \end{lstlisting}
 
 For OPFLOW for example:
+\begin{small}
 \begin{lstlisting}[language=bash]
 ./opflow -help
 ExaGO 1.4.1 built on Jan 14 2022
@@ -239,6 +241,7 @@ Arguments for opflow:
 	-hiop_ipopt_debug 0
 		Flag enabling debugging HIOP code with IPOPT (type: bool)
 \end{lstlisting}
+\end{small}
 
 ExaGO applications also have an option to print many options ExaGO was configured with, which aid in reproducing build environments that a given ExaGO source tree was built with.
 

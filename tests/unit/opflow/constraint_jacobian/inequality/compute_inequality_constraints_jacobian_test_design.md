@@ -37,7 +37,7 @@ These are given by
 \end{aligned}
 ```
 Here, $`G_{ff}`$,$`G_{ft}`$ are the self and mutual conductances for line ft, while $`B_{ff}`$,$`B_{ft}`$ are the
-self and mutual susceptances, respectively and are calculated form the line parameters as follows:
+self and mutual susceptances, respectively and are calculated from the line parameters as follows:
 
 - $`G_{ff}=y_{ff}[0]=\dfrac{R}{R^2+X^2}\dfrac{1}{tap^2}`$
 - $`B_{ff}=y_{ff}[1]=(\dfrac{-X}{R^2+X^2}+\dfrac{B_{c}}{2})\dfrac{1}{tap^2}`$
@@ -57,7 +57,7 @@ For the generator with the voltage setpoint following two constraints are calcul
 
 ## Inequality constraint Jacobian
 
-Jacobian terms are calculated as partial w.r.t voltage magniude and angle at each bus, as well as w.r.t generator injections, (and load loss and power imbalance if enabled).
+Jacobian terms are calculated as partial w.r.t voltage magnitude and angle at each bus, as well as w.r.t generator injections, (and load loss and power imbalance if enabled).
 Dimensions of the matrix are:
 - $`Number_of_rows = 2*Number_of_lines+2*Number_of_generators`
 - $`Number_of_columns = 2*(Number_of_buses+Number_of_generators)+(2*Number_of_buses if load loss and power imbalance options are enabled)`
@@ -66,11 +66,11 @@ Dimensions of the matrix are:
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
-A 5-bus system **CICJ-unittestx1.m** will be used as a basis for this test. In addition, an artifical solution vector will be also generated as an input for the test.
+A 5-bus system **CICJ-unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
 
 ### Parameters values in .m file
 
-Following are the value of parameters of interest for this test:
+Following are the values of parameters of interest for this test:
 
 - $`R_{branch}=2`$
 - $`X_{branch}=1`$

@@ -12,7 +12,7 @@ $ make test
 
 The script `./buildsystem/clang-hip/frontierVariables.sh` will load all the modules
 needed to build ExaGO on Frontier. The system modules change somewhat
-frequently on Frontier, so if some modules are not avialable but you need to build
+frequently on Frontier, so if some modules are not available but you need to build
 there, please file a Github issue.
 
 Alternatively, the `buildsystem/build.sh` can be used as follows to build. 

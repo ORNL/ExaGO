@@ -1,42 +1,31 @@
-\newcommand{\notationtable}[4] {
+\newcommand{\notationtable}[4]{
   {
-    \tabulinesep=3pt
     \begin{center}
-      \begin{longtabu} to \linewidth {lX[L]}
-
+      \begin{tabularx}{\linewidth}{l X}
         % first page header
-        \caption[
-          %short caption for list of tables
-        ]{
-          #3 %long caption
-          #4 %label
-        } \\
+        \caption[]{#3} #4\\
         \toprule
         #2 %header
         \midrule
         \endfirsthead
-
         % further pages header
-        \caption{Continued} \\
+        \caption[]{Continued} \\
         \toprule
         #2 %header
         \midrule
         \endhead
-
         % first pages footer
         \bottomrule
         \endfoot
-
         % last page footer
         \bottomrule
         \endlastfoot
-        
+
         #1 % main table content
-      \end{longtabu}
+      \end{tabularx}
     \end{center}
   }
 }
-
 \chapter{Symbol reference}\label{chap:symbref}
 
 Units of measurement are given in Table (\ref{tbl:units}),
