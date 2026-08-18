@@ -403,6 +403,9 @@ PetscErrorCode SOPFLOWSolverSolve_HIOP(SOPFLOW sopflow) {
       OPFLOWSetAuxillaryObjective(sopflow->opflow0, NULL, NULL, NULL, sopflow);
   CHKERRQ(ierr);
 
+  /* Get number of iterations */
+  sopflow->number_iterations = hiop->pridecsolver->getNumIterations();
+
   PetscFunctionReturn(0);
 }
 
