@@ -8,7 +8,7 @@ solver = 'EMPAR'
 model = 'GENRAMP'
 opflow_initialization = 'ACPF'
 multiperiod = false
-num_iters = 0
+num_iters = 1
 opflow_genbusvoltage = 'VARIABLE_WITHIN_BOUNDS'
 mode = 0 # 0 = preventive, 1 = corrective
 description = "No Description"
