@@ -13,17 +13,23 @@ PetscErrorCode SOPFLOWSolverSolve_EMPAR(SOPFLOW sopflow) {
 
   PetscFunctionBegin;
 
+  /* Solve */
   if (!sopflow->ismulticontingency) {
     for (s = 0; s < sopflow->ns; s++) {
       opflow = sopflow->opflows[s];
       ierr = OPFLOWSolve(opflow);
+      CHKERRQ(ierr);
     }
   } else {
     for (s = 0; s < sopflow->ns; s++) {
       scopflow = sopflow->scopflows[s];
       ierr = SCOPFLOWSolve(scopflow);
+      CHKERRQ(ierr);
     }
   }
+
+  /* Save number of iterations */
+  sopflow->number_iterations = 1; // EMPAR is non-iterative
 
   PetscFunctionReturn(ierr);
 }
@@ -148,12 +154,34 @@ PetscErrorCode SOPFLOWSolverGetConstraintMultipliers_EMPAR(SOPFLOW sopflow,
 
 PetscErrorCode SOPFLOWSolverGetConvergenceStatus_EMPAR(SOPFLOW sopflow,
                                                        PetscBool *status) {
-  // empty or noop...
-  (void)sopflow;
+  PetscErrorCode ierr;
+  PetscInt s;
+  PetscBool temp_status, local_status;
+  SCOPFLOW scopflow;
+  OPFLOW opflow;
 
   PetscFunctionBegin;
 
-  *status = PETSC_TRUE;
+  local_status = PETSC_TRUE;
+  if (!sopflow->ismulticontingency) {
+    for (s = 0; s < sopflow->ns; s++) {
+      opflow = sopflow->opflows[s];
+      ierr = OPFLOWGetConvergenceStatus(opflow, &temp_status);
+      CHKERRQ(ierr);
+      local_status &= temp_status;
+    }
+  } else {
+    for (s = 0; s < sopflow->ns; s++) {
+      scopflow = sopflow->scopflows[s];
+      ierr = SCOPFLOWGetConvergenceStatus(scopflow, &temp_status);
+      CHKERRQ(ierr);
+      local_status &= temp_status;
+    }
+  }
+
+  ierr = MPI_Allreduce(&local_status, status, 1, MPI_C_BOOL, MPI_LAND,
+                       sopflow->comm->type);
+  CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
 }

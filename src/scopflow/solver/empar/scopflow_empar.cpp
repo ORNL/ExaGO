@@ -152,10 +152,34 @@ PetscErrorCode SCOPFLOWSolverGetConstraintMultipliers_EMPAR(SCOPFLOW scopflow,
 
 PetscErrorCode SCOPFLOWSolverGetConvergenceStatus_EMPAR(SCOPFLOW scopflow,
                                                         PetscBool *status) {
-  (void)scopflow;
+  PetscErrorCode ierr;
+  PetscInt c;
+  PetscBool temp_status, local_status;
+  TCOPFLOW tcopflow;
+  OPFLOW opflow;
+
   PetscFunctionBegin;
 
-  *status = PETSC_TRUE;
+  local_status = PETSC_TRUE;
+  if (!scopflow->ismultiperiod) {
+    for (c = 0; c < scopflow->nc; c++) {
+      opflow = scopflow->opflows[c];
+      ierr = OPFLOWGetConvergenceStatus(opflow, &temp_status);
+      CHKERRQ(ierr);
+      local_status &= temp_status;
+    }
+  } else {
+    for (c = 0; c < scopflow->nc; c++) {
+      tcopflow = scopflow->tcopflows[c];
+      ierr = TCOPFLOWGetConvergenceStatus(tcopflow, &temp_status);
+      CHKERRQ(ierr);
+      local_status &= temp_status;
+    }
+  }
+
+  ierr = MPI_Allreduce(&local_status, status, 1, MPI_C_BOOL, MPI_LAND,
+                       scopflow->comm->type);
+  CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
 }
