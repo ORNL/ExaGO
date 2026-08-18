@@ -8,7 +8,7 @@ flatten = false
 ignore_lineflow_constraints = true
 
 [[testcase]]
-description = 'parallel datafiles/case9/case9mod_gen3_wind.m HIOP IPOPT 10scen SOPFLOW'
+description = 'parallel datafiles/case9/case9mod_gen3_wind.m HIOP IPOPT 10 scenario SOPFLOW'
 network = 'datafiles/case9/case9mod_gen3_wind.m'
 scenfile = 'datafiles/case9/10_scenarios_9bus.csv'
 solver = 'HIOP'
@@ -22,7 +22,7 @@ num_iters = 0
 obj_value = 0.0
 
 [[testcase]]
-description = 'parallel datafiles/case_ACTIVSg200.m HIOP IPOPT 10scen SOPFLOW'
+description = 'parallel datafiles/case_ACTIVSg200.m HIOP IPOPT 10 scenario SOPFLOW'
 network = 'datafiles/case_ACTIVSg200.m'
 scenfile = 'datafiles/10_scenarios_ACTIVSg200.csv'
 solver = 'HIOP'
@@ -36,7 +36,7 @@ num_iters = 0
 obj_value = 0.0
 
 [[testcase]]
-description = 'parallel datafiles/case9/case9mod_gen3_wind.m HIOP IPOPT 3scen SOPFLOW with 5 contingencies'
+description = 'parallel datafiles/case9/case9mod_gen3_wind.m HIOP IPOPT 3 scenario SOPFLOW with 5 contingencies'
 network = 'datafiles/case9/case9mod_gen3_wind.m'
 scenfile = 'datafiles/case9/10_scenarios_9bus.csv'
 contingencies = 'datafiles/case9/case9.cont'
