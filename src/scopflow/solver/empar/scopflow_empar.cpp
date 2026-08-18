@@ -13,17 +13,23 @@ PetscErrorCode SCOPFLOWSolverSolve_EMPAR(SCOPFLOW scopflow) {
 
   PetscFunctionBegin;
 
+  /* Solve */
   if (!scopflow->ismultiperiod) {
     for (c = 0; c < scopflow->nc; c++) {
       opflow = scopflow->opflows[c];
       ierr = OPFLOWSolve(opflow);
+      CHKERRQ(ierr);
     }
   } else {
     for (c = 0; c < scopflow->nc; c++) {
       tcopflow = scopflow->tcopflows[c];
       ierr = TCOPFLOWSolve(tcopflow);
+      CHKERRQ(ierr);
     }
   }
+
+  /* Save number of iterations */
+  scopflow->number_iterations = 1; // EMPAR is non-iterative
 
   PetscFunctionReturn(ierr);
 }
