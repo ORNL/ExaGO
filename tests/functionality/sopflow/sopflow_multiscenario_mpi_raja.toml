@@ -8,7 +8,7 @@ flatten = false
 ignore_lineflow_constraints = true
 
 [[testcase]]
-description = 'datafiles/case_ACTIVSg200.m HIOP RAJA 10scen SOPFLOW'
+description = 'datafiles/case_ACTIVSg200.m HIOP RAJA 10 scenario SOPFLOW'
 network = 'datafiles/case_ACTIVSg200.m'
 scenfile = 'datafiles/10_scenarios_ACTIVSg200.csv'
 solver = 'HIOP'
@@ -22,7 +22,7 @@ num_iters = 0
 obj_value = 0.0
 
 [[testcase]]
-description = 'datafiles/case9/case9mod_gen3_wind.m HIOP RAJA 10scen SOPFLOW with 2 contingencies MPI'
+description = 'datafiles/case9/case9mod_gen3_wind.m HIOP RAJA 10 scenario SOPFLOW with 2 contingencies MPI'
 network = 'datafiles/case9/case9mod_gen3_wind.m'
 scenfile = 'datafiles/case9/10_scenarios_9bus.csv'
 contingencies = 'datafiles/case9/case9.cont'
@@ -40,7 +40,7 @@ num_iters = 0
 obj_value = 0.0
 
 [[testcase]]
-description = 'datafiles/case9/case9mod_gen3_wind.m HIOP RAJA 10scen SOPFLOW with 5 contingencies MPI'
+description = 'datafiles/case9/case9mod_gen3_wind.m HIOP RAJA 10 scenario SOPFLOW with 5 contingencies MPI'
 network = 'datafiles/case9/case9mod_gen3_wind.m'
 scenfile = 'datafiles/case9/10_scenarios_9bus.csv'
 contingencies = 'datafiles/case9/case9.cont'
