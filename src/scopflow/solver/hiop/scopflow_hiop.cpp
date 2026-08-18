@@ -176,7 +176,11 @@ bool SCOPFLOWHIOPInterface::eval_f_rterm(hiop::size_type idx, const int &n,
   CHKERRQ(ierr);
   ierr = OPFLOWSetSolver(opflowctgc, scopflow->subproblem_solver);
   CHKERRQ(ierr);
-  if (scopflow->subproblem_solver == "HIOP") {
+  PetscBool issubproblemsolver_hiop;
+  ierr = PetscStrcmp(scopflow->subproblem_solver, "HIOP",
+                     &issubproblemsolver_hiop);
+  CHKERRQ(ierr);
+  if (issubproblemsolver_hiop) {
     ierr = OPFLOWSetHIOPComputeMode(opflowctgc, scopflow->compute_mode);
     CHKERRQ(ierr);
     ierr = OPFLOWSetHIOPVerbosityLevel(opflowctgc, scopflow->verbosity_level);

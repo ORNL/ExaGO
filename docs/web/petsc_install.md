@@ -53,7 +53,7 @@ Alternately, one can also download MPI and/or BLAS/LAPACK
 PETSc, by default, has a dependency on MPI. If one wishes to build PETSc without MPI then the `--with-mpi=0` option should be used when configuring PETSc.
 
 #### With third-party packages
-PETSc has interfaces to a variety of third party packages. These third party packages can be either downloaded and installed with PETSc installation, or if already installed can be linked to PETSc. We recommend downloading the packages to avoid any conflict or version incompatability issues. Below, we specify a few of these solver packages
+PETSc has interfaces to a variety of third party packages. These third party packages can be either downloaded and installed with PETSc installation, or if already installed can be linked to PETSc. We recommend downloading the packages to avoid any conflict or version incompatibility issues. Below, we specify a few of these solver packages
 
 - METIS:
     - Download: `--download-metis`

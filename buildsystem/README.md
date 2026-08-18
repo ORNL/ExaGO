@@ -134,7 +134,7 @@ Options:
 
   --test-only       Only run the test stage of the script. This should be ran
                     before every push to the repository or pull/merge request.
-                    This run takes a significant amound of time. If you omit
+                    This run takes a significant amount of time. If you omit
                     the --*-only options and just run a particular job, tests
                     will also be ran.
 

@@ -1,7 +1,7 @@
 # DMPlex dependencies for DMNetwork
 This document lists the DMPlex dependencies for DMNetwork
 
-DMNetwork holds a pointer to the DMPlex data structurre and uses it for mesh creation, querying sizes and topology information, partitioning and data (component) distribution. It uses the following functions from DMPlex
+DMNetwork holds a pointer to the DMPlex data structure and uses it for mesh creation, querying sizes and topology information, partitioning and data (component) distribution. It uses the following functions from DMPlex
 
 ### Mesh creation
 

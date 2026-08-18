@@ -13,4 +13,4 @@ to monitor builds by hand.
 ## `pnnl_mirror.yaml`
 
 Similar to `ornl_ascent_mirror.yaml`, this mirrors to PNNL GitLab, but also supports
-Incline, Decpeption and Newell.
+Incline, Deception and Newell.

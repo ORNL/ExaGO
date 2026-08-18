@@ -50,7 +50,7 @@ Dependencies are broken down into three categories:
 
 #### Third-Party Solvers
 
-At least one of the solver packages should be installed depending the application.
+At least one of the solver packages should be installed depending on the application.
 Additional documentation on installing these dependencies are linked below.
 
 | Dependency | Dependency Version | CMake Variable (if applicable) | Notes |
@@ -93,7 +93,7 @@ cd build
 # Pass any configuration options here
 cmake .. -DEXAGO_BUILD_SHARED=ON
 
-# You may also cusomize your build here
+# You may also customize your build here
 ccmake . 
 
 make -j

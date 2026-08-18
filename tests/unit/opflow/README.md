@@ -1,7 +1,7 @@
 # Unit Test Design for ExaGO OPFLOW's Functions
 
 ## Goal
-Design the scalable unit tests for varios ExaGO OPFLOW's functions.
+Design the scalable unit tests for various ExaGO OPFLOW's functions.
 
 ## Organization
 For each function, there is a separate folder that contains at least: documentation, input network with pre-set parameters and a script that is used for upscaling.
@@ -54,7 +54,7 @@ To be able to run the unit tests with the larger network, a new input file needs
 
 ## Script
 
-Scripts are wrriten is python are are based on the previously given algorithm.
+Scripts are written in Python and are based on the previously given algorithm.
 
 ## Functions to be tested
 - **OPFLOWComputeObjective_PBPOL (done)**

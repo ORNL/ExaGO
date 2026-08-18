@@ -12,20 +12,14 @@
 %\usepackage{txfonts}
 \usepackage{verbatim}
 \usepackage{longtable}
-\usepackage{tabu}
+%\usepackage{tabu}
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage{enumitem}
 
 \usepackage{float}
 %\usepackage{mathdots}
-\usepackage{listings}
-\lstset{
-  basicstyle = \ttfamily,
-  frame = single,
-  breaklines = true,
-  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
-}
+
 %\usepackage[classicReIm]{kpfonts}
 \usepackage{graphicx} %%% use 'pdftex' instead of 'dvips' for PDF output
 \usepackage{xcolor}
@@ -39,12 +33,48 @@
 
 \usepackage{tikz}
 
+\usepackage{ltablex}
+\keepXColumns % preserves X column behavior from tabularx
+
 \hypersetup{
-  colorlinks   = true, %Colours links instead of ugly boxes
-  urlcolor     = red, %Colour for external hyperlinks
-  linkcolor    = blue, %Colour of internal links
-  citecolor   = blue %Colour of citations, could be ``red''
+  colorlinks  = true, %Colours links instead of ugly boxes
+  urlcolor    = blue, %Colour for external hyperlinks
+  linkcolor   = red,  %Colour of internal links
+  citecolor   = green %Colour of citations, could be ``red''
 }
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\usepackage{listings}
+% \lstset{
+%   basicstyle = \ttfamily,
+%   frame = single,
+%   breaklines = true,
+%   postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+% }
+\lstdefinestyle{mystyle}{
+    % backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\scriptsize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\lstset{style=mystyle}
 
 %\restylefloat{table}
 %\setlength{\parskip}{1ex}
@@ -59,61 +89,61 @@
 %\renewcommand{\Re}{\R}
 %\newcommand{\Comment}[1]{}
 
-\newcommand{\exagoversion}{1.6.0}
+\newcommand{\exagoversion}{2.0.0}
 
 % Sets and accessors
-\newcommand{\Jgen}{J^\text{gen}}
+\newcommand{\Jgen}{J^\mathrm{gen}}
 \newcommand{\jinJgen}{j \in \Jgen}
-\newcommand{\Jload}{J^\text{ld}}
+\newcommand{\Jload}{J^\mathrm{ld}}
 \newcommand{\jinJload}{j \in \Jload}
-\newcommand{\Jbus}{J^\text{bus}}
+\newcommand{\Jbus}{J^\mathrm{bus}}
 \newcommand{\iinJbus}{i \in \Jbus}
-\newcommand{\Jbr}{J^\text{br}}
+\newcommand{\Jbr}{J^\mathrm{br}}
 \newcommand{\jinJbr}{j \in \Jbr}
 
 % Bounds and parameters
-\newcommand{\pminj}{p^\text{gmin}_j}
-\newcommand{\pmaxj}{p^\text{gmax}_j}
-\newcommand{\qminj}{q^\text{gmin}_j}
-\newcommand{\qmaxj}{q^\text{gmax}_j}
-\newcommand{\psetj}{p^{\text{gset}}_j}
-\newcommand{\thetarefi}{\theta^\text{ref}_i}
-\newcommand{\plj}{p^{\text{l}}_j} % Real power load for bus j
-\newcommand{\qlj}{q^{\text{l}}_j} % Reactive power load for bus j
-\newcommand{\vmini}{v^\text{min}_i}
-\newcommand{\vmaxi}{v^\text{max}_i}
-\newcommand{\vseti}{v^\text{set}_i}
-\newcommand{\srateAj}{s^{\text{rateA}}_j} %% Line j rateA MVA rating
+\newcommand{\pminj}{p^\mathrm{gmin}_j}
+\newcommand{\pmaxj}{p^\mathrm{gmax}_j}
+\newcommand{\qminj}{q^\mathrm{gmin}_j}
+\newcommand{\qmaxj}{q^\mathrm{gmax}_j}
+\newcommand{\psetj}{p^{\mathrm{gset}}_j}
+\newcommand{\thetarefi}{\theta^\mathrm{ref}_i}
+\newcommand{\plj}{p^{\mathrm{l}}_j} % Real power load for bus j
+\newcommand{\qlj}{q^{\mathrm{l}}_j} % Reactive power load for bus j
+\newcommand{\vmini}{v^\mathrm{min}_i}
+\newcommand{\vmaxi}{v^\mathrm{max}_i}
+\newcommand{\vseti}{v^\mathrm{set}_i}
+\newcommand{\srateAj}{s^{\mathrm{rateA}}_j} %% Line j rateA MVA rating
 
-\newcommand{\agj}{a^\text{g}_j} % Generator quadratic cost parameter alpha
-\newcommand{\bgj}{b^\text{g}_j} % Generator quadratic cost parameter beta
-\newcommand{\cgj}{c^\text{g}_j} % Generator quadratic cost parameter gamma
+\newcommand{\agj}{a^\mathrm{g}_j} % Generator quadratic cost parameter alpha
+\newcommand{\bgj}{b^\mathrm{g}_j} % Generator quadratic cost parameter beta
+\newcommand{\cgj}{c^\mathrm{g}_j} % Generator quadratic cost parameter gamma
 
-\newcommand{\sigmalj}{\sigma^\text{l}_j}
+\newcommand{\sigmalj}{\sigma^\mathrm{l}_j}
 \newcommand{\sigmai}{\sigma_i}
 \newcommand{\sigmaj}{\sigma_j}
 
-\newcommand{\gshi}{g^\text{sh}_i} % shunt conductance
-\newcommand{\bshi}{b^\text{sh}_i} % shunt susceptance
+\newcommand{\gshi}{g^\mathrm{sh}_i} % shunt conductance
+\newcommand{\bshi}{b^\mathrm{sh}_i} % shunt susceptance
 
 % cost
-\newcommand{\costgj}{C^\text{g}_j}
+\newcommand{\costgj}{C^\mathrm{g}_j}
 
 % Variables
-\newcommand{\pgj}{p^\text{g}_j}
-\newcommand{\qgj}{q^\text{g}_j}
-\newcommand{\pgjset}{p^{\text{gset}}_j}
-\newcommand{\Deltapupj}{\Delta{p}^\text{gu}_j}
-\newcommand{\Deltapdownj}{\Delta{p}^\text{gd}_j}
-\newcommand{\Deltapj}{\Delta{p}^\text{g}_j}
+\newcommand{\pgj}{p^\mathrm{g}_j}
+\newcommand{\qgj}{q^\mathrm{g}_j}
+\newcommand{\pgjset}{p^{\mathrm{gset}}_j}
+\newcommand{\Deltapupj}{\Delta{p}^\mathrm{gu}_j}
+\newcommand{\Deltapdownj}{\Delta{p}^\mathrm{gd}_j}
+\newcommand{\Deltapj}{\Delta{p}^\mathrm{g}_j}
 \newcommand{\pmisplusi}{\Delta{p}^{+}_i}
 \newcommand{\qmisplusi}{\Delta{q}^{+}_i}
 \newcommand{\pmisminusi}{\Delta{p}^{-}_i}
 \newcommand{\qmisminusi}{\Delta{q}^{-}_i}
 \newcommand{\vreali}{e_i}
 \newcommand{\vimagi}{f_i}
-\newcommand{\Deltaplj}{\Delta{p}^{\text{l}}_j} % Real power load loss for bus j
-\newcommand{\Deltaqlj}{\Delta{q}^{\text{l}}_j} % Reactive power load loss for bus j
+\newcommand{\Deltaplj}{\Delta{p}^{\mathrm{l}}_j} % Real power load loss for bus j
+\newcommand{\Deltaqlj}{\Delta{q}^{\mathrm{l}}_j} % Reactive power load loss for bus j
 \newcommand{\Deltasod}{\Delta{s}_{od}} % Line flow apparent power violation in the o->d direction
 \newcommand{\Deltasdo}{\Delta{s}_{do}} % Line flow apparent power violation in the d->o direction
 
@@ -121,19 +151,19 @@
 \newcommand{\vi}{v_i}
 
 % Derived and other auxillary terms
-\newcommand{\pshi}{p^{\text{sh}}_i} % real power consumed by shunt at bus i
-\newcommand{\qshi}{q^{\text{sh}}_i} % reactive power consumed by shunt at bus i
-\newcommand{\pbrj}{p^\text{br}_j} % real power flow for line j
-\newcommand{\qbrj}{q^\text{br}_j} % real power flow for line j
-\newcommand{\pbrjoi}{p^\text{br}_{j_{oi}}} % real power flow on line j, o --> i
-\newcommand{\qbrjoi}{q^\text{br}_{j_{oi}}} % reactive power flow on line j, o --> i
-\newcommand{\pbrjid}{p^\text{br}_{j_{id}}} % real power flow on line j, i --> d
-\newcommand{\qbrjid}{q^\text{br}_{j_{id}}} % reactive power flow on line j, i --> d
+\newcommand{\pshi}{p^{\mathrm{sh}}_i} % real power consumed by shunt at bus i
+\newcommand{\qshi}{q^{\mathrm{sh}}_i} % reactive power consumed by shunt at bus i
+\newcommand{\pbrj}{p^\mathrm{br}_j} % real power flow for line j
+\newcommand{\qbrj}{q^\mathrm{br}_j} % real power flow for line j
+\newcommand{\pbrjoi}{p^\mathrm{br}_{j_{oi}}} % real power flow on line j, o --> i
+\newcommand{\qbrjoi}{q^\mathrm{br}_{j_{oi}}} % reactive power flow on line j, o --> i
+\newcommand{\pbrjid}{p^\mathrm{br}_{j_{id}}} % real power flow on line j, i --> d
+\newcommand{\qbrjid}{q^\mathrm{br}_{j_{id}}} % reactive power flow on line j, i --> d
 
-\newcommand{\pbrjod}{p^\text{br}_{j_{od}}} % real power flow on line j (o->d) at bus o, o --> d
-\newcommand{\qbrjod}{q^\text{br}_{j_{od}}} % reactive power flow on line j (o->d) at bus o, o --> d
-\newcommand{\pbrjdo}{p^\text{br}_{j_{do}}} % real power flow on line j (o->d) at bus d, d --> o
-\newcommand{\qbrjdo}{q^\text{br}_{j_{do}}} % reactive power flow on line j (o->d) at bus d, d --> o
+\newcommand{\pbrjod}{p^\mathrm{br}_{j_{od}}} % real power flow on line j (o->d) at bus o, o --> d
+\newcommand{\qbrjod}{q^\mathrm{br}_{j_{od}}} % reactive power flow on line j (o->d) at bus o, o --> d
+\newcommand{\pbrjdo}{p^\mathrm{br}_{j_{do}}} % real power flow on line j (o->d) at bus d, d --> o
+\newcommand{\qbrjdo}{q^\mathrm{br}_{j_{do}}} % reactive power flow on line j (o->d) at bus d, d --> o
 
 
 
@@ -168,15 +198,16 @@
 \newcommand{\fixedwithinqbounds}{FIXED\_WITHIN\_QBOUNDS}
 \newcommand{\variablewithinbounds}{VARIABLE\_WITHIN\_BOUNDS}
 % packages
-\newcommand{\ipopt}{\href{https://github.com/coin-or/Ipopt}{Ipopt \cite{ipopt}}}
-\newcommand{\hiop}{\href{https://github.com/LLNL/hiop}{HiOp \cite{hiop-manual,hiop1}}}
-\newcommand{\raja}{\href{https://github.com/LLNL/RAJA}{RAJA \cite{beckingsale2019raja}}}
-\newcommand{\umpire}{\href{https://github.com/LLNL/Umpire}{Umpire \cite{beckingsale2019umpire}}}
+\newcommand{\ipopt}{\href{https://github.com/coin-or/Ipopt}{Ipopt \cite{ipopt}}\xspace}
+\newcommand{\hiop}{\href{https://github.com/LLNL/hiop}{HiOp \cite{hiop-manual,hiop1}}\xspace}
+\newcommand{\raja}{\href{https://github.com/LLNL/RAJA}{RAJA \cite{beckingsale2019raja}}\xspace}
+\newcommand{\umpire}{\href{https://github.com/LLNL/Umpire}{Umpire \cite{beckingsale2019umpire}}\xspace}
 \newcommand{\petsc}{\href{https://www.mcs.anl.gov/petsc/documentation/}{PETSc \cite{petsc-user-ref}}\xspace}
 \newcommand{\cmake}{\texttt{CMake}\xspace}
-\newcommand{\magma}{\href{https://icl.cs.utk.edu/magma/}{MAGMA}}
-\newcommand{\cuda}{\href{https://docs.nvidia.com/cuda/}{CUDA Toolkit }}
-\newcommand{\matpower}{\href{https://matpower.org/}{MATPOWER }}
+\newcommand{\magma}{\href{https://icl.cs.utk.edu/magma/}{MAGMA}\xspace}
+\newcommand{\cuda}{\href{https://docs.nvidia.com/cuda/}{CUDA Toolkit}\xspace}
+\newcommand{\rocm}{\href{https://rocm.docs.amd.com/en/latest/}{ROCm}\xspace}
+\newcommand{\matpower}{\href{https://matpower.org/}{MATPOWER}\xspace}
 
 
 
@@ -188,9 +219,9 @@
 \newcommand{\pflow}{\hyperref[chap:pflow]{PFLOW}\xspace}
 \newcommand{\opflow}{\hyperref[chap:opflow]{OPFLOW}\xspace}
 \newcommand{\scopflow}{\hyperref[chap:scopflow]{SCOPFLOW}\xspace}
-\newcommand{\tcopflow}{\hyperref[chap:tcopflow]{TCOPFLOW} \xspace}
-\newcommand{\sopflow}{\hyperref[chap:sopflow]{SOPFLOW} \xspace}
-\newcommand{\python}{\hyperref[chap:python]{Python Wrapper} \xspace}
+\newcommand{\tcopflow}{\hyperref[chap:tcopflow]{TCOPFLOW}\xspace}
+\newcommand{\sopflow}{\hyperref[chap:sopflow]{SOPFLOW}\xspace}
+\newcommand{\python}{\hyperref[chap:python]{Python Wrapper}\xspace}
 
 
 % Miscallenous
@@ -201,8 +232,8 @@
 \begin{document}
 
 \pagestyle{empty}
-\noindent {\includegraphics[scale=0.3]{figures/PNNL_logo.eps}}
-\hfill{\large{\bf PNNL-31126}}
+\noindent {\includegraphics[scale=0.3]{figures/exago-logo.png}}
+%\hfill{\large{\bf PNNL-31126}}
 
 
 \vspace*{2in}
