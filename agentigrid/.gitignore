@@ -1,0 +1,98 @@
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+*.ipynb_checkpoints/
+.ipynb_checkpoints/
+
+# =============================================================================
+# Testing & coverage
+# =============================================================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+**/.pytest_cache/
+
+# =============================================================================
+# Type checkers & linters
+# =============================================================================
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# =============================================================================
+# AgentiGrid runtime artifacts
+# =============================================================================
+workdir/
+logs/
+configs/logs/
+*.log
+.env
+.env.*
+!.env.example
+
+# =============================================================================
+# Local binaries and data (large, machine-specific)
+# Available via the ExaGO build and datafiles/ at the ExaGO root.
+# Only the README explaining what goes here is tracked.
+# =============================================================================
+applications/*
+!applications/README.md
+data/*
+!data/README.md
+_sopflow_probe/
+
+# =============================================================================
+# Local config files (templates are tracked, instantiated copies are local)
+# =============================================================================
+configs/env_setup.sh
+configs/local_config.yaml
+configs/default_config.yaml
+
+# =============================================================================
+# IDE / editor
+# =============================================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*.bak
+*~
+
+# =============================================================================
+# OS-generated files
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============================================================================
+# Developer scratch space (AI coding tools, personal notes, working prompts)
+# These live in the working tree but never get committed.
+# =============================================================================
+.claude/
+.opencode/
+AGENTS.md
+opencode.md
+/prompts/

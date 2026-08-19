@@ -88,6 +88,14 @@ option(EXAGO_ENABLE_RAJA "Enables RAJA and Umpire libraries" OFF)
 # Enable Python interface
 option(EXAGO_ENABLE_PYTHON "Enables Python bindings and tests" ON)
 
+# Enable AgentiGrid (LLM-driven simulation agent). Disabled by default because
+# AgentiGrid requires Python packages (Anthropic SDK, Streamlit, Plotly,
+# ReportLab, openai, ollama) that are not needed by the core ExaGO build. Enable
+# with -DEXAGO_ENABLE_AGENTIGRID=ON.
+option(EXAGO_ENABLE_AGENTIGRID
+       "Enable the AgentiGrid LLM-driven simulation agent" OFF
+)
+
 # Enable OpenMP support. This should not be toggled directly by the user, which
 # is why it's marked as advanced.
 option(EXAGO_ENABLE_OMP "Enables OpenMP" ON)
@@ -205,7 +213,7 @@ if(EXAGO_ENABLE_PETSC)
   # Include petsc package path in pkg_config_path
   set(PKG_CONFIG_PATH_save $ENV{PKG_CONFIG_PATH})
   set(ENV{PKG_CONFIG_PATH}
-      ${PETSC_DIR}/lib/pkgconfig:${PETSC_DIR}/${PETSC_ARCH}/lib/pkgconfig
+      ${PETSC_DIR}/lib/pkgconfig:${PETSC_DIR}/${PETSC_ARCH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}
   )
   pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc>=3.24)
   set(EXAGO_HAVE_PETSC 1)
@@ -389,5 +397,8 @@ endif()
 if(EXAGO_ENABLE_PYTHON)
   add_subdirectory(launcher)
   add_subdirectory(viz)
+  if(EXAGO_ENABLE_AGENTIGRID)
+    add_subdirectory(agentigrid)
+  endif()
   install(DIRECTORY ${PROJECT_SOURCE_DIR}/datafiles DESTINATION share/exago)
 endif()
