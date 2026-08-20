@@ -1,4 +1,4 @@
-module use -a /lustre/orion/stf006/world-shared/nkouk/exago-02-2026/spack-install/modules/linux-sles15-zen3
+module use -a /lustre/orion/stf006/world-shared/nkouk/exago-08-2026/spack-install/modules/linux-sles15-zen3
 ## excluded or missing from upstream: cmake@=3.30.5~doc+ncurses+ownlibs~qtgui build_system=generic build_type=Release platform=linux os=sles15 target=x86_64
 # compiler-wrapper@=1.0 build_system=generic platform=linux os=sles15 target=zen3
 module load compiler-wrapper/1.0-none-none-rfhw7ey
@@ -110,9 +110,9 @@ module load hiop/1.1.1-gcc-14.2.0-a2bwjiu
 module load ipopt/3.14.14-gcc-14.2.0-gj4qlx4
 # parmetis@=4.0.3~gdb~int64~ipo+shared build_system=cmake build_type=Release generator=make patches:=4f89253,50ed208,704b84f platform=linux os=sles15 target=zen3
 module load parmetis/4.0.3-gcc-14.2.0-xatjoum
-# petsc@=3.24.1~X~batch~cgns~complex~cuda~debug+double+examples~exodusii~fftw+fortran+fortran-bindings~giflib~hdf5~hpddm~hwloc~hypre~int64~jpeg~knl~kokkos~libpng~libyaml~memkind+metis~mkl-pardiso~mmg~moab~mpfr+mpi~mumps~openmp~p4est~parmmg~ptscotch~random123~rocm~saws~scalapack+shared~strumpack~suite-sparse~superlu-dist~sycl~tetgen~trilinos~valgrind~zoltan build_system=generic clanguage=C memalign=none patches:=fa5ef56 platform=linux os=sles15 target=zen3
-module load petsc/3.24.1-gcc-14.2.0-4izpiqe
+# petsc@=3.25.4~X~batch~cgns~complex~cuda~debug+double+examples~exodusii~fftw+fortran+fortran-bindings~giflib~hdf5~hpddm~hwloc~hypre~int64~jpeg~knl~kokkos~libpng~libyaml~memkind+metis~mkl-pardiso~mmg~moab~mpfr+mpi~mumps~openmp~p4est~parmmg~ptscotch~random123~rocm~saws~scalapack+shared~strumpack~suite-sparse~superlu-dist~sycl~tetgen~trilinos~valgrind~zoltan build_system=generic clanguage=C memalign=none platform=linux os=sles15 target=zen3
+module load petsc/3.25.4-gcc-14.2.0-ed3tmzh
 # spdlog@=1.15.0~ipo+shared build_system=cmake build_type=Release generator=make patches:=5ed92f4,fd4cbb1,fdc325d platform=linux os=sles15 target=zen3
 module load spdlog/1.15.0-gcc-14.2.0-56k2ubv
 # exago@=develop~cuda+hiop~ipo+ipopt+logging+mpi~python+raja+rocm+testing amdgpu_target:=gfx90a build_system=cmake build_type=Release dev_path=/lustre/orion/scratch/nkouk/stf006/Codes/ExaGO generator=make platform=linux os=sles15 target=zen3
-## module load exago/develop-gcc-14.2.0-yzuty4x
+## module load exago/develop-gcc-14.2.0-i7pccee
