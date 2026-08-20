@@ -220,7 +220,7 @@ class Exago(CMakePackage, CudaPackage, ROCmPackage):
     depends_on("petsc@3.18:3.19", when="@1.5")
     depends_on("petsc@3.19:3.23", when="@1.6")
     depends_on("petsc@3.24:", when="@2.0")
-    depends_on("petsc@3.25:", when="@develop") # update on new release released
+    depends_on("petsc@3.25:", when="@develop") # update on new release
     depends_on("petsc~mpi", when="~mpi")
 
     # Ipopt versiondependency logic
