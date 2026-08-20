@@ -1,3 +1,3 @@
 module use -a /lustre/orion/stf006/world-shared/nkouk/exago-08-2026/spack-install/modules/linux-sles15-zen3
 # exago@=develop~cuda+hiop~ipo+ipopt+logging+mpi~python+raja+rocm+testing amdgpu_target:=gfx90a build_system=cmake build_type=Release dev_path=/lustre/orion/scratch/nkouk/stf006/Codes/ExaGO generator=make platform=linux os=sles15 target=zen3
-module load exago/develop-gcc-14.2.0-i7pccee
+module load exago/develop-gcc-14.2.0-uk2jden
