@@ -153,7 +153,7 @@ jobs:
         run: spack -e . mirror set local-buildcache 
 
       - name: Trust keys
-        run: spack -e . buildcache keys --install --trust
+        run: spack -e . buildcache keys --install --trust --yes-to-all --force
 
       - name: Find external packages
         run: spack -e . external find --all
