@@ -171,7 +171,7 @@ jobs:
         run: spack -e . install --no-check-signature --only dependencies
 
       - name: Install package
-        run: spack -e . install --no-check-signature --fail-fast --keep-stage --no-cache
+        run: spack -e . install --no-check-signature --only package --fail-fast --keep-stage --no-cache
 
       - name: Test Build
         run: cd $(spack -e . location --build-dir exago@develop) && ctest -VV
