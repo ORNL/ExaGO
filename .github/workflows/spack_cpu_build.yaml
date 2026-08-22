@@ -145,8 +145,6 @@ jobs:
                 require: +mpi~openmp
               petsc:
                 require: ~hypre~superlu-dist~hdf5+metis
-              all:
-                require: "%gcc"
           EOF
 
       - name: Configure GHCR mirror
