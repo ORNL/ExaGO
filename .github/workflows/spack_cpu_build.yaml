@@ -184,5 +184,8 @@ jobs:
           MIRROR_USERNAME: ${{ env.USERNAME }}
           MIRROR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          spack -e . buildcache push $(spack -e . find --format '/{hash}') --force --base-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BASE_VERSION }} --unsigned --update-index local-buildcache
+          spack -e . buildcache push --force \
+          --base-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BASE_VERSION }} \
+          --unsigned --update-index local-buildcache \
+          $(spack -e . find --format '/{hash}') 
         if: ${{ !cancelled() }}
