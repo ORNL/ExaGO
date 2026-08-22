@@ -184,12 +184,5 @@ jobs:
           MIRROR_USERNAME: ${{ env.USERNAME }}
           MIRROR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          spack -e . find --format '{hash}' | tr -d '\r' | while read -r h; do
-            spack -e . buildcache push --force \
-              --base-image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BASE_VERSION }}" \
-              --unsigned \
-              local-buildcache \
-              "/$h"
-          done
-          spack buildcache update-index local-buildcache
+          spack -e . buildcache push --allow-missing --force --base-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BASE_VERSION }} --unsigned --update-index local-buildcache
         if: ${{ !cancelled() }}
