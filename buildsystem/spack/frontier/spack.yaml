@@ -27,7 +27,6 @@ spack:
       require: ~python+raja+hiop+rocm+ipopt amdgpu_target=gfx90a
     hiop:
       require: +sparse+mpi+raja+rocm~ginkgo+kron
-      version: [1.1.1]
     ipopt:
       require: '~metis+coinhsl~mumps'
     # Pin OpenBlas version for consistent test results.
@@ -64,14 +63,13 @@ spack:
     libfabric:
       buildable: false
       externals:
-      - spec: libfabric@1.22.0
+      - spec: libfabric@2.3.1
         modules:
-        - libfabric/1.22.0
+        - libfabric/2.3.1
     python:
       externals:
       - spec: python@3.11.7
-        modules:
-        - cray-python/3.11.7
+        prefix: /opt/cray/pe/python/3.11.7
       buildable: false
     hip:
       buildable: false
