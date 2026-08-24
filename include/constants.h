@@ -8,11 +8,13 @@
 #include <petsc.h>
 #define freq 60.0                   /**< System frequency */
 #define w_s (2.0 * PETSC_PI * freq) /**< Angular speed */
-#define MAXLINE 10000               /**< Max. number of characters in a line */
-#define ISOLATED_BUS 4              /**< Isolated bus */
-#define REF_BUS 3                   /**< Reference bus (swing bus) */
-#define PV_BUS 2                    /**< PV (voltage-controlled) bus */
-#define PQ_BUS 1                    /**< PQ bus */
+// FIXME: either validate that a line fits within this buffer or replace the use
+//        of a fixed-size buffer
+#define MAXLINE 1000000 /**< Max. number of characters in a line */
+#define ISOLATED_BUS 4  /**< Isolated bus */
+#define REF_BUS 3       /**< Reference bus (swing bus) */
+#define PV_BUS 2        /**< PV (voltage-controlled) bus */
+#define PQ_BUS 1        /**< PQ bus */
 #define NGEN_AT_BUS_MAX                                                        \
   32                        /**< Maximum number of generators allowed at a bus \
                              */
