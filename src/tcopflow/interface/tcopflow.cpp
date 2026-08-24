@@ -527,9 +527,10 @@ PetscErrorCode TCOPFLOWSetUp(TCOPFLOW tcopflow) {
   CHKERRQ(ierr);
   ierr = MatSetFromOptions(tcopflow->Jac);
   CHKERRQ(ierr);
-  /* Assume 10% sparsity */
+  /* Assume 10% sparsity with a minimum of 50 nz per row */
+  PetscInt jac_nz_per_row = PetscMin((PetscInt)(0.1 * tcopflow->Nx), 50);
   ierr = MatSeqAIJSetPreallocation(tcopflow->Jac,
-                                   (PetscInt)(0.1 * tcopflow->Nx), NULL);
+                                   jac_nz_per_row, NULL);
   CHKERRQ(ierr);
   ierr =
       MatSetOption(tcopflow->Jac, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
@@ -543,9 +544,10 @@ PetscErrorCode TCOPFLOWSetUp(TCOPFLOW tcopflow) {
   CHKERRQ(ierr);
   ierr = MatSetFromOptions(tcopflow->Hes);
   CHKERRQ(ierr);
-  /* Assume 10% sparsity */
+  /* Assume 10% sparsity with a minimum of 50 nz per row */
+  PetscInt hes_nz_per_row = PetscMin((PetscInt)(0.1 * tcopflow->Nx), 50);
   ierr = MatSeqAIJSetPreallocation(tcopflow->Hes,
-                                   (PetscInt)(0.1 * tcopflow->Nx), NULL);
+                                   hes_nz_per_row, NULL);
   CHKERRQ(ierr);
   ierr =
       MatSetOption(tcopflow->Hes, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
