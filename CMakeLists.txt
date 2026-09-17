@@ -171,15 +171,10 @@ endif(EXAGO_ENABLE_MPI)
 # If CUDA support is enabled, set up CUDA compiler and flags
 if(EXAGO_ENABLE_CUDA)
   include(CheckLanguage)
-  check_language(CUDA)
   enable_language(CUDA)
+  check_language(CUDA)
 
-  find_package(CUDAToolkit REQUIRED)
-
-  if(NOT DEFINED CMAKE_CUDA_STANDARD)
-    set(CMAKE_CUDA_STANDARD 17)
-    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-  endif()
+  find_package(CUDA REQUIRED)
 
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 70)
