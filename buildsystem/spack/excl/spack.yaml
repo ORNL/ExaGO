@@ -19,8 +19,8 @@ spack:
         prefix: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin/
         extra_attributes:
           compilers:
-            c: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin//gcc
-            cxx: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin//g++
+            c: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin/gcc
+            cxx: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin/g++
             fortran: /auto/software/swtree/ubuntu22.04/x86_64/gcc/12.2.0/bin/gfortran
           flags: {}
           environment: {}
@@ -52,6 +52,6 @@ spack:
     openmpi:
       buildable: false
       externals:
-      - spec: openmpi@5.0.1
+      - spec: openmpi@5.10.0
         modules:
-        - openmpi/5.0.1
+        - openmpi/5.10.0
