@@ -1,5 +1,5 @@
-module use -a /home/97k/Codes/ExaGO/tpl/spack/share/spack/modules/linux-ubuntu24.04-zen3
-module use -a /home/97k/Codes/ExaGO/tpl/spack/share/spack/modules/linux-ubuntu24.04-x86_64
+module use -a /home/97k/Codes/ExaGO/.spack/spack-install/modules/linux-ubuntu24.04-zen3
+module use -a /home/97k/Codes/ExaGO/.spack/spack-install/modules/linux-ubuntu24.04-x86_64
 # compiler-wrapper@=1.0 build_system=generic platform=linux os=ubuntu24.04 target=zen3
 module load compiler-wrapper/1.0-none-none-x2gzyyl
 # gcc@=12.2.0~binutils+bootstrap~graphite~mold~nvptx~piclibs~profiled~strip build_system=autotools build_type=RelWithDebInfo languages:='c,c++,fortran' platform=linux os=ubuntu24.04 target=x86_64

@@ -55,3 +55,14 @@ spack:
       - spec: openmpi@5.10.0
         modules:
         - openmpi/5.10.0
+  config:
+    install_tree:
+      root: $SPACK_INSTALL
+    source_cache: $SPACK_CACHE/source-cache
+    build_cache: $SPACK_CACHE/build-cache
+    misc_cache: $SPACK_CACHE/misc-cache
+    build_stage: $SPACK_CACHE/build-stage
+  modules:
+    default:
+      roots:
+        tcl: $SPACK_INSTALL/$SPACK_MODULES
