@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# We are not using a shared filesystem on ExCL, so the defaults from Spack are fine.
-export SPACK_INSTALL=spack-install
+BASE=/home/${USER}/Codes/ExaGO/.spack
+
+export SPACK_INSTALL=$BASE/spack-install
 export SPACK_MODULES=modules
-export SPACK_CACHE=spack-cache
-export SPACK_MIRROR=spack-mirror
+export SPACK_CACHE=$BASE/spack-cache
+export SPACK_MIRROR=$BASE/spack-mirror
