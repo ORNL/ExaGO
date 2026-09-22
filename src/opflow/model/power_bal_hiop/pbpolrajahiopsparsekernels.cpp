@@ -198,14 +198,18 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsArray_PBPOLRAJAHIOPSPARSE(
       RAJA::RangeSegment(0, busparams->nbus), RAJA_LAMBDA(RAJA::Index_type i) {
         double theta = x_dev[b_xidx[i]];
         double Vm = x_dev[b_xidx[i] + 1];
-        RAJA::atomicAdd<exago_raja_atomic>(
-            &ge_dev[b_gidx[i]],
-            isisolated[i] * (theta - va[i] * PETSC_PI / 180.0) +
-                ispvpq[i] * Vm * Vm * gl[i]);
+        /* bus->va is stored in radians (psreaddata.cpp converts it on read), and the
+           shunt injection belongs to every non-isolated bus, the reference bus
+           included -- as in PBPOL, and as this model's own Jacobian and Hessian
+           kernels already assume. */
+        const int notisolated = 1 - isisolated[i];
+        RAJA::atomicAdd<exago_raja_atomic>(&ge_dev[b_gidx[i]],
+                                           isisolated[i] * (theta - va[i]) +
+                                               notisolated * Vm * Vm * gl[i]);
 
         RAJA::atomicAdd<exago_raja_atomic>(&ge_dev[b_gidx[i] + 1],
                                            isisolated[i] * (Vm - vm[i]) -
-                                               ispvpq[i] * Vm * Vm * bl[i]);
+                                               notisolated * Vm * Vm * bl[i]);
         if (include_powerimbalance_variables) {
           double Pimb = x_dev[b_xidxpimb[i]];
           double Qimb = x_dev[b_xidxpimb[i] + 1];
