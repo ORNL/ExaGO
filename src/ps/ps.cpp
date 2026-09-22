@@ -1352,9 +1352,9 @@ PetscErrorCode PSSetUp(PS ps) {
     if (!line->status)
       continue;
 
-    if (busf->ide != REF_BUS || busf->ide != PV_BUS)
+    if (busf->ide == PQ_BUS)
       busf->ide = PV_BUS;
-    if (bust->ide != REF_BUS || bust->ide != PV_BUS)
+    if (bust->ide == PQ_BUS)
       bust->ide = PV_BUS;
   }
 
