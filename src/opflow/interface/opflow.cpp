@@ -83,7 +83,10 @@ PetscErrorCode OPFLOWGetLinesMonitored(OPFLOW opflow) {
   CHKERRQ(ierr);
   for (i = 0; i < ps->nline; i++) {
     line = &ps->line[i];
-    if (!line->status || line->rateA > 1e5)
+    /* A DC line has no flow constraints (PBPOL gives it nconineq = 0) and its rateA is
+       never set by the readers -- an AC branch's 0 becomes PETSC_INFINITY ("unlimited"),
+       a DC line's stays 0 -- so without this test every DC line ended up in linesmon. */
+    if (!line->status || line->isdcline || line->rateA > 1e5)
       continue;
     for (j = 0; j < opflow->nlinekvmon; j++) {
       if (PetscAbsScalar(line->kvlevel - opflow->linekvmon[j]) < 1e-5) {
