@@ -2106,13 +2106,13 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsHessian_PBPOL(OPFLOW opflow,
         dQt_dthetat_dVmt = Vmf * (Btf * sin_thetatf + Gtf * cos_thetatf);
         dQt_dthetat_dthetaf =
             Vmf * Vmt * (-Btf * cos_thetatf + Gtf * sin_thetatf);
-        dQt_dthetat_dVmf = Vmf * (Btf * sin_thetatf + Gtf * cos_thetatf);
+        dQt_dthetat_dVmf = Vmt * (Btf * sin_thetatf + Gtf * cos_thetatf);
 
         /* dQt_dVmt = -2*Btt*Vmt + Vmf*(-Btf*cos_thetatf + Gtf*sin_thetatf);
          */
         dQt_dVmt_dthetat = Vmf * (Btf * sin_thetatf + Gtf * cos_thetatf);
         dQt_dVmt_dVmt = -2 * Btt;
-        dQt_dVmt_dthetaf = Vmf * (-Btf * sin_thetatf + Gtf * cos_thetatf);
+        dQt_dVmt_dthetaf = Vmf * (-Btf * sin_thetatf - Gtf * cos_thetatf);
         dQt_dVmt_dVmf = (-Btf * cos_thetatf + Gtf * sin_thetatf);
 
         /* dQt_dthetaf = Vmf*Vmt*(-Btf*sin_thetatf - Gtf*cos_thetatf); */
