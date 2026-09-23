@@ -533,7 +533,7 @@ PetscErrorCode SCOPFLOWSetUp(SCOPFLOW scopflow) {
                             SCOPFLOWOptions::subproblem_solver.desc.c_str(), "",
                             scopflow->subproblem_solver,
                             scopflowsubproblemsolvername, max_solver_name_len,
-                            NULL);
+                            &flg);
   CHKERRQ(ierr);
   if (flg) {
     ierr =
