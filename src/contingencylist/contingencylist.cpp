@@ -12,17 +12,42 @@ extern char **blankTokenizer(const char *str, int *numtok, int maxtokens,
  */
 PetscErrorCode ContingencyListCreate(PetscInt Nc, ContingencyList *ctgclist) {
   PetscErrorCode ierr;
-  PetscInt c;
   ContingencyList ctgclistout;
   PetscFunctionBegin;
   ierr = PetscCalloc1(1, &ctgclistout);
   CHKERRQ(ierr);
-  ierr = PetscCalloc1(Nc, &ctgclistout->cont);
+  /* "all contingencies" (-scopflow_Nc -1 / -sopflow_Nc -1) arrives here as
+     Nc = MAX_CONTINGENCIES, and a Contingency is 10 KB (MAX_SIMULTANEOUS_OUTAGES outages):
+     the list was a 200 MB calloc (0.1 s of zeroing, kept for the whole run) for a 194-line
+     file. The list now starts small and grows while the file is read; Ncontinit keeps its
+     meaning (the largest allowed number). */
+  ctgclistout->capacity = (Nc >= MAX_CONTINGENCIES) ? 64 : (Nc > 0 ? Nc : 1);
+  ierr = PetscCalloc1(ctgclistout->capacity, &ctgclistout->cont);
   CHKERRQ(ierr);
-  for (c = 0; c < Nc; c++)
-    ctgclistout->cont->noutages = 0;
   ctgclistout->Ncontinit = Nc;
   *ctgclist = ctgclistout;
+  PetscFunctionReturn(0);
+}
+
+/* room for contingencies 0..n-1 (the new entries zeroed like the old ones) */
+PetscErrorCode ContingencyListEnsure(ContingencyList ctgclist, PetscInt n) {
+  PetscErrorCode ierr;
+  Contingency *grown;
+  PetscInt newcap;
+  PetscFunctionBegin;
+  if (n <= ctgclist->capacity)
+    PetscFunctionReturn(0);
+  newcap = 2 * ctgclist->capacity;
+  if (newcap < n)
+    newcap = n;
+  ierr = PetscCalloc1(newcap, &grown);
+  CHKERRQ(ierr);
+  ierr = PetscMemcpy(grown, ctgclist->cont, ctgclist->capacity * sizeof(Contingency));
+  CHKERRQ(ierr);
+  ierr = PetscFree(ctgclist->cont);
+  CHKERRQ(ierr);
+  ctgclist->cont = grown;
+  ctgclist->capacity = newcap;
   PetscFunctionReturn(0);
 }
 
@@ -133,6 +158,8 @@ PetscErrorCode ContingencyListReadData_Native(ContingencyList ctgclist) {
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
               "Exceeding max. allowed contingencies = %d\n", MAX_CONTINGENCIES);
     }
+    ierr = ContingencyListEnsure(ctgclist, num + 1);
+    CHKERRQ(ierr);
     cont = &ctgclist->cont[num];
     outage = &cont->outagelist[cont->noutages];
     outage->num = num;
@@ -201,6 +228,8 @@ PetscErrorCode ContingencyListReadData_PSSE(ContingencyList ctgclist) {
       while (strcmp(tokens[0], "END")) {
         if (!strcmp(tokens[0], "REMOVE")) {
           // Generator contingency
+          ierr = ContingencyListEnsure(ctgclist, numCont + 1);
+          CHKERRQ(ierr);
           cont = &ctgclist->cont[numCont];
           outage = &cont->outagelist[cont->noutages];
           outage->num = numCont;
@@ -217,6 +246,8 @@ PetscErrorCode ContingencyListReadData_PSSE(ContingencyList ctgclist) {
           cont->noutages++;
         } else if (!strcmp(tokens[0], "OPEN")) {
           int offset = 6;
+          ierr = ContingencyListEnsure(ctgclist, numCont + 1);
+          CHKERRQ(ierr);
           cont = &ctgclist->cont[numCont];
           outage = &cont->outagelist[cont->noutages];
           outage->num = numCont;

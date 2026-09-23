@@ -42,6 +42,7 @@ typedef struct _p_Contingency Contingency;
 struct _p_ContingencyList {
   PetscInt Ncontinit; /* Initial size of list */
   PetscInt Ncont;     /* Number of contingencies = number of scenarios */
+  PetscInt capacity;  /* allocated length of cont (grows while reading) */
   Contingency *cont;  /* Contingencies */
   char inputfile[PETSC_MAX_PATH_LEN];         /* input file */
   ContingencyFileInputFormat inputfileformat; /* format of input file */
@@ -53,6 +54,7 @@ extern PetscErrorCode ContingencyListSetData(ContingencyList,
                                              ContingencyFileInputFormat,
                                              const char[]);
 extern PetscErrorCode ContingencyListCreate(PetscInt, ContingencyList *);
+extern PetscErrorCode ContingencyListEnsure(ContingencyList, PetscInt);
 extern PetscErrorCode ContingencyListDestroy(ContingencyList *);
 extern PetscErrorCode ContingencyListReadData(ContingencyList, PetscInt *);
 extern PetscErrorCode ContingencyWriteData(Contingency *con, int id,
