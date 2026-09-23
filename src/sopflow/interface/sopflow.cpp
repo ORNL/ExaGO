@@ -573,6 +573,38 @@ SOPFLOWSetContingencyData(SOPFLOW sopflow,
 }
 
 /*
+  StackedNonzerosPerRow - Per-row nonzero estimate for the stacked constraint
+  Jacobian and Hessian.
+
+  Input Parameters:
++ nxi - number of variables in each subproblem
+- n   - number of subproblems
+
+  Notes:
+  Every row of the stacked matrices is one subproblem's row (the coupling rows
+  hold two entries each), so a row's nonzero count is set by the size of a
+  subproblem, not by the size of the stacked problem. Estimating it as 10 % of
+  the stacked Nx over-allocates by roughly the number of subproblems, and on a
+  large stacked problem the product with the row count overflows PetscInt
+  before it gets there:
+
+    [0]PETSC ERROR: Product of two integers 11673 259824 overflow
+
+  (ACTIVSg2000 over 24 periods.) Estimate from the largest subproblem instead,
+  with the rule OPFLOWSetUp uses for the subproblem's own Jacobian, plus the
+  two entries of a coupling row.
+*/
+static PetscInt StackedNonzerosPerRow(const PetscInt *nxi, PetscInt n) {
+  PetscInt i, nxmax = 0;
+
+  for (i = 0; i < n; i++)
+    nxmax = PetscMax(nxmax, nxi[i]);
+
+  /* 10 % for a small subproblem, 2 % for a big one, as in OPFLOWSetUp */
+  return (PetscInt)((nxmax < 1000 ? 0.1 : 0.02) * nxmax) + 2;
+}
+
+/*
   SOPFLOWSetUp - Sets up an stochastic optimal power flow application object
 
   Input Parameters:
@@ -1217,9 +1249,9 @@ PetscErrorCode SOPFLOWSetUp(SOPFLOW sopflow) {
     //    CHKERRQ(ierr);
     ierr = MatSetType(sopflow->Jac, MATSEQAIJ);
     CHKERRQ(ierr);
-    /* Assume 10% sparsity */
-    ierr = MatSeqAIJSetPreallocation(sopflow->Jac,
-                                     (PetscInt)(0.1 * sopflow->Nx), NULL);
+    /* Estimate the nonzeros from the subproblems, not from the stacked Nx */
+    ierr = MatSeqAIJSetPreallocation(
+        sopflow->Jac, StackedNonzerosPerRow(sopflow->nxi, sopflow->ns), NULL);
     CHKERRQ(ierr);
     ierr =
         MatSetOption(sopflow->Jac, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
@@ -1236,9 +1268,9 @@ PetscErrorCode SOPFLOWSetUp(SOPFLOW sopflow) {
     /*    ierr = MatSetFromOptions(sopflow->Hes);
     CHKERRQ(ierr);
     */
-    /* Assume 10% sparsity */
-    ierr = MatSeqAIJSetPreallocation(sopflow->Hes,
-                                     (PetscInt)(0.1 * sopflow->Nx), NULL);
+    /* Estimate the nonzeros from the subproblems, not from the stacked Nx */
+    ierr = MatSeqAIJSetPreallocation(
+        sopflow->Hes, StackedNonzerosPerRow(sopflow->nxi, sopflow->ns), NULL);
     CHKERRQ(ierr);
     ierr =
         MatSetOption(sopflow->Hes, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
