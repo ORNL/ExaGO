@@ -681,6 +681,11 @@ PetscErrorCode SOPFLOWSetUp(SOPFLOW sopflow) {
                          SOPFLOWOptions::Nc.desc.c_str(), "", sopflow->Nc,
                          &sopflow->Nc, NULL);
   CHKERRQ(ierr);
+  ierr = PetscOptionsInt(SOPFLOWOptions::verbosity_level.opt.c_str(),
+                         SOPFLOWOptions::verbosity_level.desc.c_str(), "",
+                         sopflow->verbosity_level, &sopflow->verbosity_level,
+                         NULL);
+  CHKERRQ(ierr);
   ierr = PetscOptionsString(SOPFLOWOptions::windgen.opt.c_str(),
                             SOPFLOWOptions::windgen.desc.c_str(), "", windgen,
                             windgen, PETSC_MAX_PATH_LEN, &flgwindgen);
