@@ -1934,6 +1934,14 @@ PetscErrorCode OPFLOWSetUp(OPFLOW opflow) {
     opflow->idxn2sd_map[i] = i;
 
   /* Model set up */
+  /* The participation factors (gen->apf) used to be computed at the very end of this
+     function, after the model setup. A model that copies the network to a device in its
+     setup (PBPOLRAJAHIOP*) therefore ran its AGC constraint, Jacobian and Hessian kernels
+     with apf = 0. They depend only on the network, so compute them first; the call at the
+     end of this function is kept and is idempotent. */
+  ierr = PSComputeParticipationFactors(ps);
+  CHKERRQ(ierr);
+
   if (opflow->modelops.setup) {
     ierr = (*opflow->modelops.setup)(opflow);
     CHKERRQ(ierr);
