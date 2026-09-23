@@ -11,7 +11,12 @@ User may set:
 find_package(HiOp REQUIRED)
 
 if(TARGET HiOp::HiOp)
-  if(HiOp::SPARSE AND TARGET HiOp::COINHSL)
+  # HiOp's sparse interface does not require COINHSL -- MA57 is only one of its
+  # backends (STRUMPACK, cuSOLVER-LU/ReSolve and cuDSS are others). Gating on
+  # HiOp::COINHSL leaves PBPOLRAJAHIOPSPARSE unregistered for a perfectly
+  # functional HiOp built with a free backend, and a run then fails with
+  # "Unknown type for OPFLOW Model PBPOLRAJAHIOPSPARSE".
+  if(HiOp::SPARSE)
     set(EXAGO_ENABLE_HIOP_SPARSE ON)
   endif()
   mark_as_advanced(FORCE HiOp::SPARSE)
