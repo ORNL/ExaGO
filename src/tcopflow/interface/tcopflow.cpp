@@ -33,13 +33,16 @@ PetscErrorCode TCOPFLOWSetLoadProfiles(TCOPFLOW tcopflow,
 
   PetscFunctionBegin;
 
-  if (ploadprofile) {
+  /* an empty name means "no profile": a multi-period SCOPFLOW passes whatever
+     -scopflow_{p,q}loadprofile / -scopflow_windgenprofile hold, which is "" when the
+     option was not given */
+  if (ploadprofile && ploadprofile[0]) {
     ierr = PetscStrcpy(tcopflow->ploadprofile, ploadprofile);
     CHKERRQ(ierr);
     tcopflow->ploadprofileset = PETSC_TRUE;
   }
 
-  if (qloadprofile) {
+  if (qloadprofile && qloadprofile[0]) {
     ierr = PetscStrcpy(tcopflow->qloadprofile, qloadprofile);
     CHKERRQ(ierr);
     tcopflow->qloadprofileset = PETSC_TRUE;
@@ -61,7 +64,7 @@ PetscErrorCode TCOPFLOWSetWindGenProfiles(TCOPFLOW tcopflow,
 
   PetscFunctionBegin;
 
-  if (windgenprofile) {
+  if (windgenprofile && windgenprofile[0]) {
     ierr = PetscStrcpy(tcopflow->windgenprofile, windgenprofile);
     CHKERRQ(ierr);
     tcopflow->windgenprofileset = PETSC_TRUE;
