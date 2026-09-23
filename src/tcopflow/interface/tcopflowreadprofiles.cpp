@@ -1,5 +1,34 @@
 #include <private/opflowimpl.h>
 #include <private/tcopflowimpl.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/* The three readers below took their lines with fgets() into a MAXLINE
+   (10000) character buffer. A longer line -- a load profile for
+   case_ACTIVSg2000 lists 1125 loads, 11.4 kB per row -- was silently split:
+   the period got the first ~980 loads of its row, and the next period was fed
+   the remainder of the same row as if it were its own, with its first ~140
+   loads set to values belonging to other buses.
+
+   Lines are now read whole, and every row must carry exactly as many values
+   as the header lists. */
+static PetscErrorCode TCOPFLOWProfileGetLine(FILE *fp, char **line, size_t *cap,
+                                             PetscBool *got) {
+  ssize_t n;
+
+  PetscFunctionBegin;
+  *got = PETSC_FALSE;
+  while ((n = getline(line, cap, fp)) >= 0) {
+    /* strip the line end, and skip a blank line */
+    while (n > 0 && ((*line)[n - 1] == '\n' || (*line)[n - 1] == '\r'))
+      (*line)[--n] = '\0';
+    if (n == 0)
+      continue;
+    *got = PETSC_TRUE;
+    break;
+  }
+  PetscFunctionReturn(0);
+}
 
 /*
   TCOPFLOWReadPloadProfile - Reads the active power load profile
@@ -14,11 +43,12 @@ PetscErrorCode TCOPFLOWReadPloadProfile(TCOPFLOW tcopflow,
                                         char ploadprofile[]) {
   PetscErrorCode ierr;
   FILE *fp;
-  char line[MAXLINE];
-  char *out;
+  char *line = NULL;
+  size_t linecap = 0;
+  PetscBool got;
   OPFLOW opflow;
   PS ps;
-  PetscInt nload = tcopflow->opflows[0]->ps->nload, *lbus, nl = 0;
+  PetscInt nload = tcopflow->opflows[0]->ps->nload, *lbus, nl = 0, ncol = 0;
   char *tok;
   char sep[] = ",";
   PSLOAD load;
@@ -31,35 +61,50 @@ PetscErrorCode TCOPFLOWReadPloadProfile(TCOPFLOW tcopflow,
   if (fp == NULL) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_OPEN,
             "Cannot open P load profile file %s", ploadprofile);
-    CHKERRQ(ierr);
   }
 
   ierr = PetscMalloc1(nload, &lbus);
   CHKERRQ(ierr);
   /* First line -- has the bus numbers */
-  out = fgets(line, MAXLINE, fp);
+  ierr = TCOPFLOWProfileGetLine(fp, &line, &linecap, &got);
+  CHKERRQ(ierr);
+  if (!got)
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+            "P load profile file %s is empty", ploadprofile);
 
   /* Parse load bus numbers */
   tok = strtok(line, sep);
   tok = strtok(NULL, sep); /* Skip first token */
   while (tok != NULL) {
+    if (nl >= nload)
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+              "P load profile file %s lists more than the network's %d "
+              "loads",
+              ploadprofile, (int)nload);
     sscanf(tok, "%d", &lbus[nl]);
     nl++;
     tok = strtok(NULL, sep);
   }
+  ncol = nl;
 
-  while ((out = fgets(line, MAXLINE, fp)) != NULL) {
-    if (strcmp(line, "\r\n") == 0 || strcmp(line, "\n") == 0) {
-      continue; /* Skip blank lines */
-    }
+  while (t < tcopflow->Nt) {
+    ierr = TCOPFLOWProfileGetLine(fp, &line, &linecap, &got);
+    CHKERRQ(ierr);
+    if (!got)
+      break;
 
     opflow = tcopflow->opflows[t];
     ps = opflow->ps;
-    /* Parse load bus numbers */
+    /* Parse load values */
     tok = strtok(line, sep);
     tok = strtok(NULL, sep); /* Skip first token */
     nl = 0;
     while (tok != NULL) {
+      if (nl >= ncol)
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+                "P load profile file %s: row %d has more values than the "
+                "%d loads of its header",
+                ploadprofile, (int)t + 1, (int)ncol);
       ierr = PSGetLoad(ps, lbus[nl], "1 ", &load);
       CHKERRQ(ierr);
       sscanf(tok, "%lf", &pl);
@@ -67,14 +112,18 @@ PetscErrorCode TCOPFLOWReadPloadProfile(TCOPFLOW tcopflow,
       nl++;
       tok = strtok(NULL, sep);
     }
+    if (nl != ncol)
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+              "P load profile file %s: row %d has %d values, its header "
+              "lists %d loads",
+              ploadprofile, (int)t + 1, (int)nl, (int)ncol);
 
     t++;
-    if (t == tcopflow->Nt)
-      break;
   }
 
   ierr = PetscFree(lbus);
   CHKERRQ(ierr);
+  free(line);
   fclose(fp);
   PetscFunctionReturn(0);
 }
@@ -92,11 +141,12 @@ PetscErrorCode TCOPFLOWReadQloadProfile(TCOPFLOW tcopflow,
                                         char qloadprofile[]) {
   PetscErrorCode ierr;
   FILE *fp;
-  char line[MAXLINE];
-  char *out;
+  char *line = NULL;
+  size_t linecap = 0;
+  PetscBool got;
   OPFLOW opflow;
   PS ps;
-  PetscInt nload = tcopflow->opflows[0]->ps->nload, *lbus, nl = 0;
+  PetscInt nload = tcopflow->opflows[0]->ps->nload, *lbus, nl = 0, ncol = 0;
   char *tok;
   char sep[] = ",";
   PSLOAD load;
@@ -109,35 +159,50 @@ PetscErrorCode TCOPFLOWReadQloadProfile(TCOPFLOW tcopflow,
   if (fp == NULL) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_OPEN,
             "Cannot open Q load profile file %s", qloadprofile);
-    CHKERRQ(ierr);
   }
 
   ierr = PetscMalloc1(nload, &lbus);
   CHKERRQ(ierr);
   /* First line -- has the bus numbers */
-  out = fgets(line, MAXLINE, fp);
+  ierr = TCOPFLOWProfileGetLine(fp, &line, &linecap, &got);
+  CHKERRQ(ierr);
+  if (!got)
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+            "Q load profile file %s is empty", qloadprofile);
 
   /* Parse load bus numbers */
   tok = strtok(line, sep);
   tok = strtok(NULL, sep); /* Skip first token */
   while (tok != NULL) {
+    if (nl >= nload)
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+              "Q load profile file %s lists more than the network's %d "
+              "loads",
+              qloadprofile, (int)nload);
     sscanf(tok, "%d", &lbus[nl]);
     nl++;
     tok = strtok(NULL, sep);
   }
+  ncol = nl;
 
-  while ((out = fgets(line, MAXLINE, fp)) != NULL) {
-    if (strcmp(line, "\r\n") == 0 || strcmp(line, "\n") == 0) {
-      continue; /* Skip blank lines */
-    }
+  while (t < tcopflow->Nt) {
+    ierr = TCOPFLOWProfileGetLine(fp, &line, &linecap, &got);
+    CHKERRQ(ierr);
+    if (!got)
+      break;
 
     opflow = tcopflow->opflows[t];
     ps = opflow->ps;
-    /* Parse load bus numbers */
+    /* Parse load values */
     tok = strtok(line, sep);
     tok = strtok(NULL, sep); /* Skip first token */
     nl = 0;
     while (tok != NULL) {
+      if (nl >= ncol)
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+                "Q load profile file %s: row %d has more values than the "
+                "%d loads of its header",
+                qloadprofile, (int)t + 1, (int)ncol);
       ierr = PSGetLoad(ps, lbus[nl], "1 ", &load);
       CHKERRQ(ierr);
       sscanf(tok, "%lf", &ql);
@@ -145,14 +210,18 @@ PetscErrorCode TCOPFLOWReadQloadProfile(TCOPFLOW tcopflow,
       nl++;
       tok = strtok(NULL, sep);
     }
+    if (nl != ncol)
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+              "Q load profile file %s: row %d has %d values, its header "
+              "lists %d loads",
+              qloadprofile, (int)t + 1, (int)nl, (int)ncol);
 
     t++;
-    if (t == tcopflow->Nt)
-      break;
   }
 
   ierr = PetscFree(lbus);
   CHKERRQ(ierr);
+  free(line);
   fclose(fp);
   PetscFunctionReturn(0);
 }
@@ -170,11 +239,12 @@ PetscErrorCode TCOPFLOWReadWindGenProfile(TCOPFLOW tcopflow,
                                           char windgenprofile[]) {
   PetscErrorCode ierr;
   FILE *fp;
-  char line[MAXLINE];
-  char *out;
+  char *line = NULL;
+  size_t linecap = 0;
+  PetscBool got;
   OPFLOW opflow;
   PS ps;
-  PetscInt ngen = tcopflow->opflows[0]->ps->ngen, *windgenbus, nw = 0;
+  PetscInt ngen = tcopflow->opflows[0]->ps->ngen, *windgenbus, nw = 0, ncol = 0;
   char *tok, *tok2;
   char sep[] = ",", sep2[] = "_";
   PSGEN gen;
@@ -190,14 +260,17 @@ PetscErrorCode TCOPFLOWReadWindGenProfile(TCOPFLOW tcopflow,
   if (fp == NULL) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_OPEN,
             "Cannot open wind generation profile file %s", windgenprofile);
-    CHKERRQ(ierr);
   }
 
   ierr = PetscMalloc1(ngen, &windgenbus);
   CHKERRQ(ierr);
 
   /* First line -- has the bus numbers */
-  out = fgets(line, MAXLINE, fp);
+  ierr = TCOPFLOWProfileGetLine(fp, &line, &linecap, &got);
+  CHKERRQ(ierr);
+  if (!got)
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+            "wind generation profile file %s is empty", windgenprofile);
 
   /* Parse wind generator numbers */
   tok = strtok(line, sep);
@@ -218,15 +291,17 @@ PetscErrorCode TCOPFLOWReadWindGenProfile(TCOPFLOW tcopflow,
     nw++;
     tok = strtok(NULL, sep);
   }
+  ncol = nw;
 
-  while ((out = fgets(line, MAXLINE, fp)) != NULL) {
-    if (strcmp(line, "\r\n") == 0 || strcmp(line, "\n") == 0) {
-      continue; /* Skip blank lines */
-    }
+  while (t < tcopflow->Nt) {
+    ierr = TCOPFLOWProfileGetLine(fp, &line, &linecap, &got);
+    CHKERRQ(ierr);
+    if (!got)
+      break;
 
     opflow = tcopflow->opflows[t];
     ps = opflow->ps;
-    /* Parse load bus numbers */
+    /* Parse the row */
     tok = strtok(line, sep);
     tok = strtok(NULL, sep);      /* Skip first token */
     sscanf(tok, "%d", &scen_num); /* Scenario number */
@@ -235,6 +310,11 @@ PetscErrorCode TCOPFLOWReadWindGenProfile(TCOPFLOW tcopflow,
     tok = strtok(NULL, sep); /* Scenario number */
     nw = 0;
     while (tok != NULL) {
+      if (nw >= ncol)
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+                "wind generation profile file %s: row %d has more values "
+                "than the %d generators of its header",
+                windgenprofile, (int)t + 1, (int)ncol);
       ierr = PSGetGen(ps, windgenbus[nw], windgenid[nw], &gen);
       CHKERRQ(ierr);
       sscanf(tok, "%lf", &pg);
@@ -244,15 +324,18 @@ PetscErrorCode TCOPFLOWReadWindGenProfile(TCOPFLOW tcopflow,
       nw++;
       tok = strtok(NULL, sep);
     }
+    if (nw != ncol)
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ,
+              "wind generation profile file %s: row %d has %d values, its "
+              "header lists %d generators",
+              windgenprofile, (int)t + 1, (int)nw, (int)ncol);
 
     t++;
-    if (t == tcopflow->Nt)
-      break;
   }
 
   ierr = PetscFree(windgenbus);
   CHKERRQ(ierr);
-
+  free(line);
   fclose(fp);
   PetscFunctionReturn(0);
 }
