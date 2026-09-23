@@ -230,24 +230,39 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsArray_PBPOLRAJAHIOPSPARSE(
   int *xidxt = lineparams->xidxt_dev_;
   int *geqidxf = lineparams->geqidxf_dev_;
   int *geqidxt = lineparams->geqidxt_dev_;
+  /* A DC line's contributions are its own variables (PBPOL): +Pf, +Qf at the from bus and
+     -(Pf - loss0 - loss1 Pf), -Qt at the to bus. Its admittances are zero, so evaluating
+     the AC formulas for it adds nothing at all. */
+  int *isdcline = lineparams->isdcline_dev_;
+  int *xdcidx = lineparams->xdcidx_dev_;
+  double *loss0 = lineparams->loss0_dev_;
+  double *loss1 = lineparams->loss1_dev_;
 
   RAJA::forall<exago_raja_exec>(
       RAJA::RangeSegment(0, lineparams->nlineON),
       RAJA_LAMBDA(RAJA::Index_type i) {
         double Pf, Qf, Pt, Qt;
-        double thetaf = x_dev[xidxf[i]], Vmf = x_dev[xidxf[i] + 1];
-        double thetat = x_dev[xidxt[i]], Vmt = x_dev[xidxt[i] + 1];
-        double thetaft = thetaf - thetat;
-        double thetatf = thetat - thetaf;
 
-        Pf = Gff[i] * Vmf * Vmf +
-             Vmf * Vmt * (Gft[i] * cos(thetaft) + Bft[i] * sin(thetaft));
-        Qf = -Bff[i] * Vmf * Vmf +
-             Vmf * Vmt * (-Bft[i] * cos(thetaft) + Gft[i] * sin(thetaft));
-        Pt = Gtt[i] * Vmt * Vmt +
-             Vmt * Vmf * (Gtf[i] * cos(thetatf) + Btf[i] * sin(thetatf));
-        Qt = -Btt[i] * Vmt * Vmt +
-             Vmt * Vmf * (-Btf[i] * cos(thetatf) + Gtf[i] * sin(thetatf));
+        if (isdcline[i]) {
+          Pf = x_dev[xdcidx[i]];
+          Qf = x_dev[xdcidx[i] + 1];
+          Pt = -(Pf - (loss0[i] + loss1[i] * Pf));
+          Qt = -x_dev[xdcidx[i] + 2];
+        } else {
+          double thetaf = x_dev[xidxf[i]], Vmf = x_dev[xidxf[i] + 1];
+          double thetat = x_dev[xidxt[i]], Vmt = x_dev[xidxt[i] + 1];
+          double thetaft = thetaf - thetat;
+          double thetatf = thetat - thetaf;
+
+          Pf = Gff[i] * Vmf * Vmf +
+               Vmf * Vmt * (Gft[i] * cos(thetaft) + Bft[i] * sin(thetaft));
+          Qf = -Bff[i] * Vmf * Vmf +
+               Vmf * Vmt * (-Bft[i] * cos(thetaft) + Gft[i] * sin(thetaft));
+          Pt = Gtt[i] * Vmt * Vmt +
+               Vmt * Vmf * (Gtf[i] * cos(thetatf) + Btf[i] * sin(thetatf));
+          Qt = -Btt[i] * Vmt * Vmt +
+               Vmt * Vmf * (-Btf[i] * cos(thetatf) + Gtf[i] * sin(thetatf));
+        }
 
         RAJA::atomicAdd<exago_raja_atomic>(&ge_dev[geqidxf[i]], Pf);
         RAJA::atomicAdd<exago_raja_atomic>(&ge_dev[geqidxf[i] + 1], Qf);

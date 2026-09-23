@@ -226,6 +226,10 @@ int LINEParamsRajaHiop::copy(OPFLOW opflow) {
 
   resmgr.copy(geqidxf_dev_, geqidxf);
   resmgr.copy(geqidxt_dev_, geqidxt);
+  resmgr.copy(isdcline_dev_, isdcline);
+  resmgr.copy(xdcidx_dev_, xdcidx);
+  resmgr.copy(loss0_dev_, loss0);
+  resmgr.copy(loss1_dev_, loss1);
 
   if (opflow->nlinesmon) {
     resmgr.copy(gineqidx_dev_, gineqidx);
@@ -246,6 +250,10 @@ int LINEParamsRajaHiop::copy(OPFLOW opflow) {
   xidxt_dev_ = xidxt;
   geqidxf_dev_ = geqidxf;
   geqidxt_dev_ = geqidxt;
+  isdcline_dev_ = isdcline;
+  xdcidx_dev_ = xdcidx;
+  loss0_dev_ = loss0;
+  loss1_dev_ = loss1;
   if (opflow->nlinesmon) {
     gineqidx_dev_ = gineqidx;
     gbineqidx_dev_ = gbineqidx;
@@ -272,6 +280,10 @@ int LINEParamsRajaHiop::destroy(OPFLOW opflow) {
 
   h_allocator_.deallocate(geqidxf);
   h_allocator_.deallocate(geqidxt);
+  h_allocator_.deallocate(isdcline);
+  h_allocator_.deallocate(xdcidx);
+  h_allocator_.deallocate(loss0);
+  h_allocator_.deallocate(loss1);
 
   if (opflow->nlinesmon) {
     h_allocator_.deallocate(gineqidx);
@@ -296,6 +308,10 @@ int LINEParamsRajaHiop::destroy(OPFLOW opflow) {
 
   d_allocator_.deallocate(geqidxf_dev_);
   d_allocator_.deallocate(geqidxt_dev_);
+  d_allocator_.deallocate(isdcline_dev_);
+  d_allocator_.deallocate(xdcidx_dev_);
+  d_allocator_.deallocate(loss0_dev_);
+  d_allocator_.deallocate(loss1_dev_);
 
   if (opflow->nlinesmon) {
     d_allocator_.deallocate(gineqidx_dev_);
@@ -343,6 +359,11 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
   geqidxf = paramAlloc<int>(h_allocator_, nlineON);
   geqidxt = paramAlloc<int>(h_allocator_, nlineON);
 
+  isdcline = paramAlloc<int>(h_allocator_, nlineON);
+  xdcidx = paramAlloc<int>(h_allocator_, nlineON);
+  loss0 = paramAlloc<double>(h_allocator_, nlineON);
+  loss1 = paramAlloc<double>(h_allocator_, nlineON);
+
   if (opflow->nlinesmon) {
     linelimidx = paramAlloc<int>(h_allocator_, nlinelim);
     gineqidx = paramAlloc<int>(h_allocator_, nlinelim);
@@ -386,6 +407,11 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
     geqidxf[linei] = busf->starteqloc;
     geqidxt[linei] = bust->starteqloc;
 
+    isdcline[linei] = (int)line->isdcline;
+    xdcidx[linei] = line->isdcline ? opflow->idxn2sd_map[line->startxdcloc] : -1;
+    loss0[linei] = line->isdcline ? line->loss0 : 0.0;
+    loss1[linei] = line->isdcline ? line->loss1 : 0.0;
+
     if (j < opflow->nlinesmon && opflow->linesmon[j] == i) {
       gbineqidx[j] = opflow->nconeq + line->startineqloc;
       gineqidx[j] = line->startineqloc;
@@ -414,6 +440,11 @@ int LINEParamsRajaHiop::allocate(OPFLOW opflow) {
 
   geqidxf_dev_ = paramAlloc<int>(d_allocator_, nlineON);
   geqidxt_dev_ = paramAlloc<int>(d_allocator_, nlineON);
+
+  isdcline_dev_ = paramAlloc<int>(d_allocator_, nlineON);
+  xdcidx_dev_ = paramAlloc<int>(d_allocator_, nlineON);
+  loss0_dev_ = paramAlloc<double>(d_allocator_, nlineON);
+  loss1_dev_ = paramAlloc<double>(d_allocator_, nlineON);
 
   if (opflow->nconineq) {
     gineqidx_dev_ = paramAlloc<int>(d_allocator_, nlinelim);

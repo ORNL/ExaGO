@@ -195,6 +195,13 @@ struct LINEParamsRajaHiop {
   int *gbineqidx;  /* Starting location to insert contribution to inequality
                       constraint bound */
   int *linelimidx; /* Indices for subset of lines that have finite limits */
+  /* DC lines: 1 if the line is one, the location of its three variables (Pf, Qf, Qt --
+     PBPOL's startxdcloc) in X (-1 for an AC line), and its loss model
+     Pt = Pf - (loss0 + loss1 * Pf) */
+  int *isdcline;
+  int *xdcidx;
+  double *loss0;
+  double *loss1;
 
   // Device data
   double *Gff_dev_;    /* From side self conductance */
@@ -218,6 +225,10 @@ struct LINEParamsRajaHiop {
                           constraint bound */
   int *
       linelimidx_dev_; /* Indices for subset of lines that have finite limits */
+  int *isdcline_dev_;  /* device counterparts of the DC-line data */
+  int *xdcidx_dev_;
+  double *loss0_dev_;
+  double *loss1_dev_;
 
   int allocate(OPFLOW);
   int destroy(OPFLOW);
