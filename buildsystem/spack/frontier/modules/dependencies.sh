@@ -1,5 +1,5 @@
-module use -a /lustre/orion/stf006/world-shared/nkouk/exago-08-2026/spack-install/modules/linux-sles15-zen3
-## excluded or missing from upstream: cmake@=3.30.5~doc+ncurses+ownlibs~qtgui build_system=generic build_type=Release platform=linux os=sles15 target=x86_64
+module use -a /lustre/orion/stf006/world-shared/nkouk/exago-09-2026/spack-install/modules/linux-sles15-zen3
+## excluded or missing from upstream: cmake@=3.31.11~doc+ncurses+ownlibs~qtgui build_system=generic build_type=Release platform=linux os=sles15 target=x86_64
 # compiler-wrapper@=1.1.0 build_system=generic platform=linux os=sles15 target=zen3
 module load compiler-wrapper/1.1.0-none-none-hsr6o73
 ## excluded or missing from upstream: gcc@=14.2.0+binutils+bootstrap~graphite+libsanitizer~mold~nvptx~piclibs~profiled~strip build_system=autotools build_type=RelWithDebInfo languages:='c,c++,fortran' platform=linux os=sles15 target=x86_64
@@ -7,17 +7,17 @@ module load compiler-wrapper/1.1.0-none-none-hsr6o73
 # gcc-runtime@=14.2.0 build_system=generic platform=linux os=sles15 target=zen3
 module load gcc-runtime/14.2.0-none-none-mthljcr
 # blt@=0.7.2 build_system=generic platform=linux os=sles15 target=zen3
-module load blt/0.7.2-gcc-14.2.0-v5iinju
+module load blt/0.7.2-gcc-14.2.0-nl5yhr7
 # gmake@=4.4.1~guile build_system=generic platform=linux os=sles15 target=zen3
 module load gmake/4.4.1-gcc-14.2.0-r4kiolf
-## excluded or missing from upstream: hip@=6.3.1~asan~cuda+rocm build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
-## excluded or missing from upstream: hsa-rocr-dev@=6.3.1~asan+image+shared build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
-## excluded or missing from upstream: llvm-amdgpu@=6.3.1~link_llvm_dylib~llvm_dylib+rocm-device-libs build_system=cmake build_type=Release generator=ninja languages:='c,c++' platform=linux os=sles15 target=x86_64
+## excluded or missing from upstream: hip@=6.4.1~asan~cuda+rocm build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
+## excluded or missing from upstream: hsa-rocr-dev@=6.4.1~asan+image+shared build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
+## excluded or missing from upstream: llvm-amdgpu@=6.4.1~link_llvm_dylib~llvm_dylib+rocm-device-libs build_system=cmake build_type=Release generator=ninja languages:='c,c++' platform=linux os=sles15 target=x86_64
 # camp@=2025.12.0~cuda~ipo~omptarget~openmp+rocm~sycl~tests amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=a8caefa9f4c811b1a114b4ed2c9b681d40f12325 generator=make platform=linux os=sles15 target=zen3
-module load camp/2025.12.0-gcc-14.2.0-2mvr5d4
+module load camp/2025.12.0-gcc-14.2.0-gxfcvla
 ## excluded or missing from upstream: cray-mpich@=8.1.31~cuda~rocm+wrappers build_system=generic platform=linux os=sles15 target=x86_64
 # fmt@=11.0.2~ipo+pic~shared build_system=cmake build_type=Release cxxstd=11 generator=make platform=linux os=sles15 target=zen3
-module load fmt/11.0.2-gcc-14.2.0-rymouym
+module load fmt/11.0.2-gcc-14.2.0-iz6mktm
 ## excluded or missing from upstream: python@=3.11.7+bz2+crypt+ctypes+dbm~debug+libxml2+lzma~optimizations+pic+pyexpat+pythoncmd+readline+shared+sqlite3+ssl~static~tests~tkinter+uuid+zlib build_system=generic platform=linux os=sles15 target=x86_64
 # re2c@=4.4 build_system=autotools platform=linux os=sles15 target=zen3
 module load re2c/4.4-gcc-14.2.0-zu5yo7f
@@ -34,7 +34,7 @@ module load py-wheel/0.45.1-none-none-e5kilm7
 # meson@=1.11.1 build_system=python_pip patches:=0f0b1bd platform=linux os=sles15 target=zen3
 module load meson/1.11.1-none-none-e6yrimg
 # metis@=5.1.0~gdb~int64~ipo~no_warning~real64+shared build_system=cmake build_type=Release generator=make patches:=4991da9,93a7903,b1225da platform=linux os=sles15 target=zen3
-module load metis/5.1.0-gcc-14.2.0-gx4ixil
+module load metis/5.1.0-gcc-14.2.0-d4j7okt
 # berkeley-db@=18.1.40+cxx~docs+stl build_system=autotools patches:=26090f4,b231fcc platform=linux os=sles15 target=zen3
 module load berkeley-db/18.1.40-gcc-14.2.0-hmndfu6
 # libiconv@=1.18 build_system=autotools libs:=shared,static platform=linux os=sles15 target=zen3
@@ -60,16 +60,16 @@ module load perl/5.42.0-gcc-14.2.0-x3k7ozd
 # openblas@=0.3.20~bignuma~consistent_fpcsr+dynamic_dispatch~ilp64+locking+pic+shared~static build_system=makefile patches:=9f12903 symbol_suffix=none threads=none platform=linux os=sles15 target=zen3
 module load openblas/0.3.20-gcc-14.2.0-rbgtzyf
 # coinhsl@=2024.05.15+metis~strip build_system=meson buildtype=release default_library:=shared platform=linux os=sles15 target=zen3
-module load coinhsl/2024.05.15-gcc-14.2.0-fyo6bb6
-## excluded or missing from upstream: hipblas@=6.3.1~asan~cuda+rocm amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
-## excluded or missing from upstream: hiprand@=6.3.1~asan~cuda+rocm amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
-## excluded or missing from upstream: hipsparse@=6.3.1~asan~cuda+rocm amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
-## excluded or missing from upstream: rocm-core@=6.3.1~asan build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
+module load coinhsl/2024.05.15-gcc-14.2.0-zvk5zpw
+## excluded or missing from upstream: hipblas@=6.4.1~asan~cuda+rocm amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
+## excluded or missing from upstream: hiprand@=6.4.1~asan~cuda+rocm amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
+## excluded or missing from upstream: hipsparse@=6.4.1~asan~cuda+rocm amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
+## excluded or missing from upstream: rocm-core@=6.4.1~asan build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
 # magma@=2.8.0~cuda+fortran~ipo+rocm+shared amdgpu_target:=gfx90a build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=zen3
-module load magma/2.8.0-gcc-14.2.0-pi6nfpp
-## excluded or missing from upstream: rocprim@=6.3.1~asan amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
+module load magma/2.8.0-gcc-14.2.0-jp3cmr6
+## excluded or missing from upstream: rocprim@=6.4.1~asan amdgpu_target:=auto build_system=cmake build_type=Release generator=make platform=linux os=sles15 target=x86_64
 # raja@=2025.12.2~caliper~cuda~desul~examples~exercises~gpu-profiling~ipo~lowopttest~omptarget~omptask~openmp~plugins+rocm~run-all-tests~shared~sycl~tests+vectorization amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=eca7c5015a5cf8bf7cc8ad1829fd36d3276ab274 cxxstd=20 generator=make platform=linux os=sles15 target=zen3
-module load raja/2025.12.2-gcc-14.2.0-u56663i
+module load raja/2025.12.2-gcc-14.2.0-bo7e5ha
 # libsigsegv@=2.15 build_system=autotools platform=linux os=sles15 target=zen3
 module load libsigsegv/2.15-gcc-14.2.0-gt2mrdc
 # m4@=1.4.21+sigsegv build_system=autotools platform=linux os=sles15 target=zen3
