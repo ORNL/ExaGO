@@ -147,7 +147,7 @@ static char ExaGOCurrentAppName[128];
 
 ExaGOError::ExaGOError(PetscErrorCode ierr) : is_petsc_error{true} {
   const char *error_message;
-  char *specific_error_message;
+  const char *specific_error_message;
   PetscErrorMessage(ierr, &error_message, &specific_error_message);
   message = error_message;
   message += specific_error_message;
