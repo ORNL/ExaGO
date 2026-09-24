@@ -105,18 +105,18 @@ module load texinfo/7.2-gcc-14.2.0-jsmo5ho
 # mpfr@=4.2.2 build_system=autotools libs:=shared,static platform=linux os=sles15 target=zen3
 module load mpfr/4.2.2-gcc-14.2.0-5asupl6
 # suite-sparse@=7.12.2~cuda~graphblas~openmp+pic build_system=generic platform=linux os=sles15 target=zen3
-module load suite-sparse/7.12.2-gcc-14.2.0-4s7azhu
+module load suite-sparse/7.12.2-gcc-14.2.0-4c5p3x2
 # umpire@=2025.12.0~asan~backtrace+c~cuda~dev_benchmarks~device_alloc~deviceconst~examples+fmt_header_only~fortran~ipc_shmem~ipo~mpi~mpi3_shmem~numa~omptarget~openmp+rocm~sanitizer_tests+shared~sqlite_experimental~tools~werror amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=0372fbd6e1f17d7e6dd72693f8b857f3ec7559e9 generator=make tests=none platform=linux os=sles15 target=zen3
-module load umpire/2025.12.0-gcc-14.2.0-abe4gxy
+module load umpire/2025.12.0-gcc-14.2.0-ya3ddpz
 # hiop@=1.2.0~axom~cuda~deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja+rocm~shared+sparse amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=6acee835136e9beddf3570b28739a1b1001e528a generator=make patches:=e73daa7 platform=linux os=sles15 target=zen3
-module load hiop/1.2.0-gcc-14.2.0-uulmsj5
+module load hiop/1.2.0-gcc-14.2.0-4sh35tv
 # ipopt@=3.14.14+coinhsl~debug~java~metis~mumps build_system=autotools platform=linux os=sles15 target=zen3
-module load ipopt/3.14.14-gcc-14.2.0-4227qwo
+module load ipopt/3.14.14-gcc-14.2.0-nfnr74d
 # parmetis@=4.0.3~gdb~int64~ipo+shared build_system=cmake build_type=Release generator=make patches:=4f89253,50ed208,704b84f platform=linux os=sles15 target=zen3
-module load parmetis/4.0.3-gcc-14.2.0-kir7ich
+module load parmetis/4.0.3-gcc-14.2.0-qqnhd6e
 # petsc@=3.25.2~X~batch~cgns~complex~cuda~debug+double+examples~exodusii~fftw+fortran+fortran-bindings~giflib~hdf5~hpddm~hwloc~hypre~int64~jpeg~knl~kokkos~libpng~libyaml~memkind+metis~mkl-pardiso~ml~mmg~moab~mpfr+mpi~mumps~openmp~p4est~parmmg~ptscotch~random123~rocm~saws~scalapack+shared~strumpack~suite-sparse~superlu-dist~sycl~tetgen~valgrind~zoltan build_system=generic clanguage=C memalign=none platform=linux os=sles15 target=zen3
-module load petsc/3.25.2-gcc-14.2.0-sa3r4pp
+module load petsc/3.25.2-gcc-14.2.0-upzor6w
 # spdlog@=1.15.0~ipo+shared build_system=cmake build_type=Release cxxstd=14 generator=make patches:=5ed92f4,fd4cbb1,fdc325d platform=linux os=sles15 target=zen3
-module load spdlog/1.15.0-gcc-14.2.0-chfsasm
-# exago@=develop~cuda+hiop~ipo+ipopt+logging+mpi~python+raja+rocm+testing amdgpu_target:=gfx90a build_system=cmake build_type=Release dev_path=/lustre/orion/scratch/nkouk/stf006/Codes/ExaGO generator=make platform=linux os=sles15 target=zen3
-## module load exago/develop-gcc-14.2.0-uk2jden
+module load spdlog/1.15.0-gcc-14.2.0-ouzzal7
+# exago@=develop~cuda+hiop~ipo+ipopt+logging+mpi~python+raja+rocm+testing amdgpu_target:=gfx90a build_system=cmake build_type=Release dev_path=/lustre/orion/scratch/nkouk/stf006/Tmp/ExaGO generator=make platform=linux os=sles15 target=zen3
+## module load exago/develop-gcc-14.2.0-plo2kls
