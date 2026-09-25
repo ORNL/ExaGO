@@ -1,11 +1,11 @@
-# <b>Exa</b>scale <b>G</b>rid <b>O</b>ptimization toolkit (ExaGO<sup>TM</sup>) 
+# <b>Exa</b>scale <b>G</b>rid <b>O</b>ptimization toolkit (ExaGO<sup>TM</sup>)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) ![pre-commit GitHub Action](https://github.com/ornl/ExaGO/actions/workflows/pre_commit.yaml/badge.svg?event=pull_request) ![Spack CPU Build](https://github.com/ornl/ExaGO/actions/workflows/spack_cpu_build.yaml/badge.svg?event=pull_request)
 
-<img src="viz/images/network_gen_load_us.png">
-<img src="viz/images/launcher.png">
+<img src="docs/assets/network_gen_load_us.png">
+<img src="docs/assets/launcher.png">
 
 
-ExaGO<sup>TM</sup> is a package for solving large-scale power grid optimization problems on parallel and distributed architectures, particularly targeted for exascale machines with heterogeneous architectures (GPU). Combinations of stochastic, contingency-constrained, multiperiod ACOPF problems can be solved with ExaGO. The package is written in C/C++ with python bindings available for python-based applications. An overview of the package is given on this page. For extended information, including the modeling details and formulations, see the [ExaGO manual](docs/manual/manual.pdf). 
+ExaGO<sup>TM</sup> is a package for solving large-scale power grid optimization problems on parallel and distributed architectures, particularly targeted for exascale machines with heterogeneous architectures (GPU). Combinations of stochastic, contingency-constrained, multiperiod ACOPF problems can be solved with ExaGO. The package is written in C/C++ with python bindings available for python-based applications. An overview of the package is given on this page. For extended information, including the modeling details and formulations, see the [ExaGO manual](docs/manual/manual.pdf).
 
 ExaGO<sup>TM</sup> includes the following applications for solving different power grid optimization problems:
 
@@ -23,7 +23,7 @@ Note that not all applications can utilize all solvers yet. The following table 
 
 |  Solver   | OPFLOW  | TCOPFLOW | SCOPFLOW | SOPFLOW |
 |:------:|:---------:|:-----:|:-------:|:-------:|
-| Ipopt      | Y         |  Y     | Y       | Y       | 
+| Ipopt      | Y         |  Y     | Y       | Y       |
 | HiOp       | Y          |       |   Y      |  Y       |
 
 Additionally, note that SCOPFLOW and SOPFLOW with HiOp solver use Ipopt to solve a portion of the problem (base problem). So one must also configure with Ipopt when using HiOp solver for these applications.
