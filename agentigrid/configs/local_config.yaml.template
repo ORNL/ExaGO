@@ -1,17 +1,17 @@
 # AgentiGrid Local Configuration Template
 # Copy this file to local_config.yaml and adjust values for your setup:
 #   cp local_config.yaml.template local_config.yaml
-# Usage: agentigrid --config configs/local_config.yaml ./data/case_ACTIVSg200.m "your goal"
+# Usage: agentigrid --config configs/local_config.yaml ./data/exago/examples/case_ACTIVSg200.m "your goal"
 
 # ExaGO settings
 exago:
-  binary_dir: "./applications"
+  binary_dir: "./applications/exago"
   env_script: "./configs/env_setup.sh"
   timeout: 120
 
 # Data settings
 data:
-  data_dir: "./data"
+  data_dir: "./data/exago"
 
 # LLM backend settings — adjust for your provider
 llm:

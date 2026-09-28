@@ -218,7 +218,7 @@ The app uses a **single-page layout** with a sidebar for configuration and a mai
 Always visible. Contains all search parameters.
 
 **Section: Base Case**
-- File selector (`st.selectbox`) listing `.m` files found in the `data/` directory
+- File selector (`st.selectbox`) listing `.m` files found in `data/exago/datafiles/` and `data/exago/examples/`
 - Path display showing the resolved file path
 - Small network summary after selection (number of buses, generators, branches — from `network_summary()`)
 
@@ -439,7 +439,7 @@ agentigrid/
 |---|---|
 | `app.py` | Streamlit page layout, widget rendering, session state management, main UI flow |
 | `session_manager.py` | Creates `AppConfig`, instantiates `AgentLoopController` with callbacks, manages background thread, provides iteration data to the UI |
-| `config_builder.py` | Translates GUI widget values into the dict/override format that `load_config()` expects; scans `data/` directory for available `.m` files |
+| `config_builder.py` | Translates GUI widget values into the dict/override format that `load_config()` expects; scans `data/exago/datafiles/` and `data/exago/examples/` for available `.m` files |
 | `charts.py` | Plotly figure builders: `convergence_chart()`, `voltage_profile_chart()`, `generator_dispatch_chart()`, `line_loading_chart()`, `voltage_range_trend_chart()`, `multi_objective_trend_chart()`. Used both for live display and for PDF image export |
 | `report_generator.py` | Builds a ReportLab PDF document from a completed `SearchSession`, embedding chart images and formatted tables |
 | `run.sh` | Shell script: `cd` to project root, then `streamlit run launcher/app.py` |
@@ -634,7 +634,7 @@ class ReportGenerator:
 ### 7.4 `config_builder.py`
 
 ```python
-def scan_data_files(data_dir: Path = Path("../data")) -> list[Path]:
+def scan_data_files(data_dir: Path = Path("../data/exago")) -> list[Path]:
     """Find all .m (MATPOWER) files in the data directory."""
     ...
 
@@ -848,7 +848,7 @@ Streamlit reruns the full script on every interaction. All persistent state must
 
 ### 11.2 Working Directory
 
-The launcher runs with `cwd = launcher/`. Relative paths in the default config (`./applications`, `./data`, `./workdir`) are relative to where the user invokes AgentiGrid from. The `config_builder` needs to resolve paths relative to the project root (parent of `launcher/`), not relative to `launcher/` itself. The `run.sh` script should `cd` to the project root before launching Streamlit, or the `config_builder` should use `Path(__file__).parent.parent` as the base for relative paths.
+The launcher runs with `cwd = launcher/`. Relative paths in the default config (`./applications/exago`, `./data/exago`, `./workdir`) are relative to where the user invokes AgentiGrid from. The `config_builder` needs to resolve paths relative to the project root (parent of `launcher/`), not relative to `launcher/` itself. The `run.sh` script should `cd` to the project root before launching Streamlit, or the `config_builder` should use `Path(__file__).parent.parent` as the base for relative paths.
 
 ### 11.3 Preserving OPFLOWResult for Charts
 

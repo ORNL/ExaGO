@@ -54,8 +54,26 @@ configs/logs/
 # =============================================================================
 applications/*
 !applications/README.md
+!applications/exago/
+!applications/gridkit/
+applications/exago/*
+applications/gridkit/*
+!applications/exago/README.md
+!applications/gridkit/README.md
 data/*
 !data/README.md
+!data/exago/
+!data/gridkit/
+data/exago/*
+data/gridkit/*
+!data/exago/README.md
+!data/gridkit/README.md
+!data/exago/datafiles/
+!data/gridkit/datafiles/
+data/exago/datafiles/*
+data/gridkit/datafiles/*
+!data/exago/datafiles/README.md
+!data/gridkit/datafiles/README.md
 _sopflow_probe/
 
 # =============================================================================

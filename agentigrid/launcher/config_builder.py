@@ -20,20 +20,38 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def get_data_dir() -> Path:
+    """Return the ExaGO data directory (<project_root>/data/exago)."""
+    return get_project_root() / "data" / "exago"
+
+
+def _glob_data(data_dir: Path, pattern: str) -> list[Path]:
+    """Glob *pattern* in *data_dir* and its ``datafiles/`` and ``examples/`` subdirectories.
+
+    User files live in ``datafiles/``; ``examples/`` holds symlinks to the
+    example data shipped with ExaGO.
+    """
+    found = list(data_dir.glob(pattern))
+    for sub in ("datafiles", "examples"):
+        if (data_dir / sub).is_dir():
+            found += (data_dir / sub).glob(pattern)
+    return sorted(found)
+
+
 def scan_data_files(data_dir: Path | None = None) -> list[Path]:
     """Find all MATPOWER .m files in the data directory.
 
     Args:
-        data_dir: Path to data directory. Defaults to <project_root>/data.
+        data_dir: Path to data directory. Defaults to <project_root>/data/exago.
 
     Returns:
         Sorted list of .m file paths (absolute).
     """
     if data_dir is None:
-        data_dir = get_project_root() / "data"
+        data_dir = get_data_dir()
     if not data_dir.is_dir():
         return []
-    return sorted(data_dir.glob("*.m"))
+    return _glob_data(data_dir, "*.m")
 
 
 def scan_config_files(configs_dir: Path | None = None) -> list[Path]:
@@ -60,16 +78,16 @@ def scan_contingency_files(data_dir: Path | None = None) -> list[Path]:
     """Find all .cont contingency files in the data directory.
 
     Args:
-        data_dir: Path to data directory. Defaults to <project_root>/data.
+        data_dir: Path to data directory. Defaults to <project_root>/data/exago.
 
     Returns:
         Sorted list of .cont file paths (absolute).
     """
     if data_dir is None:
-        data_dir = get_project_root() / "data"
+        data_dir = get_data_dir()
     if not data_dir.is_dir():
         return []
-    return sorted(data_dir.glob("*.cont"))
+    return _glob_data(data_dir, "*.cont")
 
 
 def scan_profile_files(data_dir: Path | None = None) -> list[Path]:
@@ -78,16 +96,16 @@ def scan_profile_files(data_dir: Path | None = None) -> list[Path]:
     Looks for files matching *_load_P.csv and *_load_Q.csv.
 
     Args:
-        data_dir: Path to data directory. Defaults to <project_root>/data.
+        data_dir: Path to data directory. Defaults to <project_root>/data/exago.
 
     Returns:
         Sorted list of profile CSV file paths (absolute).
     """
     if data_dir is None:
-        data_dir = get_project_root() / "data"
+        data_dir = get_data_dir()
     if not data_dir.is_dir():
         return []
-    return sorted(data_dir.glob("*_load_*.csv"))
+    return _glob_data(data_dir, "*_load_*.csv")
 
 
 def scan_scenario_files(data_dir: Path | None = None) -> list[Path]:
@@ -96,17 +114,17 @@ def scan_scenario_files(data_dir: Path | None = None) -> list[Path]:
     Looks for files matching *_scenarios.csv and *_10_scenarios.csv.
 
     Args:
-        data_dir: Path to data directory. Defaults to <project_root>/data.
+        data_dir: Path to data directory. Defaults to <project_root>/data/exago.
 
     Returns:
         Sorted list of scenario CSV file paths (absolute).
     """
     if data_dir is None:
-        data_dir = get_project_root() / "data"
+        data_dir = get_data_dir()
     if not data_dir.is_dir():
         return []
-    singles = sorted(data_dir.glob("*_scenarios.csv"))
-    tens = sorted(data_dir.glob("*_10_scenarios.csv"))
+    singles = _glob_data(data_dir, "*_scenarios.csv")
+    tens = _glob_data(data_dir, "*_10_scenarios.csv")
     return sorted(set(singles + tens))
 
 
@@ -149,19 +167,19 @@ def match_profiles_for_case(
 
     Args:
         case_path: Path to the .m base case file.
-        data_dir: Path to data directory. Defaults to <project_root>/data.
+        data_dir: Path to data directory. Defaults to <project_root>/data/exago.
 
     Returns:
         Dict with keys "pload" and "qload", each containing a list of
         matching profile paths sorted by name. Empty lists if no matches.
     """
     if data_dir is None:
-        data_dir = get_project_root() / "data"
+        data_dir = get_data_dir()
     if not data_dir.is_dir():
         return {"pload": [], "qload": []}
 
-    all_p = sorted(data_dir.glob("*_load_P.csv"))
-    all_q = sorted(data_dir.glob("*_load_Q.csv"))
+    all_p = _glob_data(data_dir, "*_load_P.csv")
+    all_q = _glob_data(data_dir, "*_load_Q.csv")
 
     case_stem = case_path.stem
     variants = _case_stem_variants(case_stem)
@@ -193,13 +211,13 @@ def match_scenarios_for_case(
 
     Args:
         case_path: Path to the .m base case file.
-        data_dir: Path to data directory. Defaults to <project_root>/data.
+        data_dir: Path to data directory. Defaults to <project_root>/data/exago.
 
     Returns:
         Sorted list of matching scenario file paths.
     """
     if data_dir is None:
-        data_dir = get_project_root() / "data"
+        data_dir = get_data_dir()
     if not data_dir.is_dir():
         return []
 

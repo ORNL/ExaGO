@@ -11,11 +11,11 @@ AgentiGrid uses large language models to iteratively modify power grid simulatio
 pip install -e .
 
 # Run with a simple goal
-agentigrid ./data/case_ACTIVSg200.m \
+agentigrid ./data/exago/examples/case_ACTIVSg200.m \
   "Find the maximum uniform load scaling factor before the system becomes infeasible"
 
 # Dry run (validate config without executing)
-agentigrid ./data/case_ACTIVSg200.m "test" --dry-run
+agentigrid ./data/exago/examples/case_ACTIVSg200.m "test" --dry-run
 ```
 
 ## How It Works
@@ -101,7 +101,7 @@ SCOPFLOW optimizes the base case dispatch so that the network remains feasible e
 - All OPFLOW commands work with SCOPFLOW (voltage control, load scaling, generator dispatch, etc.)
 - Branch status commands (`set_branch_status`) permanently modify the topology — they do NOT simulate contingencies (the `.cont` file handles that)
 
-Select via CLI (`--app scopflow --ctgc data/case_ACTIVSg200.cont`) or in the launcher GUI (application dropdown + contingency file selector).
+Select via CLI (`--app scopflow --ctgc data/exago/examples/case_ACTIVSg200.cont`) or in the launcher GUI (application dropdown + contingency file selector).
 
 ### TCOPFLOW (Multi-Period OPF)
 
@@ -115,7 +115,7 @@ TCOPFLOW solves a multi-period AC optimal power flow over a time horizon with ge
 - Only the IPOPT solver is supported
 - The launcher auto-selects profile files matching the base case name (e.g., `case9mod.m` → `case9_load_P.csv`)
 
-Load profile files follow the naming convention `<casename>_load_P.csv` / `<casename>_load_Q.csv` (see `data/README.md`). Select via CLI (`--app tcopflow --pload-profile data/case9_load_P.csv --qload-profile data/case9_load_Q.csv`) or in the launcher GUI (application dropdown + auto-matched profile selectors + temporal parameters).
+Load profile files follow the naming convention `<casename>_load_P.csv` / `<casename>_load_Q.csv` (see `data/exago/README.md`). Select via CLI (`--app tcopflow --pload-profile data/exago/examples/case9_load_P.csv --qload-profile data/exago/examples/case9_load_Q.csv`) or in the launcher GUI (application dropdown + auto-matched profile selectors + temporal parameters).
 
 ### SOPFLOW (Stochastic OPF)
 
@@ -128,7 +128,7 @@ SOPFLOW solves a two-stage stochastic optimization: a first-stage (here-and-now)
 - SOPFLOW supports both **IPOPT** (single-core, default) and **EMPAR** (multi-core via MPI) solvers
 - The launcher auto-selects scenario files matching the base case name (e.g., `case9mod_gen3_wind.m` → `case9_scenarios.csv`)
 
-Scenario files follow the naming convention `<casename>_scenarios.csv` / `<casename>_10_scenarios.csv` (see `data/README.md`). Select via CLI (`--app sopflow --scenario-file data/case9_10_scenarios.csv`) or in the launcher GUI (application dropdown + auto-matched scenario selector + solver/coupling options).
+Scenario files follow the naming convention `<casename>_scenarios.csv` / `<casename>_10_scenarios.csv` (see `data/exago/README.md`). Select via CLI (`--app sopflow --scenario-file data/exago/examples/case9_10_scenarios.csv`) or in the launcher GUI (application dropdown + auto-matched scenario selector + solver/coupling options).
 
 ### PFLOW (Power Flow — Analysis, Not Optimization)
 
@@ -159,7 +159,7 @@ When `--concurrent-pflow` is enabled, the LLM can propose multiple simulation va
 
 **CLI usage:**
 ```bash
-agentigrid ./data/case_ACTIVSg200.m \
+agentigrid ./data/exago/examples/case_ACTIVSg200.m \
   "Find the maximum load scaling factor" \
   --app pflow --concurrent-pflow --max-variants 5
 ```
@@ -198,7 +198,7 @@ AgentiGrid includes a dedicated stress test mode for adversarial contingency exp
 
 ```bash
 # CLI
-agentigrid ./data/case_ACTIVSg200.m \
+agentigrid ./data/exago/examples/case_ACTIVSg200.m \
   "Find the most critical N-1 contingencies" \
   --search-mode stress_test
 ```
@@ -272,10 +272,10 @@ simulation.
 ./run_agentigrid.sh configs/my_config.yaml
 
 # Override config and case file
-./run_agentigrid.sh configs/my_config.yaml ./data/case_RTS.m
+./run_agentigrid.sh configs/my_config.yaml ./data/exago/datafiles/case_RTS.m
 
 # Override all three (config, case file, max iterations)
-./run_agentigrid.sh configs/my_config.yaml ./data/case_RTS.m 10
+./run_agentigrid.sh configs/my_config.yaml ./data/exago/datafiles/case_RTS.m 10
 ```
 
 When run, the script will ask:
@@ -289,7 +289,7 @@ Then print a summary before executing:
   AgentiGrid Run
 ============================================================
   Config:    configs/local_config.yaml
-  Case file: ./data/case_ACTIVSg200.m
+  Case file: ./data/exago/examples/case_ACTIVSg200.m
   Max iter:  20
   Prompt:    Find the maximum load scaling factor before infeasibility
 ============================================================
@@ -303,57 +303,57 @@ controlled by the config file.
 
 ```bash
 # Basic run
-agentigrid ./data/case_ACTIVSg200.m "Find the maximum load scaling factor"
+agentigrid ./data/exago/examples/case_ACTIVSg200.m "Find the maximum load scaling factor"
 
 # With options
-agentigrid ./data/case_ACTIVSg200.m "Minimize generation cost" \
+agentigrid ./data/exago/examples/case_ACTIVSg200.m "Minimize generation cost" \
   --backend anthropic --model claude-sonnet-4-20250514 \
   --app opflow --max-iter 30 --verbose
 
 # Quiet mode (only show final summary)
-agentigrid ./data/case_ACTIVSg200.m "Analyze voltage profile" --quiet
+agentigrid ./data/exago/examples/case_ACTIVSg200.m "Analyze voltage profile" --quiet
 
 # Stress test mode (adversarial contingency exploration)
-agentigrid ./data/case_ACTIVSg200.m \
+agentigrid ./data/exago/examples/case_ACTIVSg200.m \
   "Find critical N-1 contingencies" --search-mode stress_test
 
 # Resume a saved session
 agentigrid --resume workdir/saved_session_20260414_150000
 
 # DC Optimal Power Flow (fast screening)
-agentigrid ./data/case_ACTIVSg200.m \
+agentigrid ./data/exago/examples/case_ACTIVSg200.m \
   "Find the maximum load scaling factor before infeasibility" \
   --app dcopflow --max-iter 10 --mode fresh
 
 # Security-Constrained OPF (requires contingency file)
-agentigrid ./data/case_ACTIVSg200.m \
+agentigrid ./data/exago/examples/case_ACTIVSg200.m \
   "Find the minimum cost dispatch that survives all N-1 contingencies" \
-  --app scopflow --ctgc data/case_ACTIVSg200.cont --max-iter 10
+  --app scopflow --ctgc data/exago/examples/case_ACTIVSg200.cont --max-iter 10
 
 # Multi-Period OPF (requires load profile files)
-agentigrid ./data/case9mod.m \
+agentigrid ./data/exago/examples/case9mod.m \
   "Find the load scaling factor that causes infeasibility over the time horizon" \
-  --app tcopflow --pload-profile data/case9_load_P.csv \
-  --qload-profile data/case9_load_Q.csv --tcopflow-duration 1.0 --tcopflow-dt 15
+  --app tcopflow --pload-profile data/exago/examples/case9_load_P.csv \
+  --qload-profile data/exago/examples/case9_load_Q.csv --tcopflow-duration 1.0 --tcopflow-dt 15
 
 # Stochastic OPF (requires wind scenario file and wind-enabled network)
-agentigrid ./data/case9mod_gen3_wind.m \
+agentigrid ./data/exago/examples/case9mod_gen3_wind.m \
   "Find the maximum wind penetration level before the system becomes infeasible" \
-  --app sopflow --scenario-file data/case9_10_scenarios.csv
+  --app sopflow --scenario-file data/exago/examples/case9_10_scenarios.csv
 
 # Stochastic OPF with EMPAR solver (multi-core)
-agentigrid ./data/case9mod_gen3_wind.m \
+agentigrid ./data/exago/examples/case9mod_gen3_wind.m \
   "Find the maximum wind penetration level" \
-  --app sopflow --scenario-file data/case9_10_scenarios.csv \
+  --app sopflow --scenario-file data/exago/examples/case9_10_scenarios.csv \
   --sopflow-solver EMPAR --np 4
 
 # Power Flow (LLM-driven search, no optimization)
-agentigrid ./data/case_ACTIVSg200.m \
+agentigrid ./data/exago/examples/case_ACTIVSg200.m \
   "Find the maximum load scaling factor before the power flow fails to converge" \
   --app pflow --max-iter 15 --mode fresh
 
 # Dry run (validate config without executing)
-python -m agentigrid ./data/case_ACTIVSg200.m "test goal" --dry-run
+python -m agentigrid ./data/exago/examples/case_ACTIVSg200.m "test goal" --dry-run
 ```
 
 ## Example Output
@@ -366,7 +366,7 @@ python -m agentigrid ./data/case_ACTIVSg200.m "test goal" --dry-run
   Backend:        anthropic
   Model:          claude-sonnet-4-20250514
   Application:    opflow
-  Base case:      data/case_ACTIVSg200.m
+  Base case:      data/exago/examples/case_ACTIVSg200.m
   Goal:           Find the maximum load scaling factor
   Max iterations: 20
   Mode:           accumulative
@@ -408,7 +408,7 @@ cd /path/to/agentigrid
 pip install -e .
 ```
 
-Copy or symlink ExaGO binaries into `applications/` (see [applications/README.md](applications/README.md)) and place network data files in `data/` (see [data/README.md](data/README.md)).
+Copy or symlink ExaGO binaries into `applications/exago/` (see [applications/exago/README.md](applications/exago/README.md)) and place your own network data files in `data/exago/datafiles/`; ExaGO's example data is linked into `data/exago/examples/` (see [data/exago/README.md](data/exago/README.md)).
 
 ## Configuration
 

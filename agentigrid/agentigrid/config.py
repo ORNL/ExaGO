@@ -19,7 +19,7 @@ logger = logging.getLogger("agentigrid.config")
 
 DEFAULTS: dict[str, Any] = {
     "exago": {
-        "binary_dir": "./applications",
+        "binary_dir": "./applications/exago",
         "opflow_binary": None,
         "scopflow_binary": None,
         "tcopflow_binary": None,
@@ -31,7 +31,7 @@ DEFAULTS: dict[str, Any] = {
         "mpi_np": 1,
     },
     "data": {
-        "data_dir": "./data",
+        "data_dir": "./data/exago",
     },
     "llm": {
         "backend": "anthropic",
@@ -287,7 +287,7 @@ def load_config(
     raw: dict[str, Any] = {}
     # Resolve relative paths against cwd (where the user invokes the tool),
     # not the config file's parent — the default YAML values like
-    # "./applications" are written relative to the project root.
+    # "./applications/exago" are written relative to the project root.
     config_root = Path.cwd()
 
     if path is not None:
