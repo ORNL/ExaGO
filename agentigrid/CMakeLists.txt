@@ -66,7 +66,8 @@ install(
 # ${CMAKE_INSTALL_PREFIX}/share/exago/datafiles/) at runtime. The READMEs
 # document this convention.
 foreach(__subdir applications applications/exago applications/gridkit data
-                 data/exago data/gridkit)
+                 data/exago data/gridkit
+)
   install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/${__subdir}/README.md
           DESTINATION ${__install_dest}/${__subdir}
   )
