@@ -84,6 +84,7 @@ AgentiGrid root, with `EXAGO` set to your ExaGO checkout:
 
 ```bash
 EXAGO=/path/to/ExaGO
+mkdir -p data/exago/examples
 cd data/exago/examples
 for f in "$EXAGO"/datafiles/*; do
   case "$(basename "$f")" in test_validation|unit) ;; *) ln -s "$f" . ;; esac
