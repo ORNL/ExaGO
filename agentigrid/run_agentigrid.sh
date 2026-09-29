@@ -5,7 +5,7 @@ set -e
 # Configurable defaults
 # ---------------------------------------------------------------------------
 CONFIG="configs/local_config.yaml"
-CASE_FILE="./data/case_ACTIVSg200.m"
+CASE_FILE="./data/exago/examples/case_ACTIVSg200.m"
 MAX_ITER=20
 
 # ---------------------------------------------------------------------------

@@ -1,26 +1,16 @@
-# ExaGO Application Binaries
+# Application Binaries
 
-Place or symlink ExaGO application binaries in this directory.
+AgentiGrid runs external simulation tools. Each tool has its own
+subdirectory here holding symlinks to that tool's binaries.
 
-## Supported binaries
-
-- `opflow` — Optimal Power Flow
-- `scopflow` — Security-Constrained Optimal Power Flow
-- `tcopflow` — Time-Coupled Optimal Power Flow
-- `sopflow` — Stochastic Optimal Power Flow
-- `dcopflow` — DC Optimal Power Flow
-- `pflow` — Power Flow
-
-## Example
-
-```bash
-# Symlink from an ExaGO build
-ln -s /path/to/ExaGO/build/bin/opflow ./applications/opflow
-ln -s /path/to/ExaGO/build/bin/scopflow ./applications/scopflow
-ln -s /path/to/ExaGO/build/bin/tcopflow ./applications/tcopflow
-ln -s /path/to/ExaGO/build/bin/sopflow ./applications/sopflow
-ln -s /path/to/ExaGO/build/bin/dcopflow ./applications/dcopflow
-ln -s /path/to/ExaGO/build/bin/pflow ./applications/pflow
+```
+applications/
+├── exago/     ExaGO binaries (opflow, dcopflow, pflow, scopflow, sopflow, tcopflow)
+└── gridkit/   GridKit binaries (DynamicSimulation, ContingencyAnalysis)
 ```
 
-Alternatively, set the `exago.binary_dir` config option to point to an external directory containing the binaries (e.g., the ExaGO build `bin/` directory).
+The tools are built and installed separately. See the README in each
+subdirectory for the symlink commands.
+
+The symlinks hold machine-specific paths and are not tracked by git; only
+the READMEs are.

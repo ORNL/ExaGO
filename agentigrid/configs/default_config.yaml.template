@@ -2,7 +2,7 @@
 
 # ExaGO settings
 exago:
-  binary_dir: "./applications"  # Local applications/ folder; override for external ExaGO install
+  binary_dir: "./applications/exago"  # Local applications/exago/ folder; override for external ExaGO install
   # Individual binary paths (derived from binary_dir if not set)
   opflow_binary: null    # defaults to {binary_dir}/opflow
   scopflow_binary: null
@@ -18,7 +18,7 @@ exago:
 
 # Data settings
 data:
-  data_dir: "./data"            # Default location for network files and scenarios
+  data_dir: "./data/exago"      # Default location for network files and scenarios
 
 # LLM backend settings
 llm:

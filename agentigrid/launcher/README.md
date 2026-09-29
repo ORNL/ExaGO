@@ -6,7 +6,7 @@ A Streamlit-based GUI for configuring, running, and monitoring AgentiGrid search
 
 - Python 3.10+
 - AgentiGrid installed from the project root: `pip install -e .`
-- ExaGO binaries configured in `applications/` (see main project README)
+- ExaGO binaries configured in `applications/exago/` (see main project README)
 - An LLM API key (Anthropic or OpenAI) set as an environment variable
 
 ## Installation
@@ -19,7 +19,7 @@ This installs Streamlit, Plotly, kaleido (for PDF chart export), ReportLab (for 
 
 ## Running
 
-The launcher must be run from the **project root** directory so that config paths (`./applications`, `./data`, `./workdir`) resolve correctly.
+The launcher must be run from the **project root** directory so that config paths (`./applications/exago`, `./data/exago`, `./workdir`) resolve correctly.
 
 ```bash
 # Recommended: use the launch script
@@ -35,12 +35,12 @@ Do **not** run `streamlit run app.py` from inside `launcher/` — paths will not
 ## Features
 
 ### Configuration Panel (Sidebar)
-- Select MATPOWER base case files from the `data/` directory
+- Select MATPOWER base case files from `data/exago/datafiles/` and `data/exago/examples/`
 - Choose LLM backend (Anthropic, OpenAI, Ollama, Ollama-Cloud) with auto-populated model defaults
 - Adjust temperature, iteration mode (accumulative/fresh), and max iterations
 - Search mode selector: **Standard** (goal-directed search) or **Stress Test** (adversarial contingency exploration)
 - Application selector: choose between supported ExaGO applications (OPFLOW for full AC OPF, DCOPFLOW for fast DC approximation, SCOPFLOW for security-constrained OPF, TCOPFLOW for multi-period OPF, SOPFLOW for stochastic OPF, PFLOW for LLM-driven power flow analysis)
-- Contingency file selector: appears when SCOPFLOW is selected, showing available `.cont` files from the `data/` directory
+- Contingency file selector: appears when SCOPFLOW is selected, showing available `.cont` files from `data/exago/datafiles/` and `data/exago/examples/`
 - Load profile selectors: appear when TCOPFLOW is selected, auto-matching profile CSV files to the selected base case (layered fallback: exact prefix → stripped suffix → all profiles). Includes active load (P), reactive load (Q), and optional wind generation profile dropdowns
 - Temporal parameters: appear when TCOPFLOW is selected — Duration (hours), Time-step (minutes), and Generator ramp coupling toggle
 - Scenario file selector: appears when SOPFLOW is selected, auto-matching wind scenario CSV files to the selected base case (layered fallback: exact prefix → stripped suffix → all scenarios). Supports both single-period and multi-period scenario formats
@@ -122,8 +122,8 @@ The GUI widget values override defaults from `configs/default_config.yaml`. The 
 
 Key configuration paths:
 - **Base config**: `configs/default_config.yaml`
-- **Data files**: `data/*.m` (MATPOWER format)
-- **Applications**: `applications/` (ExaGO binaries)
+- **Data files**: `data/exago/datafiles/*.m` and `data/exago/examples/*.m` (MATPOWER format)
+- **Applications**: `applications/exago/` (ExaGO binaries)
 - **Working directory**: `workdir/` (created at runtime)
 
 Key configuration fields added in prompt-#14 reporting fixes:
@@ -147,8 +147,8 @@ Key configuration fields added in prompt-#14 reporting fixes:
 
 ## Troubleshooting
 
-### "No .m files found in data/ directory"
-Ensure MATPOWER `.m` files are present in the `data/` directory at the project root.
+### "No .m files found in data/exago/ directory"
+Ensure MATPOWER `.m` files are present in `data/exago/datafiles/` (your own files) or `data/exago/examples/` (links to ExaGO's example data) at the project root.
 
 ### "ANTHROPIC_API_KEY not set" / "OPENAI_API_KEY not set"
 Export the relevant API key before launching:

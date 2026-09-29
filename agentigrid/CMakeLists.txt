@@ -59,17 +59,19 @@ install(
   DESTINATION ${__install_dest}
 )
 
-# Install README placeholders for applications/ and data/ subdirs. The binaries
-# and data files themselves are not shipped — AgentiGrid uses ExaGO's canonical
-# binaries (${CMAKE_INSTALL_PREFIX}/bin/) and datafiles
-# (${CMAKE_INSTALL_PREFIX}/share/exago/datafiles/) at runtime. The READMEs
+# Install README placeholders for applications/ and data/ and their per-tool
+# subdirs (exago/, gridkit/). The binaries and data files themselves are not
+# shipped — AgentiGrid uses each tool's canonical binaries (e.g.
+# ${CMAKE_INSTALL_PREFIX}/bin/) and data files (e.g.
+# ${CMAKE_INSTALL_PREFIX}/share/exago/datafiles/) at runtime. The READMEs
 # document this convention.
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/applications/README.md
-        DESTINATION ${__install_dest}/applications
+foreach(__subdir applications applications/exago applications/gridkit data
+                 data/exago data/gridkit
 )
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/README.md
-        DESTINATION ${__install_dest}/data
-)
+  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/${__subdir}/README.md
+          DESTINATION ${__install_dest}/${__subdir}
+  )
+endforeach()
 
 # ── Install-time pip install ───────────────────────────────────────────────
 
