@@ -177,8 +177,12 @@ def test_load_session_preserves_sweep_fields(tmp_path):
         feasible_buses=[1, 2],
     )
     journal.add_contingency(
-        iteration=2, description="n-1", target_bus=5,
-        neighbors=[(6, 1), (7, 2)], order=1,
+        iteration=2, description="n-1",
+        mutation={"action": "add_load_at_bus", "bus": 5, "Pd": 50.0}, changed_element={"type": "load", "bus": 5},
+        substation_depth=1, order=1,
+        affected={"buses": [{"bus": 5, "substation": 5, "tier": 0}, {"bus": 6, "substation": 6, "tier": 1}],
+                  "branches": [{"fbus": 5, "tbus": 6, "ckt": 0, "tier": 0}],
+                  "gens": [{"bus": 6, "gen_id": 0, "tier": 1}], "loads": [], "shunts": []},
         contingency_summaries=[{"label": "gen@6", "passed": False}],
         passed_count=0, failed_count=1,
     )
@@ -199,7 +203,8 @@ def test_load_session_preserves_sweep_fields(tmp_path):
 
     cont = next(e for e in entries if e.mode == "contingency")
     assert cont.contingency_meta is not None
-    assert cont.contingency_meta["target_bus"] == 5
+    assert cont.contingency_meta["changed_element"] == {"type": "load", "bus": 5}
+    assert cont.contingency_meta["affected"]["gens"] == [{"bus": 6, "gen_id": 0, "tier": 1}]
     assert cont.candidate_count == 1
 
 

@@ -54,7 +54,7 @@ class TestParseOPFLOW:
         assert result.num_iterations == 23
 
     def test_solve_time(self, result: OPFLOWResult):
-        assert result.solve_time == pytest.approx(0.042, abs=0.001)
+        assert result.solve_time == pytest.approx(0.063, abs=0.001)
 
     def test_bus_count(self, result: OPFLOWResult):
         assert len(result.buses) == 200

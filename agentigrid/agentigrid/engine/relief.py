@@ -4,16 +4,20 @@ For a FAILED contingency, greedily try relief measures in priority order — eac
 with a bounded parameter search — re-solving OPFLOW on top of the outage, and
 report the first measure+setting that restores feasibility.
 
-Option-A modeling assumptions (confirm with the domain expert before relying on
-results — see the C.7 task header):
+Relief uses only fast measures on existing, already-committed equipment: tap
+changes, switching lines out or in, and load shedding. Unit commitment is never
+changed and no equipment is added.
+
+Option-A modeling assumptions:
   1. OPF-redispatch feasibility: "feasible" = post-outage OPFLOW converges.
-  2. Generator redispatch is INHERENT to the OPF (Pg is a decision variable), so
-     ``set_gen_dispatch`` is initial-guess-only and cannot rescue a contingency
-     that already failed with optimal redispatch. ``generator_redispatch`` is
-     therefore a reported pass-through (no command applied, never resolves).
+  2. Generator redispatch is INHERENT to the OPF (Pg is a decision variable): every
+     solve already redispatches all committed units, so it is not a separate
+     measure.
   3. Transformer tap ratios are FIXED in ExaGO ACOPF, so a tap change is a genuine
      lever here. If taps become optimization variables, treat tap change like
      redispatch (subsumed) → an Option-B redesign.
+  4. Load shedding grows in substation tiers around the outage, each load bus shed
+     by at most ``relief_shed_max_fraction`` (see ``_try_load_curtailment``).
 
 This module is pure w.r.t. the agent loop: it imports only the command parser, the
 modifier, sweep_metrics (the feasibility predicate), topology, and the MATPOWER
@@ -35,7 +39,6 @@ from agentigrid.parsers.matpower_model import MATNetwork
 # Priority order (highest first) and the canonical measure names.
 MEASURE_ORDER = (
     "transformer_ratio",
-    "generator_redispatch",
     "line_switching",
     "load_curtailment",
 )
@@ -99,11 +102,9 @@ def _trial(
 # ---------------------------------------------------------------------------
 
 def _focus_buses(contingency) -> set[int]:
-    """Buses local to the contingency (neighbor buses + outaged branch endpoints)."""
+    """Buses local to the contingency (outaged branch endpoints, element buses)."""
     buses: set[int] = set()
     for e in contingency.elements:
-        if e.neighbor_bus is not None:
-            buses.add(e.neighbor_bus)
         if e.kind == "branch":
             buses.add(e.fbus)
             buses.add(e.tbus)
@@ -121,8 +122,10 @@ def _outaged_branch_keys(contingency) -> set[tuple[int, int, int]]:
     return keys
 
 
-def _incident_branches_sorted(net: MATNetwork, buses: set[int]):
-    """In-service branches incident to any focus bus, deduped, in a fixed order.
+def _incident_branches_sorted(net: MATNetwork, buses: set[int], include_out_of_service: bool = False):
+    """Branches incident to any focus bus, deduped, in a fixed order.
+
+    In-service only unless ``include_out_of_service``.
 
     Yields (branch, key) where key = (lo, hi, ckt) — ckt being the branch's
     position among net branches sharing its unordered endpoints (matching
@@ -130,7 +133,7 @@ def _incident_branches_sorted(net: MATNetwork, buses: set[int]):
     """
     seen: dict[tuple[int, int, int], object] = {}
     for bus in sorted(buses):
-        for br in topology.incident_branches(net, bus):
+        for br in topology.incident_branches(net, bus, include_out_of_service):
             lo, hi = min(br.fbus, br.tbus), max(br.fbus, br.tbus)
             ckt = 0
             for other in net.branches:
@@ -170,91 +173,113 @@ def _try_transformer_ratio(net, contingency, vmin, vmax, solve_fn, cfg):
     return None
 
 
-def _try_generator_redispatch(net, contingency, vmin, vmax, solve_fn, cfg):
-    """Pass-through under Option A: OPF redispatch is inherent; no command applied.
-
-    Never resolves (the bare outaged case is exactly the already-failed solve), so
-    this is a logged no-op and the search proceeds to the next measure.
-    """
-    return None
-
-
 def _try_line_switching(net, contingency, vmin, vmax, solve_fn, cfg):
-    """Switch OUT one in-service branch local to the contingency (excluding outaged)."""
+    """Switch one branch local to the contingency: in-service ones out, open ones in.
+
+    Candidates are the branches at the contingency's buses, in a fixed order; the
+    branches the contingency itself takes out are never switched back in.
+    """
     focus = _focus_buses(contingency)
     outaged = _outaged_branch_keys(contingency)
     outage_cmds = tuple(contingency.commands())
-    for br, key in _incident_branches_sorted(net, focus):
+    for br, key in _incident_branches_sorted(net, focus, include_out_of_service=True):
         if key in outaged:
             continue
+        switch_in = br.status == 0
         cmd = {
             "action": "set_branch_status",
-            "fbus": br.fbus, "tbus": br.tbus, "ckt": key[2], "status": 0,
+            "fbus": br.fbus, "tbus": br.tbus, "ckt": key[2], "status": 1 if switch_in else 0,
         }
         if _trial(net, outage_cmds, [cmd], vmin, vmax, solve_fn):
             return ReliefAction(
                 measure="line_switching",
                 commands=(cmd,),
-                detail=f"switch out branch {br.fbus}-{br.tbus}",
+                detail=f"switch {'in' if switch_in else 'out'} branch {br.fbus}-{br.tbus}",
             )
     return None
 
 
-def _try_load_curtailment(net, contingency, vmin, vmax, solve_fn, cfg):
-    """Backstop: bisect a uniform curtailment fraction on local load buses.
+def _try_load_curtailment(net, contingency, vmin, vmax, solve_fn, cfg, protected_load=None):
+    """Shed load in growing rings around the contingency, at most a fixed share per bus.
 
-    Curtails load at the contingency's focus buses via
-    ``set_load(Pd*(1-f), Qd*(1-f))`` and bisects the minimum feasible fraction to
-    ``relief_curtail_tol_mw``. Reports the minimum MW curtailed. Resolves at f=1
-    (all local load removed) unless even that is infeasible.
+    Tier 0 is the substation(s) of the contingency's buses; each further tier is
+    one line farther out (transformers add no hop), up to ``relief_shed_max_depth``.
+    Every load bus sheds at most ``relief_shed_max_fraction`` of its Pd and Qd
+    (power factor kept). Starting at tier 0, if shedding the full share there does
+    not restore feasibility, those buses stay at the full share and the next tier
+    is added. In the first tier where it works, the smallest share that works is
+    bisected to ``relief_curtail_tol_mw``. Unresolved if the full share at every
+    tier up to the maximum depth is not enough.
+
+    ``protected_load`` ({bus: (Pd, Qd)}) is never shed: the load the mutation added
+    is the development under study. The share applies to the rest of the bus load.
     """
     focus = _focus_buses(contingency)
     outage_cmds = tuple(contingency.commands())
+    cap = float(getattr(cfg, "relief_shed_max_fraction", 0.10))
+    max_depth = int(getattr(cfg, "relief_shed_max_depth", 3))
     tol_mw = float(getattr(cfg, "relief_curtail_tol_mw", 1.0))
 
-    # Load-bearing focus buses (deterministic order) and their base Pd/Qd.
-    load_buses = []
-    total_pd = 0.0
-    for b in net.buses:
-        if b.bus_i in focus and (b.Pd != 0 or b.Qd != 0):
-            load_buses.append((b.bus_i, b.Pd, b.Qd))
-            total_pd += b.Pd
-    load_buses.sort(key=lambda x: x[0])
-    if not load_buses or total_pd <= 0:
-        return None  # nothing to curtail here
+    scope = topology.substations_within(net, sorted(focus), max_depth)
+    protected = protected_load or {}
+    keep_of = {b.bus_i: protected.get(b.bus_i, (0.0, 0.0)) for b in net.buses}
+    load_of = {   # sheddable part of each bus load
+        b.bus_i: (b.Pd - keep_of[b.bus_i][0], b.Qd - keep_of[b.bus_i][1])
+        for b in net.buses if b.Pd - keep_of[b.bus_i][0] > 0
+    }
+    tiers: list[list[int]] = [[] for _ in range(max_depth + 1)]
+    for bus in sorted(load_of):
+        if bus in scope.tier_of:
+            tiers[scope.tier_of[bus]].append(bus)
 
-    def _curtail_cmds(f: float) -> list[dict]:
-        return [
-            {"action": "set_load", "bus": bi, "Pd": pd * (1.0 - f), "Qd": qd * (1.0 - f)}
-            for bi, pd, qd in load_buses
-        ]
+    def _cmds(full: list[int], part: list[int], f: float) -> list[dict]:
+        cmds = []
+        for bus, share in [(b, cap) for b in full] + [(b, f) for b in part]:
+            pd, qd = load_of[bus]
+            kp, kq = keep_of[bus]
+            cmds.append({
+                "action": "set_load", "bus": bus,
+                "Pd": kp + pd * (1.0 - share), "Qd": kq + qd * (1.0 - share),
+            })
+        return cmds
 
-    # f=1 (remove all local load) must be feasible for curtailment to work.
-    if not _trial(net, outage_cmds, _curtail_cmds(1.0), vmin, vmax, solve_fn):
-        return None
+    full: list[int] = []   # buses of the inner tiers, shed by the full share
+    for tier, buses in enumerate(tiers):
+        if not buses:
+            continue
+        if not _trial(net, outage_cmds, _cmds(full, buses, cap), vmin, vmax, solve_fn):
+            full += buses
+            continue
 
-    # Bisect the minimum feasible fraction. lo infeasible (f=0 = bare outage, failed),
-    # hi feasible.
-    lo, hi = 0.0, 1.0
-    while (hi - lo) * total_pd > tol_mw:
-        mid = 0.5 * (lo + hi)
-        if _trial(net, outage_cmds, _curtail_cmds(mid), vmin, vmax, solve_fn):
-            hi = mid
-        else:
-            lo = mid
+        # Bisect this tier's share; lo is known infeasible (0 = inner tiers alone).
+        tier_pd = sum(load_of[b][0] for b in buses)
+        lo, hi = 0.0, cap
+        while (hi - lo) * tier_pd > tol_mw:
+            mid = 0.5 * (lo + hi)
+            if _trial(net, outage_cmds, _cmds(full, buses, mid), vmin, vmax, solve_fn):
+                hi = mid
+            else:
+                lo = mid
 
-    mw = hi * total_pd
-    buses_str = ", ".join(str(bi) for bi, _, _ in load_buses)
-    return ReliefAction(
-        measure="load_curtailment",
-        commands=tuple(_curtail_cmds(hi)),
-        detail=f"curtail {mw:.1f} MW ({hi * 100:.1f}%) at bus(es) {buses_str}",
-    )
+        parts = []
+        for t in range(tier):
+            if tiers[t]:
+                mw = sum(load_of[b][0] for b in tiers[t]) * cap
+                parts.append(f"tier {t} {mw:.1f} MW ({cap * 100:.0f}%) at {', '.join(map(str, tiers[t]))}")
+        parts.append(
+            f"tier {tier} {tier_pd * hi:.1f} MW ({hi * 100:.1f}%) at {', '.join(map(str, buses))}"
+        )
+        total_mw = sum(load_of[b][0] for b in full) * cap + tier_pd * hi
+        return ReliefAction(
+            measure="load_curtailment",
+            commands=tuple(_cmds(full, buses, hi)),
+            detail=f"shed {total_mw:.1f} MW: " + "; ".join(parts),
+        )
+    return None
 
 
 _MEASURE_FNS = {
     "transformer_ratio": _try_transformer_ratio,
-    "generator_redispatch": _try_generator_redispatch,
     "line_switching": _try_line_switching,
     "load_curtailment": _try_load_curtailment,
 }
@@ -272,6 +297,7 @@ def find_relief(
     vmax: float,
     solve_fn: SolveFn,
     cfg,
+    protected_load: Optional[dict] = None,
 ) -> ReliefResult:
     """Greedily search relief measures in the given priority order.
 
@@ -279,6 +305,8 @@ def find_relief(
     ``MEASURE_ORDER``), run its bounded search; on the first measure that restores
     feasibility, return ``ReliefResult(resolved=True, action=..., attempts=...)``
     where ``attempts`` records every measure tried and whether it resolved.
+    ``protected_load`` ({bus: (Pd, Qd)}) is passed to load shedding, which never
+    sheds it.
     """
     attempts: list = []
     for measure in relief_measures:
@@ -286,7 +314,8 @@ def find_relief(
         if fn is None:
             attempts.append((measure, False))
             continue
-        action = fn(net, contingency, vmin, vmax, solve_fn, cfg)
+        extra = {"protected_load": protected_load} if measure == "load_curtailment" else {}
+        action = fn(net, contingency, vmin, vmax, solve_fn, cfg, **extra)
         resolved = action is not None
         attempts.append((measure, resolved))
         if resolved:
