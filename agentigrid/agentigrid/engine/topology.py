@@ -1,12 +1,16 @@
 """Deterministic graph-topology layer for power-grid networks.
 
+Substations (buses joined by transformers) and the substation tiers around a
+start bus, used by the contingency neighbor search; plus the branches incident
+to a bus.
+
 Pure module — no imports from agent_loop (avoids circular dependency).
 All bus identifiers are external bus numbers (Bus.bus_i == Branch.fbus/tbus).
 """
 
 from __future__ import annotations
 
-from collections import deque
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -23,87 +27,134 @@ def _build_bus_set(net: MATNetwork) -> set[int]:
     return {b.bus_i for b in net.buses}
 
 
-def _bfs_distances(adj: dict[int, set[int]], src: int) -> dict[int, int]:
-    """BFS from src. Returns {bus: hop_distance} for all reachable buses, excluding src."""
-    visited: dict[int, int] = {src: 0}
-    q: deque[int] = deque([src])
-    while q:
-        node = q.popleft()
-        for nb in sorted(adj[node]):
-            if nb not in visited:
-                visited[nb] = visited[node] + 1
-                q.append(nb)
-    del visited[src]
-    return visited
-
-
 # ---------------------------------------------------------------------------
 # Graph functions
 # ---------------------------------------------------------------------------
 
-def build_adjacency(
-    net: MATNetwork, include_out_of_service: bool = False,
-) -> dict[int, set[int]]:
-    """Undirected adjacency keyed by external bus number (bus_i).
+def is_transformer(br: Branch) -> bool:
+    """True for a transformer branch (MATPOWER TAP column != 0), False for a line.
 
-    Every bus in net.buses appears as a key (isolated buses map to empty set).
-    Branches with status == 0 are excluded unless include_out_of_service=True.
-    Parallel branches collapse to a single edge (set semantics).
-    Self-loops (fbus == tbus) are skipped.
+    MATPOWER convention: ``ratio == 0`` marks a line; any other value (including
+    1.0) marks a transformer. Phase shift and base-kV differences are not used.
     """
-    adj: dict[int, set[int]] = {b.bus_i: set() for b in net.buses}
+    return br.ratio != 0
+
+
+def substation_map(
+    net: MATNetwork, include_out_of_service: bool = False,
+) -> dict[int, int]:
+    """Group buses into substations: buses joined by transformers share one substation.
+
+    Returns ``{bus_i: substation_id}`` for every bus, where the substation id is
+    the smallest bus number in the group. A case with no transformers maps each
+    bus to itself. Branches with status == 0 are ignored unless
+    include_out_of_service=True.
+    """
+    parent: dict[int, int] = {b.bus_i: b.bus_i for b in net.buses}
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
     for br in net.branches:
         if not include_out_of_service and br.status == 0:
             continue
-        if br.fbus == br.tbus:
+        if not is_transformer(br) or br.fbus == br.tbus:
             continue
-        adj.setdefault(br.fbus, set()).add(br.tbus)
-        adj.setdefault(br.tbus, set()).add(br.fbus)
-    return adj
+        if br.fbus not in parent or br.tbus not in parent:
+            continue
+        ra, rb = find(br.fbus), find(br.tbus)
+        if ra != rb:
+            # Keep the smaller bus number as the root → stable substation ids.
+            lo, hi = min(ra, rb), max(ra, rb)
+            parent[hi] = lo
+
+    return {bus: find(bus) for bus in parent}
 
 
-def k_nearest_by_hops(
-    net: MATNetwork,
-    bus: int,
-    k: int = 3,
-    include_out_of_service: bool = False,
-) -> list[tuple[int, int]]:
-    """BFS from bus. Return up to k (neighbor_bus, hop_distance) pairs.
+@dataclass
+class SubstationScope:
+    """Substations within a given number of line hops of the start substation(s).
 
-    Ordered by (hop_distance ASC, neighbor_bus ASC).
-    Source bus is excluded. Raises ValueError for unknown bus or k < 1.
+    ``tiers[0]`` holds the start substation(s); ``tiers[d]`` the substations first
+    reached across ``d`` lines (transformers add no hop). Substation ids are the
+    smallest bus number in each substation.
     """
-    bus_set = _build_bus_set(net)
-    if bus not in bus_set:
-        raise ValueError(f"Bus {bus} is not in the network.")
-    if k < 1:
-        raise ValueError(f"k must be >= 1, got {k}.")
-    adj = build_adjacency(net, include_out_of_service)
-    distances = _bfs_distances(adj, bus)
-    result = sorted(distances.items(), key=lambda x: (x[1], x[0]))
-    return result[:k]
+
+    start_buses: tuple[int, ...]
+    depth: int
+    tiers: list[list[int]]
+    substation_of: dict[int, int]   # bus -> substation id, buses in scope only
+    tier_of: dict[int, int]         # bus -> tier, buses in scope only
+
+    @property
+    def buses(self) -> list[int]:
+        return sorted(self.substation_of)
 
 
-def hop_distance(
+def substations_within(
     net: MATNetwork,
-    src: int,
-    dst: int,
+    start_buses: list[int] | tuple[int, ...],
+    depth: int,
     include_out_of_service: bool = False,
-) -> int | None:
-    """Minimum hop distance src -> dst (0 if src == dst). None if dst unreachable.
+) -> SubstationScope:
+    """All substations within ``depth`` line hops of the substation(s) of ``start_buses``.
 
-    Raises ValueError if src or dst is not in the network.
+    Buses joined by a transformer belong to the same substation (0 hops); each
+    line between two substations is 1 hop. For a changed branch pass both end
+    buses, so the tiers grow outward on both sides. There is no cap on the number
+    of substations found.
+
+    Raises ValueError for an unknown bus, an empty start list, or depth < 0.
     """
+    if not start_buses:
+        raise ValueError("start_buses must contain at least one bus.")
+    if depth < 0:
+        raise ValueError(f"depth must be >= 0, got {depth}.")
     bus_set = _build_bus_set(net)
-    if src not in bus_set:
-        raise ValueError(f"Bus {src} is not in the network.")
-    if dst not in bus_set:
-        raise ValueError(f"Bus {dst} is not in the network.")
-    if src == dst:
-        return 0
-    adj = build_adjacency(net, include_out_of_service)
-    distances = _bfs_distances(adj, src)
-    return distances.get(dst)
+    for b in start_buses:
+        if b not in bus_set:
+            raise ValueError(f"Bus {b} is not in the network.")
+
+    sub_of = substation_map(net, include_out_of_service)
+
+    # Substation graph: one edge per pair of substations joined by at least one line.
+    sub_adj: dict[int, set[int]] = {s: set() for s in set(sub_of.values())}
+    for br in net.branches:
+        if not include_out_of_service and br.status == 0:
+            continue
+        if is_transformer(br) or br.fbus == br.tbus:
+            continue
+        if br.fbus not in sub_of or br.tbus not in sub_of:
+            continue
+        sa, sb = sub_of[br.fbus], sub_of[br.tbus]
+        if sa != sb:
+            sub_adj[sa].add(sb)
+            sub_adj[sb].add(sa)
+
+    tier0 = sorted({sub_of[b] for b in start_buses})
+    tiers: list[list[int]] = [tier0]
+    seen: set[int] = set(tier0)
+    for _ in range(depth):
+        nxt = sorted({nb for s in tiers[-1] for nb in sub_adj[s]} - seen)
+        if not nxt:
+            break
+        tiers.append(nxt)
+        seen.update(nxt)
+
+    tier_of_sub = {s: d for d, tier in enumerate(tiers) for s in tier}
+    substation_of = {bus: s for bus, s in sub_of.items() if s in tier_of_sub}
+    tier_of = {bus: tier_of_sub[s] for bus, s in substation_of.items()}
+
+    return SubstationScope(
+        start_buses=tuple(start_buses),
+        depth=depth,
+        tiers=tiers,
+        substation_of=substation_of,
+        tier_of=tier_of,
+    )
 
 
 def incident_branches(
@@ -128,58 +179,9 @@ def incident_branches(
     return result
 
 
-def count_reachable(
-    net: MATNetwork,
-    bus: int,
-    include_out_of_service: bool = False,
-) -> int:
-    """Total number of buses reachable from bus (excluding bus itself)."""
-    bus_set = _build_bus_set(net)
-    if bus not in bus_set:
-        raise ValueError(f"Bus {bus} is not in the network.")
-    adj = build_adjacency(net, include_out_of_service)
-    return len(_bfs_distances(adj, bus))
-
-
 # ---------------------------------------------------------------------------
 # Pure view formatters (token-bounded, LLM-facing)
 # ---------------------------------------------------------------------------
-
-def format_nearest_neighbors_view(
-    bus: int,
-    k: int,
-    neighbors: list[tuple[int, int]],
-    total_reachable: int,
-) -> str:
-    """Compact, token-bounded text view of k-nearest neighbors for the LLM."""
-    svc = "in-service branches"
-    header = (
-        f"Topology: {len(neighbors)} nearest neighbor bus(es) of bus {bus} "
-        f"by hop count ({svc}).\n"
-    )
-    col_bus_w = max(3, max((len(str(nb)) for nb, _ in neighbors), default=3))
-    col_hop_w = max(4, max((len(str(h)) for _, h in neighbors), default=4))
-    rank_w = max(4, len(str(len(neighbors))))
-
-    header_row = f"{'rank':>{rank_w}} | {'bus':>{col_bus_w}} | {'hops':>{col_hop_w}}"
-    rows = [header_row]
-    for i, (nb, hops) in enumerate(neighbors, 1):
-        rows.append(f"{i:>{rank_w}} | {nb:>{col_bus_w}} | {hops:>{col_hop_w}}")
-
-    note_lines = [
-        f"[Equal-hop buses ordered by ascending bus number; source bus {bus} excluded.",
-        f" {bus} can reach {total_reachable} buses in total. Adjacency uses {svc} only.",
-    ]
-    if len(neighbors) < k:
-        note_lines.append(
-            f" Only {len(neighbors)} neighbor(s) reachable (requested k={k})."
-        )
-    note_lines[-1] = note_lines[-1] + "]"
-    # Close the bracket: remove from last line and add to end
-    note = "\n".join(note_lines)
-
-    return header + "\n".join(rows) + "\n" + note
-
 
 def format_incident_branches_view(bus: int, branches: list[Branch]) -> str:
     """Compact, token-bounded text view of incident branches for the LLM."""

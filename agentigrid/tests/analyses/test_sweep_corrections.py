@@ -287,7 +287,7 @@ class TestReactiveAdequacyAudit:
 class TestSystemPromptNudge:
 
     def test_no_redundant_sweep_rule_present(self):
-        from agentigrid.prompts.system_prompt import build_system_prompt
+        from agentigrid.prompts.exago.system_prompt import build_system_prompt
         p = build_system_prompt("SCHEMA", "NET", application="opflow")
         assert "DO NOT RE-RUN AN IDENTICAL SWEEP" in p
 

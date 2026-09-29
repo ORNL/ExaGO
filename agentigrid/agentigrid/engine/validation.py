@@ -21,6 +21,7 @@ from agentigrid.engine.commands import (
     SetGenVoltage,
     SetLoad,
     SetPhaseShiftAngle,
+    SetShunt,
     SetShuntSusceptance,
     SetTapRatio,
 )
@@ -227,6 +228,11 @@ def validate_command(cmd: ModCommand, net: MATNetwork, index_maps=None) -> Valid
 
     elif isinstance(cmd, SetShuntSusceptance):
         _validate_bus_exists(net, cmd.bus, errors, index_maps)
+
+    elif isinstance(cmd, SetShunt):
+        _validate_bus_exists(net, cmd.bus, errors, index_maps)
+        if cmd.Gs is None and cmd.Bs is None:
+            warnings.append("set_shunt has no effect: neither Gs nor Bs was provided")
 
     elif isinstance(cmd, SetPhaseShiftAngle):
         branch = _validate_branch(net, cmd.fbus, cmd.tbus, cmd.ckt, errors, index_maps)

@@ -29,7 +29,7 @@ from agentigrid.engine.modifier import (
 )
 from agentigrid.parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
 from agentigrid.engine.journal import SearchJournal, JournalEntry
-from agentigrid.prompts.system_prompt import build_system_prompt
+from agentigrid.prompts.exago.system_prompt import build_system_prompt
 from agentigrid.engine.schema_description import command_schema_text
 from agentigrid.engine.goal_classifier import build_classification_prompts
 
