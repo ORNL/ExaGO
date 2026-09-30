@@ -3,8 +3,9 @@
 Place your own GridKit case files (`*.case.json`) in `datafiles/`. The `examples/`
 subdirectory holds symlinks to the phasor-dynamics cases shipped with GridKit.
 
-AgentiGrid does not run GridKit yet. These files prepare for transient
-studies that will be added later.
+AgentiGrid reads these case files for transient-stability studies
+(`agentigrid --tool gridkit <case.json> "goal"`). It never changes them: faults
+and recorded variables are added to a copy in the run folder.
 
 ## Supported file types
 
@@ -20,6 +21,7 @@ GridKit checkout:
 
 ```bash
 GRIDKIT=/path/to/GridKit
+mkdir -p data/gridkit/examples
 cd data/gridkit/examples
 for f in "$GRIDKIT"/cases/PhasorDynamics/*/*.case.json; do
   ln -s "$f" .
