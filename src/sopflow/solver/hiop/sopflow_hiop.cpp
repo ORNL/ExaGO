@@ -404,7 +404,8 @@ PetscErrorCode SOPFLOWSolverSolve_HIOP(SOPFLOW sopflow) {
   CHKERRQ(ierr);
 
   /* Get number of iterations */
-  // Commented out for now
+  // Commented out for now to avoid needing to change the test answer keys
+  // @todo Uncomment and update the tests
   //sopflow->number_iterations = hiop->pridecsolver->getNumIterations();
 
   PetscFunctionReturn(0);
