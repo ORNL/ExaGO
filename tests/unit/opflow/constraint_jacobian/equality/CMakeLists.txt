@@ -2,16 +2,10 @@ if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
   set_source_files_properties(jac_eq_acopf.cpp PROPERTIES LANGUAGE CUDA)
 endif()
 
-add_executable(
-  jac_eq_acopf jac_eq_acopf.cpp
-               ${CMAKE_SOURCE_DIR}/tests/unit/utils/test_acopf_utils.cpp
-)
+add_executable(jac_eq_acopf jac_eq_acopf.cpp)
 target_link_libraries(jac_eq_acopf ExaGO::OPFLOW)
 target_include_directories(
   jac_eq_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/utils
-)
-target_include_directories(
-  jac_eq_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/opflow
 )
 
 # Network files to run on - doing 3 and 600 bus examples.

@@ -4,14 +4,11 @@
 #include <numeric>
 #include <sstream>
 #include <string>
+#include <vector>
 
-#include <private/opflowimpl.h>
-#include <exago_config.h>
+#include <opflow.h>
 #include <utils.h>
 #include <test_base.h>
-
-// #include "opflow_tests.h"
-#include "test_acopf_utils.h"
 
 inline constexpr double PI = 3.14159265358979323846;
 
@@ -20,18 +17,16 @@ PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies,
                                           const std::string &reffile);
 
 /**
- * @brief Unit test driver for objective function
- * @see opflow/OpflowTests.hpp for kernel tested by this driver
+ * @brief Unit test driver for the inequality constraint Jacobian
  *
- * You can pass two options to the objectiveAcopf executatable through the
- * command line (implemented using PETSc options):
+ * Computes the inequality constraint Jacobian of
+ * `CICJ_unittestx<num_copies>.m` at a fixed solution vector and compares it
+ * with the reference Jacobian in `cicj.csv`, replicated `num_copies` times.
+ * Both files are read from the working directory.
  *
- *    ~ -netfile <data_file> : Specifies the input data file to test against.
- * Default value is `/<exago_dir>/datafiles/case9/case9mod.m`. See directory
- * datafiles for other potential inputs.
+ * Options (implemented using PETSc options):
  *
- *    ~ -num_copies <number> : Specifies the number of replications of the
- * network given through `-netfile`. If this is not set properly, test may fail
+ *    ~ -num_copies <number> : Number of copies of the base network (default 1).
  *
  *    ~ -no_line_limits : Uses the network with zero line ratings, which has no
  * line flow constraints, and its reference Jacobian.
@@ -46,7 +41,7 @@ int main(int argc, char **argv) {
 
   /** Use `ExaGOLogSetLoggingFileName("opflow-logfile");` to log the output. */
   PetscErrorCode ierr =
-      ExaGOInitialize(PETSC_COMM_WORLD, &argc, &argv, appname, help);
+      ExaGOInitialize(MPI_COMM_WORLD, &argc, &argv, appname, help);
   if (ierr) {
     fprintf(stderr, "Could not initialize ExaGO application %s.\n", appname);
     return ierr;
@@ -66,40 +61,24 @@ int main(int argc, char **argv) {
   std::string reffile = "cicj" + variant + ".csv";
 
   Mat J_ineq_ref;
-  ConstructReferenceJacobian(&J_ineq_ref, num_copies, reffile);
+  PetscCall(ConstructReferenceJacobian(&J_ineq_ref, num_copies, reffile));
   Vec X;
 
   OPFLOW opflowtest;
-  // exago::tests::TestOpflow test;
 
   /* Set up test opflow */
   PetscCall(OPFLOWCreate(PETSC_COMM_WORLD, &opflowtest));
   PetscCall(OPFLOWReadMatPowerData(opflowtest, netfile.c_str()));
-  // PetscCall(OPFLOWSetInitializationType(opflowtest, OPFLOWINIT_FROMFILE));
   PetscCall(OPFLOWSetGenBusVoltageType(opflowtest, FIXED_WITHIN_QBOUNDS));
   PetscCall(OPFLOWSetUp(opflowtest));
-  // PetscCall(OPFLOWGetSolution(opflowtest, &X));
 
-  ConstructSolutionVector(&X, num_copies);
-
-  // If we are using HIOP, need to convert X
-  // The string lengths must be 65
-  std::string modelname;
-  std::string solvername;
-  PetscCall(OPFLOWGetModel(opflowtest, &modelname));
-  PetscCall(OPFLOWGetSolver(opflowtest, &solvername));
+  PetscCall(ConstructSolutionVector(&X, num_copies));
 
   int fail = 0;
-  // if (solvername == "IPOPT") {
   Mat J_eq;
   Mat J_ineq;
   PetscCall(OPFLOWGetConstraintJacobian(opflowtest, &J_eq, &J_ineq));
   PetscCall(OPFLOWComputeConstraintJacobian(opflowtest, X, J_eq, J_ineq));
-
-  // PetscViewerPushFormat(PETSC_VIEWER_STDOUT_SELF, PETSC_VIEWER_ASCII_DENSE);
-  // PetscCall(MatView(J_ineq_ref, PETSC_VIEWER_STDOUT_SELF));
-  // PetscCall(VecView(X, PETSC_VIEWER_STDOUT_SELF));
-  // PetscCall(MatView(J_ineq, PETSC_VIEWER_STDOUT_SELF));
 
   PetscCall(MatAXPY(J_ineq, -1.0, J_ineq_ref, UNKNOWN_NONZERO_PATTERN));
   PetscReal norm = 0.0;
@@ -112,8 +91,6 @@ int main(int argc, char **argv) {
              "tolerance {}",
              norm, exago::tests::eps);
   }
-  // }
-  // TODO: handle other solver types specially as necessary
 
   PetscCall(OPFLOWDestroy(&opflowtest));
 
