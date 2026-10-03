@@ -64,6 +64,19 @@ def _write_gencost_row(gc: GenCost) -> str:
     return "\t" + "\t".join(parts) + ";"
 
 
+def _terminate(raw: str) -> str:
+    """Ensure a raw section ends with "};" / "];".
+
+    ExaGO locates the end of ``mpc.genfuel`` by the literal "};". Networks
+    parsed by older versions stored the block without the semicolon; writing
+    that back made ExaGO ignore the fuel types, leaving every ramp rate at 0
+    (SCOPFLOW cannot redispatch in contingencies) and wind/solar fixed at Pmax.
+    """
+    if raw.endswith("}") or raw.endswith("]"):
+        return raw + ";"
+    return raw
+
+
 def write_matpower(network: MATNetwork, path: Path) -> None:
     """Write a MATNetwork object to a MATPOWER .m file.
 
@@ -137,7 +150,7 @@ def write_matpower(network: MATNetwork, path: Path) -> None:
     # --- Extra sections (gentype, genfuel, bus_name, etc.) ---
     for section_name, raw_text in network.extra_sections.items():
         lines.append("")
-        lines.append(raw_text.rstrip())
+        lines.append(_terminate(raw_text.rstrip()))
 
     lines.append("")
 
