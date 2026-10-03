@@ -114,9 +114,9 @@ def gen_fuel(bus_size):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Generate CICJ_unittestx<N>.m, a network of N copies of '
-                    'the 4-bus inequality constraint Jacobian test network.')
+                    'the 5-bus inequality constraint Jacobian test network.')
     parser.add_argument('network_size', type=int,
-                        help='number of copies N of the 4-bus network')
+                        help='number of copies N of the 5-bus network')
     parser.add_argument('--no-line-limits', action='store_true',
                         help='set line ratings to 0, so OPFLOW creates no line '
                              'flow constraints, and write '

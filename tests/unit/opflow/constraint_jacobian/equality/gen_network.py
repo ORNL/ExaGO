@@ -113,9 +113,9 @@ def gen_fuel(bus_size):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Generate CECJ_unittestx<N>.m, a network of N copies of '
-                    'the 4-bus equality constraint Jacobian test network.')
+                    'the 5-bus equality constraint Jacobian test network.')
     parser.add_argument('network_size', type=int,
-                        help='number of copies N of the 4-bus network')
+                        help='number of copies N of the 5-bus network')
     args = parser.parse_args()
 
     network_length = args.network_size
