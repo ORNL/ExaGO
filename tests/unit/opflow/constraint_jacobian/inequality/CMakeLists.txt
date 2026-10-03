@@ -70,7 +70,7 @@ if(EXAGO_RUN_TESTS)
     # Iterate over networks, matching network file to num_copies
     foreach(num IN LISTS num_copies)
       set(testname
-          "UNIT_TESTS_INEQUALITY_CONSTRAINT_JACOBIAN_${num}_${solver}_${model}"
+          "UNIT_TESTS_OPFLOW_INEQUALITY_CONSTRAINT_JACOBIAN_${num}_${solver}_${model}"
       )
       exago_add_test(
         NAME
