@@ -16,7 +16,8 @@
 inline constexpr double PI = 3.14159265358979323846;
 
 PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies);
-PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies);
+PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies,
+                                          const std::string &reffile);
 
 /**
  * @brief Unit test driver for objective function
@@ -31,6 +32,9 @@ PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies);
  *
  *    ~ -num_copies <number> : Specifies the number of replications of the
  * network given through `-netfile`. If this is not set properly, test may fail
+ *
+ *    ~ -no_line_limits : Uses the network with zero line ratings, which has no
+ * line flow constraints, and its reference Jacobian.
  *
  */
 int main(int argc, char **argv) {
@@ -52,10 +56,17 @@ int main(int argc, char **argv) {
   int num_copies = 1;
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-num_copies", &num_copies, &flg));
 
-  std::string netfile = "CICJ_unittestx" + std::to_string(num_copies) + ".m";
+  PetscBool no_line_limits = PETSC_FALSE;
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-no_line_limits", &no_line_limits,
+                                &flg));
+
+  std::string variant = no_line_limits ? "_nolinelimits" : "";
+  std::string netfile =
+      "CICJ" + variant + "_unittestx" + std::to_string(num_copies) + ".m";
+  std::string reffile = "cicj" + variant + ".csv";
 
   Mat J_ineq_ref;
-  ConstructReferenceJacobian(&J_ineq_ref, num_copies);
+  ConstructReferenceJacobian(&J_ineq_ref, num_copies, reffile);
   Vec X;
 
   OPFLOW opflowtest;
@@ -139,13 +150,14 @@ PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies) {
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies) {
+PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies,
+                                          const std::string &reffile) {
   PetscFunctionBeginUser;
 
   // Read base Jacobian from file
-  std::ifstream ifs("cicj.csv");
+  std::ifstream ifs(reffile);
   if (!ifs) {
-    throw ExaGOError("Unable to open file: cicj.csv");
+    throw ExaGOError("Unable to open file: " + reffile);
   }
   std::string line;
   int nrows_base, ncols_base;

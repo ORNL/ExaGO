@@ -23,10 +23,18 @@ configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/cicj.csv ${CMAKE_CURRENT_BINARY_DIR}/cicj.csv
   COPYONLY
 )
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/cicj_nolinelimits.csv
+  ${CMAKE_CURRENT_BINARY_DIR}/cicj_nolinelimits.csv COPYONLY
+)
 foreach(n IN LISTS num_copies)
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/CICJ_unittestx${n}.m
     ${CMAKE_CURRENT_BINARY_DIR}/CICJ_unittestx${n}.m COPYONLY
+  )
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/CICJ_nolinelimits_unittestx${n}.m
+    ${CMAKE_CURRENT_BINARY_DIR}/CICJ_nolinelimits_unittestx${n}.m COPYONLY
   )
 endforeach()
 
@@ -80,6 +88,26 @@ if(EXAGO_RUN_TESTS)
         ${num}
       )
       set_tests_properties(${testname} PROPERTIES SKIP_RETURN_CODE 2)
+
+      exago_add_test(
+        NAME
+        ${testname}_NOLINELIMITS
+        DEPENDS
+        ${dependency}
+        COMMAND
+        ${RUNCMD}
+        $<TARGET_FILE:jac_ineq_acopf>
+        -opflow_model
+        ${model}
+        -opflow_solver
+        ${solver}
+        -num_copies
+        ${num}
+        -no_line_limits
+      )
+      set_tests_properties(
+        ${testname}_NOLINELIMITS PROPERTIES SKIP_RETURN_CODE 2
+      )
     endforeach()
   endforeach()
 endif()
