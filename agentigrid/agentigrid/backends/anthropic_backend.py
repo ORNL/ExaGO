@@ -27,6 +27,9 @@ class AnthropicBackend(LLMBackend):
             raise ImportError("anthropic package is required for the Anthropic backend")
 
         self._config = config
+        # None = not yet known; True/False once a call has succeeded / the
+        # model has rejected the parameter (see complete()).
+        self.temperature_sent: Optional[bool] = None
         api_key = os.environ.get(config.api_key_env)
         if not api_key:
             logger.warning(
@@ -39,6 +42,26 @@ class AnthropicBackend(LLMBackend):
     def name(self) -> str:
         """Return the backend name."""
         return "anthropic"
+
+    def _system_param(self, system_prompt: str):
+        """System prompt in the form the Messages API expects.
+
+        With ``prompt_cache`` on, the system prompt is sent as a single text block
+        carrying an ephemeral ``cache_control`` breakpoint. AgentiGrid builds the
+        system prompt once per session, so every later iteration reads it from the
+        cache instead of paying the full input price again. This affects billing
+        only; the model sees identical text either way. Prompts below the model's
+        minimum cacheable length are silently processed uncached by the API.
+        """
+        if not getattr(self._config, "prompt_cache", False):
+            return system_prompt
+        return [
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
 
     def supports_json_mode(self) -> bool:
         """Anthropic does not have a native JSON output mode."""
@@ -54,20 +77,45 @@ class AnthropicBackend(LLMBackend):
         temp = temperature if temperature is not None else self._config.temperature
 
         try:
-            response = self._client.messages.create(
+            kwargs = dict(
                 model=self._config.model,
                 max_tokens=self._config.max_tokens,
-                temperature=temp,
-                system=system_prompt,
+                system=self._system_param(system_prompt),
                 messages=[{"role": "user", "content": user_prompt}],
             )
+            if self.temperature_sent is not False:
+                kwargs["temperature"] = temp
+            try:
+                response = self._client.messages.create(**kwargs)
+                if "temperature" in kwargs:
+                    self.temperature_sent = True
+            except Exception as exc:
+                # Newer models reject the sampling-temperature parameter
+                # ("`temperature` is deprecated for this model"). Retry once
+                # without it and stop sending it for the rest of the session;
+                # the journal records temperature_sent=False.
+                if "temperature" in kwargs and "temperature" in str(exc).lower():
+                    logger.warning("Model %s rejects `temperature`; retrying without it.", self._config.model)
+                    kwargs.pop("temperature")
+                    self.temperature_sent = False
+                    response = self._client.messages.create(**kwargs)
+                else:
+                    raise
 
             raw_text = ""
+            content_types = []
             for block in response.content:
+                content_types.append(getattr(block, "type", None))
                 if block.type == "text":
                     raw_text += block.text
+            stop_reason = getattr(response, "stop_reason", None)
+            if stop_reason == "max_tokens":
+                logger.warning("Response stopped at max_tokens=%s (blocks: %s, %d text chars)",
+                               self._config.max_tokens, content_types, len(raw_text))
 
-            prompt_tokens = getattr(response.usage, "input_tokens", None)
+            prompt_tokens, cache_creation, cache_read = _input_token_breakdown(
+                response.usage
+            )
             completion_tokens = getattr(response.usage, "output_tokens", None)
 
             json_data, json_error = extract_json(raw_text)
@@ -80,6 +128,10 @@ class AnthropicBackend(LLMBackend):
                 backend=self.name(),
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
+                cache_creation_tokens=cache_creation,
+                cache_read_tokens=cache_read,
+                stop_reason=stop_reason,
+                content_types=content_types,
             )
 
         except Exception as exc:
@@ -93,4 +145,23 @@ class AnthropicBackend(LLMBackend):
                 backend=self.name(),
                 prompt_tokens=None,
                 completion_tokens=None,
+                api_error=True,
             )
+
+
+def _input_token_breakdown(usage) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    """Return (total_input, cache_creation, cache_read) from an API usage object.
+
+    With caching, the API's ``input_tokens`` counts only tokens after the last
+    cache breakpoint. The total input is ``input_tokens + cache_creation_input_tokens
+    + cache_read_input_tokens``; returning that total keeps ``prompt_tokens``
+    comparable with runs made before caching was enabled.
+    """
+    base = getattr(usage, "input_tokens", None)
+    creation = getattr(usage, "cache_creation_input_tokens", None)
+    read = getattr(usage, "cache_read_input_tokens", None)
+    creation = creation if isinstance(creation, int) else None
+    read = read if isinstance(read, int) else None
+    if not isinstance(base, int):
+        return None, creation, read
+    return base + (creation or 0) + (read or 0), creation, read

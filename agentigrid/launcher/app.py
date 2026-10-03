@@ -37,6 +37,7 @@ from charts import (
 )
 
 from agentigrid.parsers import parse_matpower, network_summary
+from agentigrid.engine.journal import NON_SOLVE_STATUSES, format_iteration_count
 
 # ── Page Configuration ───────────────────────────────────────────────────────
 
@@ -394,6 +395,23 @@ def render_sidebar() -> dict:
         max_iterations = st.slider(
             "Max iterations", 1, 50, 20, disabled=disabled,
         )
+        stall_stop = st.checkbox(
+            "Stop early if the model stalls",
+            value=False,
+            disabled=disabled,
+            help=(
+                "End the search after N consecutive no-progress iterations "
+                "(the model repeating an invalid action or applying no change). "
+                "Saves iterations when a model is stuck. Leave unchecked for "
+                "comparable runs that always reach Max iterations."
+            ),
+        )
+        stall_limit = st.number_input(
+            "Stop after N no-progress iterations",
+            min_value=2, max_value=20, value=5, step=1,
+            disabled=disabled or not stall_stop,
+        )
+        os.environ["AGENTIGRID_STALL_LIMIT"] = str(int(stall_limit)) if stall_stop else "0"
         mpi_disabled = disabled or application not in ("scopflow", "sopflow")
         mpi_np = st.number_input(
             "MPI processes",
@@ -797,15 +815,23 @@ def render_live_monitor():
             icon = _iteration_icon(entry)
             obj = entry.get("objective_value")
             is_pflow_live = st.session_state.get("current_application") == "pflow"
-            if is_pflow_live:
-                obj_str = "analysis" if obj is not None else "FAILED"
+            # An entry with no objective is only "FAILED" if it was a real solve
+            # that did not converge. Analysis/complete/sweep/contingency/explore
+            # markers and discarded proposals carry no cost — they are not failures.
+            cs = entry.get("convergence_status") or ""
+            _no_solve = cs in NON_SOLVE_STATUSES or entry.get("mode") == "discarded"
+            if obj is not None:
+                obj_str = "analysis" if is_pflow_live else f"${obj:,.2f}"
+            elif _no_solve:
+                obj_str = ""            # no cost, but not a failure — omit the segment
             else:
-                obj_str = f"${obj:,.2f}" if obj is not None else "FAILED"
+                obj_str = "FAILED"      # a solve that genuinely did not converge
             elapsed = entry.get("sim_elapsed")
             time_str = f"{elapsed:.1f}s" if elapsed is not None else "—"
+            _cost_seg = f" — {obj_str}" if obj_str else ""
             label = (
                 f"{icon} Iteration {entry['iteration']}: "
-                f"{entry['description']} — {obj_str} ({time_str})"
+                f"{entry['description']}{_cost_seg} ({time_str})"
             )
 
             with st.expander(label):
@@ -933,7 +959,9 @@ def render_live_monitor():
 
         # Progress Stats
         st.markdown("---")
-        n_iters = len(st.session_state.iteration_log)
+        _its = {e.get("iteration") for e in st.session_state.iteration_log}
+        _n_agent = sum(1 for i in _its if isinstance(i, int) and i >= 1)
+        n_iters = f"{_n_agent} + base case" if 0 in _its else str(_n_agent)
         feasible_count = sum(
             1 for e in st.session_state.iteration_log if e.get("feasible")
         )
@@ -1329,7 +1357,7 @@ def _render_overview_tab(session):
 
     mc1, mc2, mc3, mc4, mc5 = st.columns(5)
     mc1.metric("Application", f"{session.application}")
-    mc2.metric("Iterations", f"{stats['total_iterations']}")
+    mc2.metric("Iterations", format_iteration_count(stats))
     mc3.metric("Duration", duration_str)
     mc4.metric("Termination", session.termination_reason)
     mc5.metric("Tokens", f"{total_tokens:,}" if total_tokens > 0 else "—")
