@@ -20,3 +20,5 @@ myenv/
 launcher/config.yaml
 launcher/run.sh
 .direnv/
+*.warning
+*ipynb

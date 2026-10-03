@@ -75,9 +75,9 @@ PetscErrorCode OPFLOWSetConstraintBoundsArray_PBPOLRAJAHIOP(OPFLOW opflow,
         RAJA::RangeSegment(0, lineparams->nlinelim),
         RAJA_LAMBDA(RAJA::Index_type i) {
           int j = linelimidx[i];
-          gl_dev[gbineqidx[i]] = 0.0;
+          gl_dev[gbineqidx[i]] = PETSC_NINFINITY;
           gu_dev[gbineqidx[i]] = (rateA[j] / MVAbase) * (rateA[j] / MVAbase);
-          gl_dev[gbineqidx[i] + 1] = 0.0;
+          gl_dev[gbineqidx[i] + 1] = PETSC_NINFINITY;
           gu_dev[gbineqidx[i] + 1] =
               (rateA[j] / MVAbase) * (rateA[j] / MVAbase);
         });
@@ -786,25 +786,25 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOP(
 
     /* Generator contributions for row,col numbers */
     int *g_xidx = genparams->xidx_dev_;
-    int *hesssp_idx = genparams->hesssp_idx_dev_;
+    int *hesssp_obj_idx = genparams->hesssp_obj_idx_dev_;
     RAJA::forall<exago_raja_exec>(
         RAJA::RangeSegment(0, genparams->ngenON),
         RAJA_LAMBDA(RAJA::Index_type i) {
-          iHSS_dev[hesssp_idx[i]] = g_xidx[i];
-          jHSS_dev[hesssp_idx[i]] = g_xidx[i];
+          iHSS_dev[hesssp_obj_idx[i]] = g_xidx[i];
+          jHSS_dev[hesssp_obj_idx[i]] = g_xidx[i];
         });
 
     /* Loadloss contributions - two contributions*/
     if (opflow->include_loadloss_variables) {
       int *l_xidx = loadparams->xidx_dev_;
-      int *l_hesssp_idx = loadparams->hesssp_idx_dev_;
+      int *l_hesssp_obj_idx = loadparams->hesssp_obj_idx_dev_;
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, loadparams->nload),
           RAJA_LAMBDA(RAJA::Index_type i) {
-            iHSS_dev[l_hesssp_idx[i]] = l_xidx[i];
-            jHSS_dev[l_hesssp_idx[i]] = l_xidx[i];
-            iHSS_dev[l_hesssp_idx[i] + 1] = l_xidx[i] + 1;
-            jHSS_dev[l_hesssp_idx[i] + 1] = l_xidx[i] + 1;
+            iHSS_dev[l_hesssp_obj_idx[i]] = l_xidx[i];
+            jHSS_dev[l_hesssp_obj_idx[i]] = l_xidx[i];
+            iHSS_dev[l_hesssp_obj_idx[i] + 1] = l_xidx[i] + 1;
+            jHSS_dev[l_hesssp_obj_idx[i] + 1] = l_xidx[i] + 1;
           });
     }
   }
@@ -813,31 +813,34 @@ PetscErrorCode OPFLOWComputeSparseHessian_PBPOLRAJAHIOP(
 
     /* Generator contributions */
     if (opflow->objectivetype == MIN_GEN_COST) {
-      int *hesssp_idx = genparams->hesssp_idx_dev_;
+      int *hesssp_obj_idx = genparams->hesssp_obj_idx_dev_;
       double *cost_alpha = genparams->cost_alpha_dev_;
 
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, genparams->ngenON),
           RAJA_LAMBDA(RAJA::Index_type i) {
-            MHSS_dev[hesssp_idx[i]] = weight * isobj_gencost * obj_factor *
-                                      2.0 * cost_alpha[i] * MVAbase * MVAbase;
+            MHSS_dev[hesssp_obj_idx[i]] = weight * isobj_gencost * obj_factor *
+                                          2.0 * cost_alpha[i] * MVAbase *
+                                          MVAbase;
           });
       flps += 6 * genparams->ngenON;
     } else if (opflow->objectivetype == NO_OBJ) {
-      int *hesssp_idx = genparams->hesssp_idx_dev_;
+      int *hesssp_obj_idx = genparams->hesssp_obj_idx_dev_;
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, genparams->ngenON),
-          RAJA_LAMBDA(RAJA::Index_type i) { MHSS_dev[hesssp_idx[i]] = 0.0; });
+          RAJA_LAMBDA(RAJA::Index_type i) {
+            MHSS_dev[hesssp_obj_idx[i]] = 0.0;
+          });
     }
 
     /* Loadloss contributions - 2 contributions expected */
     if (opflow->include_loadloss_variables) {
-      int *l_hesssp_idx = loadparams->hesssp_idx_dev_;
+      int *l_hesssp_obj_idx = loadparams->hesssp_obj_idx_dev_;
       RAJA::forall<exago_raja_exec>(
           RAJA::RangeSegment(0, loadparams->nload),
           RAJA_LAMBDA(RAJA::Index_type i) {
-            MHSS_dev[l_hesssp_idx[i]] = 0.0;
-            MHSS_dev[l_hesssp_idx[i] + 1] = 0.0;
+            MHSS_dev[l_hesssp_obj_idx[i]] = 0.0;
+            MHSS_dev[l_hesssp_obj_idx[i] + 1] = 0.0;
           });
     }
   }
@@ -1208,7 +1211,7 @@ PetscErrorCode OPFLOWComputeDenseInequalityConstraintJacobian_PBPOLRAJAHIOP(
 /**
  * @param[inout] HDD_dev Hessian matrix with size nxdense x nxdense
  */
-PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLRAJAHIOP(
+PetscErrorCode OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLRAJAHIOP(
     OPFLOW opflow, const double *x_dev, const double *lambda_dev,
     double *HDD_dev) {
   PbpolModelRajaHiop *pbpolrajahiop =
@@ -1452,7 +1455,7 @@ PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLRAJAHIOP(
         dPt_dthetat_dVmf = Vmt * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
 
         /* dPt_Vmt  = 2*Gtt*Vmt + Vmf*(Gtf*cos(thetatf) + Btf*sin(thetatf)); */
-        dPt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Bft * cos(thetatf));
+        dPt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
         dPt_dVmt_dVmt = 2 * Gtt;
         dPt_dVmt_dthetaf = Vmf * (Gtf * sin(thetatf) - Btf * cos(thetatf));
         dPt_dVmt_dVmf = (Gtf * cos(thetatf) + Btf * sin(thetatf));
@@ -1598,7 +1601,7 @@ PetscErrorCode OPFLOWComputeDenseEqualityConstraintHessian_PBPOLRAJAHIOP(
 /**
  * @param[inout] HDD_dev Hessian matrix with size nxdense x nxdense
  */
-PetscErrorCode OPFLOWComputeDenseInequalityConstraintHessian_PBPOLRAJAHIOP(
+PetscErrorCode OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLRAJAHIOP(
     OPFLOW opflow, const double *x_dev, const double *lambda_dev,
     double *HDD_dev) {
   PbpolModelRajaHiop *pbpolrajahiop =
@@ -1797,7 +1800,7 @@ PetscErrorCode OPFLOWComputeDenseInequalityConstraintHessian_PBPOLRAJAHIOP(
         d2Pt_dthetat_dVmf = Vmt * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
 
         /* dPt_Vmt  = 2*Gtt*Vmt + Vmf*(Gtf*cos(thetatf) + Btf*sin(thetatf)); */
-        d2Pt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Bft * cos(thetatf));
+        d2Pt_dVmt_dthetat = Vmf * (-Gtf * sin(thetatf) + Btf * cos(thetatf));
         d2Pt_dVmt_dVmt = 2 * Gtt;
         d2Pt_dVmt_dthetaf = Vmf * (Gtf * sin(thetatf) - Btf * cos(thetatf));
         d2Pt_dVmt_dVmf = (Gtf * cos(thetatf) + Btf * sin(thetatf));
@@ -2091,12 +2094,12 @@ PetscErrorCode OPFLOWComputeDenseHessian_PBPOLRAJAHIOP(OPFLOW opflow,
       RAJA_LAMBDA(RAJA::Index_type i) { HDD_dev[i] = 0.0; });
 
   /* Equality constraint Hessian */
-  ierr = OPFLOWComputeDenseEqualityConstraintHessian_PBPOLRAJAHIOP(
+  ierr = OPFLOWComputeDenseEqualityConstraintsHessian_PBPOLRAJAHIOP(
       opflow, x_dev, lambda_dev, HDD_dev);
   CHKERRQ(ierr);
 
   if (opflow->nconineq) {
-    ierr = OPFLOWComputeDenseInequalityConstraintHessian_PBPOLRAJAHIOP(
+    ierr = OPFLOWComputeDenseInequalityConstraintsHessian_PBPOLRAJAHIOP(
         opflow, x_dev, lambda_dev + opflow->nconeq, HDD_dev);
     CHKERRQ(ierr);
   }
