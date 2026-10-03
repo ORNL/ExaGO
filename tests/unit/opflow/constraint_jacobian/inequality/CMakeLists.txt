@@ -1,3 +1,7 @@
+if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
+  set_source_files_properties(jac_ineq_acopf.cpp PROPERTIES LANGUAGE CUDA)
+endif()
+
 add_executable(jac_ineq_acopf jac_ineq_acopf.cpp)
 target_link_libraries(jac_ineq_acopf ExaGO::OPFLOW)
 target_include_directories(
