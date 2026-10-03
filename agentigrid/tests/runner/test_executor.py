@@ -331,6 +331,8 @@ class TestMPIGuard:
             assert cmd_arg[0] != "mpirun"
 
 
+@pytest.mark.skipif(not _has_opflow, reason="opflow binary not available")
+@pytest.mark.skipif(not _has_test_file, reason="case_ACTIVSg200.m not in data/exago/examples/")
 class TestExecutorLive:
 
     def test_opflow_run(self, tmp_path: Path):
