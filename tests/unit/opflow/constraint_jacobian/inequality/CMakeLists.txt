@@ -1,8 +1,3 @@
-find_package(Python)
-if(NOT Python_FOUND)
-  return()
-endif()
-
 if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
   set_source_files_properties(jac_ineq_acopf.cpp PROPERTIES LANGUAGE CUDA)
 endif()
@@ -29,9 +24,9 @@ configure_file(
   COPYONLY
 )
 foreach(n IN LISTS num_copies)
-  execute_process(
-    COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gen_network.py ${n}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/CICJ_unittestx${n}.m
+    ${CMAKE_CURRENT_BINARY_DIR}/CICJ_unittestx${n}.m COPYONLY
   )
 endforeach()
 
