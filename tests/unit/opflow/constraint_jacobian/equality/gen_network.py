@@ -1,11 +1,11 @@
 #!/usr/bin/python
 
-import sys
+import argparse
 
 
-def header(bus_size):
+def header(case_name):
     output = []
-    output.append("function mpc = CECJ_unittestx" + bus_size + "\n")
+    output.append("function mpc = " + case_name + "\n")
     output.append("mpc.version = '2';\n")
     output.append("mpc.baseMVA =  100.00;\n")
     output.append("\n")
@@ -111,23 +111,21 @@ def gen_fuel(bus_size):
 
 
 if __name__ == '__main__':
-    network_length = 0
+    parser = argparse.ArgumentParser(
+        description='Generate CECJ_unittestx<N>.m, a network of N copies of '
+                    'the 4-bus equality constraint Jacobian test network.')
+    parser.add_argument('network_size', type=int,
+                        help='number of copies N of the 4-bus network')
+    args = parser.parse_args()
 
-    # Script can be called with CLI argument
-    if (len(sys.argv) < 2):
-        network_length = input('Enter a network size: ')
-    else:
-        network_length = sys.argv[1]
+    network_length = args.network_size
+    case_name = f'CECJ_unittestx{network_length}'
 
     print(f'Generating a network of size {network_length}')
 
-    output_filename = 'CECJ_unittestx' + network_length + '.m'
-
-    f = open(output_filename, "w+")
-
-    # Loop over file component functions and append to file
-    for section in [header, bus, generator, gen_cost, branch, bus_names, gen_types, gen_fuel]:
-        for line in section(network_length):
-            f.write(line)
-
-    f.close()
+    with open(case_name + '.m', 'w') as f:
+        for section in [header(case_name), bus(network_length),
+                        generator(network_length), gen_cost(network_length),
+                        branch(network_length), bus_names(network_length),
+                        gen_types(network_length), gen_fuel(network_length)]:
+            f.writelines(section)
