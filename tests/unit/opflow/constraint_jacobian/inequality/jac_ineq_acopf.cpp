@@ -1,167 +1,214 @@
+#include <fstream>
 #include <iostream>
 #include <cstdio>
+#include <numeric>
+#include <sstream>
 #include <string>
+#include <vector>
 
-#include <private/opflowimpl.h>
-#include <exago_config.h>
+#include <opflow.h>
 #include <utils.h>
+#include <test_base.h>
 
-#include "opflow_tests.h"
-#include "test_acopf_utils.h"
+inline constexpr double PI = 3.14159265358979323846;
+
+PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies);
+PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies,
+                                          const std::string &reffile);
 
 /**
- * @brief Unit test driver for objective function
- * @see opflow/OpflowTests.hpp for kernel tested by this driver
+ * @brief Unit test driver for the inequality constraint Jacobian
  *
- * You can pass two options to the objectiveAcopf executatable through the
- * command line (implemented using PETSc options):
+ * Computes the inequality constraint Jacobian of
+ * `CICJ_unittestx<num_copies>.m` at a fixed solution vector and compares it
+ * with the reference Jacobian in `cicj.csv`, replicated `num_copies` times.
+ * Both files are read from the working directory.
  *
- *    ~ -netfile <data_file> : Specifies the input data file to test against.
- * Default value is `/<exago_dir>/datafiles/case9/case9mod.m`. See directory
- * datafiles for other potential inputs.
+ * Options (implemented using PETSc options):
  *
- *    ~ -num_copies <number> : Specifies the number of replications of the
- * network given through `-netfile`. If this is not set properly, test may fail
+ *    ~ -num_copies <number> : Number of copies of the base network (default 1).
+ *
+ *    ~ -no_line_limits : Uses the network with zero line ratings, which has no
+ * line flow constraints, and its reference Jacobian.
  *
  */
 int main(int argc, char **argv) {
-  PetscErrorCode ierr;
   PetscBool flg;
-  Vec X;
-  int fail = 0;
-  double obj_value;
-  char file_c_str[PETSC_MAX_PATH_LEN];
-  char validation_c_str[PETSC_MAX_PATH_LEN];
-  std::string file;
-  char appname[] = "opflow";
-  MPI_Comm comm = MPI_COMM_WORLD;
-  int num_copies = 0;
 
+  char appname[] = "opflow";
   char help[] =
       "Unit tests for inequality constraint Jacobians running opflow\n";
 
   /** Use `ExaGOLogSetLoggingFileName("opflow-logfile");` to log the output. */
-  ierr = ExaGOInitialize(comm, &argc, &argv, appname, help);
+  PetscErrorCode ierr =
+      ExaGOInitialize(MPI_COMM_WORLD, &argc, &argv, appname, help);
   if (ierr) {
     fprintf(stderr, "Could not initialize ExaGO application %s.\n", appname);
     return ierr;
   }
 
-  /* Get network data file from command line */
-  ierr = PetscOptionsGetString(NULL, NULL, "-netfile", file_c_str,
-                               PETSC_MAX_PATH_LEN, &flg);
-  CHKERRQ(ierr);
-
   /* Get num_copies from command line */
-  ierr = PetscOptionsGetInt(NULL, NULL, "-num_copies", &num_copies, &flg);
-  CHKERRQ(ierr);
+  int num_copies = 1;
+  PetscCall(PetscOptionsGetInt(NULL, NULL, "-num_copies", &num_copies, &flg));
 
-  if (!flg) {
-    file = "../datafiles/case9/case9mod.m";
-  } else {
-    file.assign(file_c_str);
-  }
+  PetscBool no_line_limits = PETSC_FALSE;
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-no_line_limits", &no_line_limits,
+                                &flg));
 
-  // Set obj_value as reference solution, and run as usual
-  /* Get validation data file from command line */
-  ierr = PetscOptionsGetString(NULL, NULL, "-validation", validation_c_str,
-                               PETSC_MAX_PATH_LEN, &flg);
-  CHKERRQ(ierr);
-  readFromFile(&obj_value, validation_c_str);
+  std::string variant = no_line_limits ? "_nolinelimits" : "";
+  std::string netfile =
+      "CICJ" + variant + "_unittestx" + std::to_string(num_copies) + ".m";
+  std::string reffile = "cicj" + variant + ".csv";
 
-  obj_value = obj_value * num_copies;
+  Mat J_ineq_ref;
+  PetscCall(ConstructReferenceJacobian(&J_ineq_ref, num_copies, reffile));
+  Vec X;
 
   OPFLOW opflowtest;
-  exago::tests::TestOpflow test;
 
   /* Set up test opflow */
-  ierr = OPFLOWCreate(PETSC_COMM_WORLD, &opflowtest);
-  CHKERRQ(ierr);
-  ierr = OPFLOWReadMatPowerData(opflowtest, file.c_str());
-  CHKERRQ(ierr);
-  ierr = OPFLOWSetInitializationType(opflowtest, OPFLOWINIT_FROMFILE);
-  CHKERRQ(ierr);
-  ierr = OPFLOWSetUp(opflowtest);
-  CHKERRQ(ierr);
-  ierr = OPFLOWGetSolution(opflowtest, &X);
-  CHKERRQ(ierr);
+  PetscCall(OPFLOWCreate(PETSC_COMM_WORLD, &opflowtest));
+  PetscCall(OPFLOWReadMatPowerData(opflowtest, netfile.c_str()));
+  PetscCall(OPFLOWSetGenBusVoltageType(opflowtest, FIXED_WITHIN_QBOUNDS));
+  PetscCall(OPFLOWSetUp(opflowtest));
 
-  // If we are using HIOP, need to convert X
-  // The string lengths must be 65
-  std::string modelname;
+  PetscCall(ConstructSolutionVector(&X, num_copies));
+
   std::string solvername;
-  ierr = OPFLOWGetModel(opflowtest, &modelname);
-  ierr = OPFLOWGetSolver(opflowtest, &solvername);
+  PetscCall(OPFLOWGetSolver(opflowtest, &solvername));
 
-  if (solvername == "HIOP") {
-#if defined(EXAGO_ENABLE_HIOP)
-    double *x_ref;
-    ierr = VecGetArray(X, &x_ref);
+  int fail = 0;
+  if (solvername == "IPOPT" || solvername == "HIOPSPARSE") {
+    Mat J_eq;
+    Mat J_ineq;
+    PetscCall(OPFLOWGetConstraintJacobian(opflowtest, &J_eq, &J_ineq));
+    PetscCall(OPFLOWComputeConstraintJacobian(opflowtest, X, J_eq, J_ineq));
 
-    int nx, nconeq, nconineq;
-    ierr = OPFLOWGetSizes(opflowtest, &nx, &nconeq, &nconineq);
-    CHKERRQ(ierr);
-
-    // If we are running using the CPU model, nothing needs to be done
-    if (modelname == "POWER_BALANCE_HIOP") {
-      // TODO: Replace with inequality Jacobian test once implemented
-      // fail += test.computeObjective(opflowtest, x_ref, obj_value);
-    } else // Using model PBPOLRAJAHIOP
-    {
-#if defined(EXAGO_ENABLE_RAJA)
-      // Get resource manager instance
-      auto &resmgr = umpire::ResourceManager::getInstance();
-
-      // Get Allocator
-      umpire::Allocator h_allocator = resmgr.getAllocator("HOST");
-
-      // Register array xref with umpire
-      umpire::util::AllocationRecord record_x{
-          x_ref, sizeof(double) * nx, h_allocator.getAllocationStrategy()};
-      resmgr.registerAllocation(x_ref, record_x);
-      // Allocate and copy xref to device
-      double *x_ref_dev;
-
-#ifdef EXAGO_ENABLE_GPU
-
-      ierr = OPFLOWSetHIOPComputeMode(opflowtest, "GPU");
-      CHKERRQ(ierr);
-
-      umpire::Allocator d_allocator = resmgr.getAllocator("DEVICE");
-      x_ref_dev =
-          static_cast<double *>(d_allocator.allocate(nx * sizeof(double)));
-#else
-      ierr = OPFLOWSetHIOPComputeMode(opflowtest, "CPU");
-      CHKERRQ(ierr);
-      x_ref_dev = x_ref;
-#endif
-      resmgr.copy(x_ref_dev, x_ref);
-
-      // TODO: Replace with inequality Jacobian test once implemented
-      // fail += test.computeObjective(opflowtest, x_ref_dev, obj_value);
-
-#ifdef EXAGO_ENABLE_GPU
-      d_allocator.deallocate(x_ref_dev);
-#endif
-#endif
+    PetscCall(MatAXPY(J_ineq, -1.0, J_ineq_ref, UNKNOWN_NONZERO_PATTERN));
+    PetscReal norm = 0.0;
+    PetscCall(MatNorm(J_ineq, NORM_INFINITY, &norm));
+    std::cout << "Error norm: " << norm << std::endl;
+    if (norm >= exago::tests::eps) {
+      ++fail;
+      ExaGOLog(EXAGO_LOG_INFO,
+               "Error between Inequality Constraint Jacobians ({}) exceeds "
+               "tolerance {}",
+               norm, exago::tests::eps);
     }
-
-    ierr = VecRestoreArray(X, &x_ref);
-    CHKERRQ(ierr);
-
-    ierr = PetscFree(x_ref);
-    CHKERRQ(ierr);
-#endif // End #ifdefined(EXAGO_ENABLE_HIOP)
   } else {
-    // TODO: Replace with inequality Jacobian test once implemented
-    // fail += test.computeObjective(opflowtest, X, obj_value);
+    ExaGOLog(EXAGO_LOG_INFO, "Skipping test for unsupported solver {}",
+             solvername);
+    fail = exago::tests::SKIP_TEST;
   }
-  ierr = OPFLOWDestroy(&opflowtest);
-  CHKERRQ(ierr);
 
-  // Temporarily skip the test
-  fail = exago::tests::SKIP_TEST;
+  PetscCall(OPFLOWDestroy(&opflowtest));
+
+  PetscCall(VecDestroy(&X));
+  PetscCall(MatDestroy(&J_ineq_ref));
 
   ExaGOFinalize();
   return fail;
+}
+
+PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies) {
+  PetscFunctionBeginUser;
+
+  std::vector<PetscReal> x_base = {0, 2, 0, 2, 30 * PI / 180.0, 2, 1.6, -2.2,
+                                   0, 2, 0, 2};
+  int nvals_base = 12;
+  int nvals = (nvals_base - 2) * num_copies + 2;
+  std::vector<PetscReal> x;
+  x.reserve(nvals);
+  x.assign(begin(x_base), end(x_base));
+  std::vector<PetscInt> is(nvals);
+  std::iota(begin(is), end(is), 0);
+
+  for (int n = 1; n < num_copies; ++n) {
+    for (int i = 2; i < nvals_base; ++i) {
+      x.push_back(x_base[i]);
+    }
+  }
+
+  PetscCall(VecCreateSeq(PETSC_COMM_WORLD, nvals, X));
+  PetscCall(VecSetValues(*X, is.size(), is.data(), x.data(), ADD_VALUES));
+  PetscCall(VecAssemblyBegin(*X));
+  PetscCall(VecAssemblyEnd(*X));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies,
+                                          const std::string &reffile) {
+  PetscFunctionBeginUser;
+
+  // Read base Jacobian from file
+  std::ifstream ifs(reffile);
+  if (!ifs) {
+    throw ExaGOError("Unable to open file: " + reffile);
+  }
+  std::string line;
+  int nrows_base, ncols_base;
+  std::vector<PetscInt> i_base;
+  std::vector<PetscInt> j_base;
+  std::vector<PetscReal> v_base;
+  // Read matrix dimensions
+  std::getline(ifs, line);
+  std::istringstream iss(line);
+  std::string dimstr;
+  std::getline(iss, dimstr, ',');
+  std::istringstream(dimstr) >> nrows_base;
+  std::getline(iss, dimstr, ',');
+  std::istringstream(dimstr) >> ncols_base;
+  // Read triples
+  std::string estr;
+  while (std::getline(ifs, line)) {
+    PetscInt i, j;
+    PetscReal v;
+    iss = std::istringstream(line);
+    std::getline(iss, estr, ',');
+    std::istringstream(estr) >> i;
+    std::getline(iss, estr, ',');
+    std::istringstream(estr) >> j;
+    std::getline(iss, estr, ',');
+    std::istringstream(estr) >> v;
+    i_base.push_back(i - 1);
+    j_base.push_back(j - 1);
+    v_base.push_back(v);
+  }
+
+  // The first 2 rows are generator bus constraints. OPFLOW numbers all bus
+  // constraints before all line flow constraints.
+  int nrows_top = 2 * num_copies;
+  int nrows = nrows_base * num_copies;
+  int ncols = (ncols_base - 2) * num_copies + 2;
+
+  std::vector<PetscInt> i_coo;
+  std::vector<PetscInt> j_coo;
+  std::vector<PetscScalar> v_coo;
+
+  std::size_t ncoo = i_base.size() * num_copies;
+  i_coo.reserve(ncoo);
+  j_coo.reserve(ncoo);
+  v_coo.reserve(ncoo);
+
+  for (int n = 0; n < num_copies; ++n) {
+    auto row_start_top = n * 2;
+    auto row_start = nrows_top + n * (nrows_base - 2);
+    auto col_start = n * (ncols_base - 2);
+    for (std::size_t c = 0; c < v_base.size(); ++c) {
+      auto i = i_base[c];
+      if (i < 2) {
+        i_coo.push_back(row_start_top + i);
+      } else {
+        i_coo.push_back(row_start + i - 2);
+      }
+      j_coo.push_back(col_start + j_base[c]);
+      v_coo.push_back(v_base[c]);
+    }
+  }
+
+  PetscCall(MatCreateSeqAIJFromTriple(PETSC_COMM_WORLD, nrows, ncols,
+                                      i_coo.data(), j_coo.data(), v_coo.data(),
+                                      J, v_coo.size(), PETSC_FALSE));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
