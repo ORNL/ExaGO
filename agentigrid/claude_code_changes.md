@@ -4,6 +4,30 @@ This document records significant changes made by Claude Code, grouped by the pr
 
 ---
 
+## MATPOWER cell arrays keep "};" — ExaGO reads genfuel again (2026-10-03)
+
+**Symptom.** SCOPFLOW reported local infeasibility on AgentiGrid-rewritten ACTIVSg200 at base load, while the original file converged. The rewritten file had `mpc.genfuel = { ... }` with a bare `}`.
+
+**Cause.** `src/ps/psreaddata.cpp` ends `mpc.genfuel` at the first line containing `};`. The parser stored cell arrays (`gentype`, `genfuel`, `bus_name`) without the trailing `;` and the writer wrote them back as `}`, so for every case AgentiGrid rewrote, ExaGO ignored the fuel types: all units took the default fuel, ramp rates were 0, and wind/solar stayed at Pmin = Pmax.
+
+**Evidence in the repository.** `tests/fixtures/sample_opflow_output.txt` (OPFLOW on AgentiGrid-rewritten ACTIVSg200) listed all 49 generators as COAL; `case_ACTIVSg200.m` has 25 coal, 17 ng, 6 wind and 1 nuclear (bus 189). `test_gen_189` asserted COAL, so it encoded the bug.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `agentigrid/parsers/matpower_parser.py` | Keep `};` / `];` on stored cell-array sections |
+| `agentigrid/parsers/matpower_writer.py` | Terminate cell arrays with `};`, including raw sections from networks parsed before the fix |
+| `tests/grid_files/test_matpower_cell_terminators.py` | New (3 tests): mimics ExaGO's genfuel detection on a round-tripped ACTIVSg200; all fail without the fix |
+| `tests/fixtures/sample_opflow_output.txt` | Regenerated with the fixed writer (Ipopt 3.14.14): real fuel mix |
+| `tests/results/test_opflow_parser.py` | Expected values for the new fixture (21 iterations, 0.021 s, bus 189 NUCLEAR); new `test_fuel_mix_matches_case_file` |
+| `tests/runner/test_executor.py` | `TestExecutorLive` skips without the `opflow` binary (like `TestMPIGuard`) and no longer overwrites the tracked fixture on every run; regenerate with `AGENTIGRID_REGENERATE_FIXTURES=1` |
+| `tests/README.md` | How to regenerate the fixture |
+
+Fast suite (`python -m pytest -m "not slow"`), without ExaGO binaries: **1083 passed, 13 skipped**. Before this change the same run had 2 failures: `test_solve_time` (the committed fixture no longer matched its expected value) and `test_opflow_run` (no skip without the binary).
+
+---
+
 ## C.2/C.3 corrections — metric gating, summary aggregation, predicate audit, sweep dedup (2026-06-23)
 
 Four contained fixes from the prompt-13/15/17 runs. No capability behavior changed (capacity numbers, dispatch results, metric/predicate definitions, and the C.1 binding identifier are untouched) — only how results are gated, summarized, audited, and deduplicated.

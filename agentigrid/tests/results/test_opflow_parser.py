@@ -51,10 +51,10 @@ class TestParseOPFLOW:
         assert result.objective_type == "MIN_GEN_COST"
 
     def test_num_iterations(self, result: OPFLOWResult):
-        assert result.num_iterations == 23
+        assert result.num_iterations == 21
 
     def test_solve_time(self, result: OPFLOWResult):
-        assert result.solve_time == pytest.approx(0.042, abs=0.001)
+        assert result.solve_time == pytest.approx(0.021, abs=0.001)
 
     def test_bus_count(self, result: OPFLOWResult):
         assert len(result.buses) == 200
@@ -91,10 +91,18 @@ class TestSpecificValues:
         assert abs(max_br.Sf - 387.19) < 0.01
 
     def test_gen_189(self, result: OPFLOWResult):
-        """Gen at bus 189: Pg≈383.40, fuel=COAL."""
+        """Gen at bus 189: Pg≈383.40, fuel=NUCLEAR (mpc.genfuel of case_ACTIVSg200.m)."""
         gen189 = next(g for g in result.generators if g.bus == 189)
         assert abs(gen189.Pg - 383.40) < 0.01
-        assert gen189.fuel == "COAL"
+        assert gen189.fuel == "NUCLEAR"
+
+    def test_fuel_mix_matches_case_file(self, result: OPFLOWResult):
+        """All 49 units keep the fuel from mpc.genfuel (25 coal, 17 ng, 6 wind,
+        1 nuclear). A fixture regenerated with a writer that drops the "};"
+        after mpc.genfuel would show every unit as COAL."""
+        from collections import Counter
+        assert Counter(g.fuel for g in result.generators) == {
+            "COAL": 25, "NG": 17, "WIND": 6, "NUCLEAR": 1}
 
 
 # ===========================================================================
