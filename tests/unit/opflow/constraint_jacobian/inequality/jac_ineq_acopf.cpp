@@ -177,7 +177,10 @@ PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies) {
     v_base.push_back(v);
   }
 
-  int nrows = (nrows_base - 2) * num_copies + 2;
+  // The first 2 rows are generator bus constraints. OPFLOW numbers all bus
+  // constraints before all line flow constraints.
+  int nrows_top = 2 * num_copies;
+  int nrows = nrows_base * num_copies;
   int ncols = (ncols_base - 2) * num_copies + 2;
 
   std::vector<int> i_coo;
@@ -189,20 +192,16 @@ PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies) {
   j_coo.reserve(ncoo);
   v_coo.reserve(ncoo);
 
-  i_coo.assign(begin(i_base), end(i_base));
-  j_coo.assign(begin(j_base), end(j_base));
-  v_coo.assign(begin(v_base), end(v_base));
-
-  for (int n = 1; n < num_copies; ++n) {
+  for (int n = 0; n < num_copies; ++n) {
     auto row_start_top = n * 2;
-    auto row_start = n * (nrows_base - 2);
+    auto row_start = nrows_top + n * (nrows_base - 2);
     auto col_start = n * (ncols_base - 2);
     for (std::size_t c = 0; c < v_base.size(); ++c) {
       auto i = i_base[c];
       if (i < 2) {
         i_coo.push_back(row_start_top + i);
       } else {
-        i_coo.push_back(row_start + i_base[c]);
+        i_coo.push_back(row_start + i - 2);
       }
       j_coo.push_back(col_start + j_base[c]);
       v_coo.push_back(v_base[c]);
