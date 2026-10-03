@@ -224,7 +224,7 @@ Always visible. Contains all search parameters.
 
 **Section: LLM Backend**
 - Backend selector: `anthropic` | `openai` | `ollama` | `ollama-cloud`
-- Model name text input (pre-filled with defaults per backend: `claude-sonnet-4-20250514` for Anthropic, `gpt-4o` for OpenAI, etc.)
+- Model name text input (pre-filled with defaults per backend: `claude-sonnet-4-6` for Anthropic, `gpt-4o` for OpenAI, etc.)
 - Temperature slider (0.0 – 1.0, default 0.3)
 
 **Section: Search Parameters**
@@ -274,7 +274,7 @@ Shown while a search is running. Two-column layout:
   - Key metrics: voltage range, max line loading, gen/load totals
   - Mode used (fresh/accumulative)
 - Current iteration shows a live status indicator:
-  - Spinner with phase text: "Sending prompt to Claude (claude-sonnet-4-20250514)..." → "Applying 3 modifications..." → "Running OPFLOW simulation..." → "Parsing results..."
+  - Spinner with phase text: "Sending prompt to Claude (claude-sonnet-4-6)..." → "Applying 3 modifications..." → "Running OPFLOW simulation..." → "Parsing results..."
 
 **Right column (~35%)** — Live Charts:
 - **Convergence chart** (Plotly line chart): Objective value vs. iteration number
