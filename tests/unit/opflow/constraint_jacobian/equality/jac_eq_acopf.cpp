@@ -47,7 +47,6 @@ int main(int argc, char **argv) {
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-num_copies", &num_copies, &flg));
 
   std::string netfile = "CECJ_unittestx" + std::to_string(num_copies) + ".m";
-  // std::string netfile = "CECJ_unittest1.m";
 
   Mat J_eq_ref;
   PetscCall(ConstructReferenceJacobian(&J_eq_ref, num_copies));
@@ -58,7 +57,6 @@ int main(int argc, char **argv) {
   /* Set up test opflow */
   PetscCall(OPFLOWCreate(PETSC_COMM_WORLD, &opflowtest));
   PetscCall(OPFLOWReadMatPowerData(opflowtest, netfile.c_str()));
-  PetscCall(OPFLOWSetInitializationType(opflowtest, OPFLOWINIT_FROMFILE));
   PetscCall(OPFLOWSetUp(opflowtest));
 
   PetscCall(ConstructSolutionVector(&X, num_copies));
@@ -167,9 +165,9 @@ PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies) {
   int nrows = (nrows_base - 2) * num_copies + 2;
   int ncols = (ncols_base - 2) * num_copies + 2;
 
-  std::vector<int> i_coo;
-  std::vector<int> j_coo;
-  std::vector<double> v_coo;
+  std::vector<PetscInt> i_coo;
+  std::vector<PetscInt> j_coo;
+  std::vector<PetscScalar> v_coo;
 
   std::size_t ncoo = i_base.size() * num_copies;
   i_coo.reserve(ncoo);

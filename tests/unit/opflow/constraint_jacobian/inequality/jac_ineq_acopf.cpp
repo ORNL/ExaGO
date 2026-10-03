@@ -181,9 +181,9 @@ PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies,
   int nrows = nrows_base * num_copies;
   int ncols = (ncols_base - 2) * num_copies + 2;
 
-  std::vector<int> i_coo;
-  std::vector<int> j_coo;
-  std::vector<double> v_coo;
+  std::vector<PetscInt> i_coo;
+  std::vector<PetscInt> j_coo;
+  std::vector<PetscScalar> v_coo;
 
   std::size_t ncoo = i_base.size() * num_copies;
   i_coo.reserve(ncoo);
