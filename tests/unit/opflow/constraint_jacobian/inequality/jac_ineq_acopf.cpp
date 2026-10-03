@@ -74,22 +74,31 @@ int main(int argc, char **argv) {
 
   PetscCall(ConstructSolutionVector(&X, num_copies));
 
-  int fail = 0;
-  Mat J_eq;
-  Mat J_ineq;
-  PetscCall(OPFLOWGetConstraintJacobian(opflowtest, &J_eq, &J_ineq));
-  PetscCall(OPFLOWComputeConstraintJacobian(opflowtest, X, J_eq, J_ineq));
+  std::string solvername;
+  PetscCall(OPFLOWGetSolver(opflowtest, &solvername));
 
-  PetscCall(MatAXPY(J_ineq, -1.0, J_ineq_ref, UNKNOWN_NONZERO_PATTERN));
-  PetscReal norm = 0.0;
-  PetscCall(MatNorm(J_ineq, NORM_INFINITY, &norm));
-  std::cout << "Error norm: " << norm << std::endl;
-  if (norm >= exago::tests::eps) {
-    ++fail;
-    ExaGOLog(EXAGO_LOG_INFO,
-             "Error between Inequality Constraint Jacobians ({}) exceeds "
-             "tolerance {}",
-             norm, exago::tests::eps);
+  int fail = 0;
+  if (solvername == "IPOPT" || solvername == "HIOPSPARSE") {
+    Mat J_eq;
+    Mat J_ineq;
+    PetscCall(OPFLOWGetConstraintJacobian(opflowtest, &J_eq, &J_ineq));
+    PetscCall(OPFLOWComputeConstraintJacobian(opflowtest, X, J_eq, J_ineq));
+
+    PetscCall(MatAXPY(J_ineq, -1.0, J_ineq_ref, UNKNOWN_NONZERO_PATTERN));
+    PetscReal norm = 0.0;
+    PetscCall(MatNorm(J_ineq, NORM_INFINITY, &norm));
+    std::cout << "Error norm: " << norm << std::endl;
+    if (norm >= exago::tests::eps) {
+      ++fail;
+      ExaGOLog(EXAGO_LOG_INFO,
+               "Error between Inequality Constraint Jacobians ({}) exceeds "
+               "tolerance {}",
+               norm, exago::tests::eps);
+    }
+  } else {
+    ExaGOLog(EXAGO_LOG_INFO, "Skipping test for unsupported solver {}",
+             solvername);
+    fail = exago::tests::SKIP_TEST;
   }
 
   PetscCall(OPFLOWDestroy(&opflowtest));

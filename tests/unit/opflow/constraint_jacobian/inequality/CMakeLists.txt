@@ -44,7 +44,7 @@ if(EXAGO_ENABLE_IPOPT)
 endif()
 
 # Set up HIOPSPARSE solver tests if enabled
-if(TARGET HiOp::SPARSE)
+if(EXAGO_ENABLE_HIOP_SPARSE)
   list(APPEND solvers HIOPSPARSE)
   list(APPEND models POWER_BALANCE_POLAR)
   list(APPEND dependencies HIOP_SPARSE)
