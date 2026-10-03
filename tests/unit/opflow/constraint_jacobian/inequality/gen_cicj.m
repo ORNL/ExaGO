@@ -1,3 +1,6 @@
+% Set to false for CICJ_nolinelimits_unittestx*.m (zero line ratings)
+line_limits = true;
+
 Vm=2;
 Vm1=2;
 Vm2=2;
@@ -27,7 +30,7 @@ shiftt=deg2rad(60);
 Pg=1.6;
 Qg=-2.2;
 Qmax=197.8 / mvabase;
-Qmin=-202.2 = mvabase;
+Qmin=-202.2 / mvabase;
 
 Pd=-3.4;
 Qd=8.8;
@@ -319,6 +322,14 @@ J(10,11) = dSt45dtheta5;
 J(9,12) = dSf45dVm5;
 J(10,12) = dSt45dVm5;
 
+csvfile = 'cicj.csv';
+if ~line_limits
+    % Only the generator bus constraints remain
+    Line = 0;
+    J = J(1:2*Gen,:);
+    csvfile = 'cicj_nolinelimits.csv';
+end
+
 J
 
 JW(1,1) =  2*Line+2*Gen;
@@ -335,5 +346,5 @@ for i=1:(2*Line+2*Gen)
         end
     end
 end
-writematrix(JW,'cicj.csv') 
+writematrix(JW,csvfile)
             
