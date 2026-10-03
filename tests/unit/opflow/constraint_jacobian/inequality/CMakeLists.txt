@@ -1,16 +1,10 @@
-if(EXAGO_ENABLE_RAJA AND EXAGO_ENABLE_CUDA)
-  set_source_files_properties(jac_ineq_acopf.cpp PROPERTIES LANGUAGE CUDA)
-endif()
-
 add_executable(jac_ineq_acopf jac_ineq_acopf.cpp)
 target_link_libraries(jac_ineq_acopf ExaGO::OPFLOW)
 target_include_directories(
   jac_ineq_acopf PRIVATE ${CMAKE_SOURCE_DIR}/tests/unit/utils
 )
 
-# Network files to run on - doing 3 and 600 bus examples.
-set(prefix ${CMAKE_SOURCE_DIR}/datafiles/unit/opflow/objective/)
-# Map num_copies to a specific netfile
+# Numbers of copies of the base network to test
 set(num_copies 1 3 600)
 
 configure_file(
@@ -61,7 +55,7 @@ if(EXAGO_RUN_TESTS)
     solvers
     dependencies
   )
-    # Iterate over networks, matching network file to num_copies
+    # Iterate over the numbers of copies
     foreach(num IN LISTS num_copies)
       set(testname
           "UNIT_TESTS_OPFLOW_INEQUALITY_CONSTRAINT_JACOBIAN_${num}_${solver}_${model}"
