@@ -231,7 +231,11 @@ def parse_matpower(path: Path) -> MATNetwork:
 
         if bracket == "{":
             # Cell array (bus_name, gentype, genfuel, etc.) → store as raw
-            raw_text = comment + "\n" + text[match.start():block_start] + block_content + ("}" if bracket == "{" else "]")
+            # Keep the MATLAB terminator "};" -- ExaGO's reader finds the end of
+            # mpc.genfuel by searching for "};", so a bare "}" makes it skip the
+            # fuel types (and with them the default ramp rates and the
+            # renewable Pmin=0 relaxation).
+            raw_text = comment + "\n" + text[match.start():block_start] + block_content + "};"
             extra_sections[section_name] = raw_text
             continue
 
@@ -263,7 +267,7 @@ def parse_matpower(path: Path) -> MATNetwork:
             logger.debug("Parsed %d gencost entries", len(gencost))
         else:
             # Unknown numeric section → store as raw
-            raw_text = comment + "\n" + text[match.start():block_start] + block_content + "]"
+            raw_text = comment + "\n" + text[match.start():block_start] + block_content + "];"
             extra_sections[section_name] = raw_text
             logger.debug("Stored unknown section mpc.%s as raw text", section_name)
 
