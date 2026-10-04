@@ -11,19 +11,20 @@
 /**
  * GPU-only (PETSc-free) computation of inequality constraint Jacobian values.
  *
- * Replaces the PETSc-based path that calls
- * opflow->modelops.computeinequalityconstraintjacobian followed by
- * MatGetRow extraction. Writes directly into device memory using RAJA
- * kernels, without PETSc Mat/Vec operations; no H2D, D2H copies back and forth.
+ * Writes directly into device memory using RAJA kernels, without PETSc
+ * Mat/Vec operations; no H2D, D2H copies back and forth.
  *
  * @param opflow     The OPFLOW problem context
  * @param x_dev      Device array of variable values
+ * @param perm_dev   Device array mapping setup-layout positions to sorted
+ *                   (row, column) positions in the inequality block
  * @param jacd_dev   Device output array for inequality Jacobian values
  *                   (points to the ineq portion of the sparse Jacobian,
  *                    i.e. MJacS_dev + nnz_eqjacsp)
  */
 void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                                  const double *x_dev,
+                                                 const int *perm_dev,
                                                  double *jacd_dev);
 
 /**

@@ -241,8 +241,25 @@ int main(int argc, char **argv) {
   resmgr.copy(x_dev, x_sd);
 #endif
 
+  /* Build the sparsity pattern and the permutation used by the kernel */
+  int nnz_jac = opflow->nnz_eqjacsp + nnz;
+  int *iJacS_dev, *jJacS_dev;
+#ifdef EXAGO_ENABLE_GPU
+  iJacS_dev = static_cast<int *>(d_allocator.allocate(nnz_jac * sizeof(int)));
+  jJacS_dev = static_cast<int *>(d_allocator.allocate(nnz_jac * sizeof(int)));
+#else
+  iJacS_dev = static_cast<int *>(h_allocator.allocate(nnz_jac * sizeof(int)));
+  jJacS_dev = static_cast<int *>(h_allocator.allocate(nnz_jac * sizeof(int)));
+#endif
+  ierr = (*opflow->modelops.computesparseinequalityconstraintjacobianhiop)(
+      opflow, x_dev, iJacS_dev, jJacS_dev, NULL);
+  CHKERRQ(ierr);
+  const int *perm_dev =
+      reinterpret_cast<PbpolModelRajaHiop *>(opflow->model)->perm_jacineq_dev;
+
   std::cout << "  Running RAJA GPU inequality Jacobian kernel..." << std::endl;
-  ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, gpu_vals_dev);
+  ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, perm_dev,
+                                              gpu_vals_dev);
 
   gpu_vals = static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
 #ifdef EXAGO_ENABLE_GPU
@@ -362,7 +379,8 @@ int main(int argc, char **argv) {
 #endif
       auto t0 = std::chrono::high_resolution_clock::now();
       for (int iter = 0; iter < niters; iter++) {
-        ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, bench_dev);
+        ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, perm_dev,
+                                                    bench_dev);
       }
 #ifdef EXAGO_ENABLE_HIP
       (void)hipDeviceSynchronize();
@@ -393,8 +411,12 @@ int main(int argc, char **argv) {
 #ifdef EXAGO_ENABLE_GPU
   d_allocator.deallocate(x_dev);
   d_allocator.deallocate(gpu_vals_dev);
+  d_allocator.deallocate(iJacS_dev);
+  d_allocator.deallocate(jJacS_dev);
 #else
   h_allocator.deallocate(gpu_vals_dev);
+  h_allocator.deallocate(iJacS_dev);
+  h_allocator.deallocate(jJacS_dev);
 #endif
 
   ierr = OPFLOWDestroy(&opflow);
