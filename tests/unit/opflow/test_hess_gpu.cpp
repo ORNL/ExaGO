@@ -23,40 +23,47 @@ struct TripletEntry {
   double val;
 };
 
-static void computeReferenceHessian(OPFLOW opflow,
-                                    std::vector<TripletEntry> &entries) {
+static PetscErrorCode
+computeReferenceHessian(OPFLOW opflow, std::vector<TripletEntry> &entries) {
   PetscErrorCode ierr;
   ierr = (*opflow->modelops.computehessian)(opflow, opflow->X, opflow->Lambdae,
                                             opflow->Lambdai, opflow->Hes);
+  CHKERRQ(ierr);
 
   PetscInt nrow, ncol;
   ierr = MatGetSize(opflow->Hes, &nrow, &ncol);
+  CHKERRQ(ierr);
 
   for (PetscInt i = 0; i < nrow; i++) {
     PetscInt nvals;
     const PetscInt *cols;
     const PetscScalar *vals;
     ierr = MatGetRow(opflow->Hes, i, &nvals, &cols, &vals);
+    CHKERRQ(ierr);
     for (PetscInt j = 0; j < nvals; j++) {
       if (cols[j] >= i) { // upper triangle
         entries.push_back({(int)i, (int)cols[j], vals[j]});
       }
     }
     ierr = MatRestoreRow(opflow->Hes, i, &nvals, &cols, &vals);
+    CHKERRQ(ierr);
   }
+  return 0;
 }
 
-static double benchmarkPETSc(OPFLOW opflow, int niters) {
+static PetscErrorCode benchmarkPETSc(OPFLOW opflow, int niters, double *ms) {
   PetscErrorCode ierr;
 
   auto t0 = Clock::now();
   for (int iter = 0; iter < niters; iter++) {
     ierr = (*opflow->modelops.computehessian)(
         opflow, opflow->X, opflow->Lambdae, opflow->Lambdai, opflow->Hes);
+    CHKERRQ(ierr);
   }
   auto t1 = Clock::now();
 
-  return Ms(t1 - t0).count() / niters;
+  *ms = Ms(t1 - t0).count() / niters;
+  return 0;
 }
 
 int main(int argc, char **argv) {
@@ -111,7 +118,8 @@ int main(int argc, char **argv) {
   CHKERRQ(ierr);
 
   std::vector<TripletEntry> ref_entries;
-  computeReferenceHessian(opflow_ref, ref_entries);
+  ierr = computeReferenceHessian(opflow_ref, ref_entries);
+  CHKERRQ(ierr);
 
   /* ----------------------------------------------------------------
    * Set up OPFLOW with HIOPSPARSE to exercise the GPU path.
@@ -332,8 +340,11 @@ int main(int argc, char **argv) {
    * Benchmark performance
    * ---------------------------------------------------------------- */
   /* Warmup and benchmark PETSc*/
-  benchmarkPETSc(opflow_ref, 5);
-  double petsc_ms = benchmarkPETSc(opflow_ref, niters);
+  double petsc_ms;
+  ierr = benchmarkPETSc(opflow_ref, 5, &petsc_ms);
+  CHKERRQ(ierr);
+  ierr = benchmarkPETSc(opflow_ref, niters, &petsc_ms);
+  CHKERRQ(ierr);
 
   /* Warmup the GPU values kernel */
   for (int i = 0; i < 5; i++) {
@@ -375,6 +386,8 @@ int main(int argc, char **argv) {
 #endif
 
   ierr = VecRestoreArray(X_gpu, &x_host);
+  CHKERRQ(ierr);
+  ierr = VecRestoreArray(Lambda_gpu, &lambda_host);
   CHKERRQ(ierr);
 
   /* ----------------------------------------------------------------
