@@ -166,6 +166,17 @@ class SessionManager:
         """Get the LLM-determined goal classification, or None if not yet computed."""
         return self._goal_classification
 
+    def get_rag_config(self) -> dict | None:
+        """Effective RAG configuration for the run (mode + thresholds), or None."""
+        if self._controller is not None and hasattr(self._controller, "_retriever"):
+            r = self._controller._retriever
+            if hasattr(r, "describe"):
+                try:
+                    return r.describe()
+                except Exception:
+                    return None
+        return None
+
     def get_opflow_by_iteration(self, iteration: int) -> OPFLOWResult | None:
         """Get the OPFLOW result for a specific iteration."""
         return self._opflow_by_iteration.get(iteration)

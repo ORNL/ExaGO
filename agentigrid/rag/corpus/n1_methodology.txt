@@ -1,0 +1,3 @@
+N-1 security analysis checks whether the grid stays feasible after losing any single element.
+It requires a contingency set. A base-case-only study does NOT answer an N-1 question.
+In ExaGO, security-constrained OPF runs with SCOPFLOW using a contingency (.cont) file matching the base case.
