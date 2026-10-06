@@ -24,6 +24,14 @@ Also: CRLF input is normalised on read and the writer always emits LF; the `func
 | `agentigrid/parsers/matpower_writer.py` | Fixes 3, 4 (header); casename/function line; LF output |
 | `tests/grid_files/test_matpower_hardening.py` | New (29 tests; 22 fail without the fix) |
 
+**Follow-up (property-based testing).** Randomised round-trip tests then found three more defects:
+
+- A finite value near the float maximum was written with 10 significant digits that round past it, and read back as `Inf`. The writer now falls back to the exact representation.
+- A value that rounds to an integer (for example `9999999999.5`) was written as `1e+10` the first time and `10000000000` the second, so writing was not idempotent. The integer form is now decided on the rounded value.
+- `mpc.baseMVA` was read with a digits-and-dots pattern. `1e2` (or `1e+15`, which the writer itself emits) was silently read as `1`, and negative values were "not found". It now accepts any numeric literal (sign, exponent, `Inf`/`NaN`) on an `mpc.baseMVA` line, ignores the text in comments, and raises `ValueError` for a non-numeric value.
+
+18 more tests; 12 of them fail without these fixes.
+
 ---
 
 ## MATPOWER cell arrays keep "};" — ExaGO reads genfuel again (2026-10-03)

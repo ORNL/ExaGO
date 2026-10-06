@@ -23,7 +23,8 @@ logger = logging.getLogger("agentigrid.parsers.matpower")
 
 _FUNC_RE = re.compile(r"^function\s+mpc\s*=\s*(\w+)", re.MULTILINE)
 _VERSION_RE = re.compile(r"mpc\.version\s*=\s*'([^']+)'")
-_BASEMVA_RE = re.compile(r"mpc\.baseMVA\s*=\s*([\d.]+)")
+# The value is any numeric token (sign, exponent, Inf/NaN) up to ";" or a comment.
+_BASEMVA_RE = re.compile(r"^[ \t]*mpc\.baseMVA[ \t]*=[ \t]*([^;%\n]*)", re.MULTILINE)
 # Match  mpc.<section> = [  or  mpc.<section> = {
 _SECTION_RE = re.compile(r"^mpc\.(\w+)\s*=\s*([{\[])", re.MULTILINE)
 
@@ -269,7 +270,11 @@ def parse_matpower(path: Path) -> MATNetwork:
     m = _BASEMVA_RE.search(text)
     if not m:
         raise ValueError(f"Cannot find mpc.baseMVA in {path}")
-    baseMVA = float(m.group(1))
+    token = m.group(1).strip()
+    try:
+        baseMVA = _parse_float(token)
+    except ValueError:
+        raise ValueError(f"mpc.baseMVA: invalid value {token!r} in {path}") from None
 
     # --- Header comments (everything before mpc.version or mpc.baseMVA) ---
     first_mpc = text.find("mpc.")

@@ -228,3 +228,52 @@ def test_writer_does_not_mutate_its_input(tmp_path):
     before = copy.deepcopy(net)
     write_matpower(net, tmp_path / "out.m")
     assert net == before
+
+
+# --- number formatting and baseMVA (found by property-based testing) ---------
+
+@pytest.mark.parametrize(
+    "value",
+    [9999999999.5, 123456789012.345, 1e15, 1e16, 0.1 + 0.2, 5e-324,
+     1.7976931345e308, -1.7976931348623157e308],
+    ids=["rounds-to-int", "11-digits", "1e15", "1e16", "0.3", "subnormal",
+         "near-max", "-max"],
+)
+def test_number_round_trip_is_close_finite_and_idempotent(tmp_path, value):
+    net = parse_matpower(_write(tmp_path, _case()))
+    net.buses[1].Pd = value
+    a, b = tmp_path / "a.m", tmp_path / "b.m"
+    write_matpower(net, a)
+    back = parse_matpower(a)
+    assert math.isfinite(back.buses[1].Pd)
+    assert math.isclose(back.buses[1].Pd, value, rel_tol=1e-9, abs_tol=1e-12)
+    write_matpower(back, b)
+    assert a.read_text() == b.read_text()
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [("1e2", 100.0), ("100.0", 100.0), ("-1", -1.0), ("1e+16", 1e16), ("Inf", math.inf)],
+)
+def test_basemva_accepts_any_numeric_literal(tmp_path, text, expected):
+    net = parse_matpower(_write(tmp_path, _case().replace("mpc.baseMVA = 100;", f"mpc.baseMVA = {text};")))
+    assert net.baseMVA == expected
+
+
+def test_basemva_in_a_comment_is_ignored(tmp_path):
+    text = _case().replace("%TINY test case\n", "%TINY test case\n%   mpc.baseMVA = 5;\n")
+    assert parse_matpower(_write(tmp_path, text)).baseMVA == 100.0
+
+
+def test_basemva_non_numeric_raises(tmp_path):
+    with pytest.raises(ValueError, match="baseMVA"):
+        parse_matpower(_write(tmp_path, _case().replace("mpc.baseMVA = 100;", "mpc.baseMVA = abc;")))
+
+
+@pytest.mark.parametrize("value", [1e16, -1.0, 1.7976931345e308])
+def test_basemva_round_trip(tmp_path, value):
+    net = parse_matpower(_write(tmp_path, _case()))
+    net.baseMVA = value
+    out = tmp_path / "out.m"
+    write_matpower(net, out)
+    assert math.isclose(parse_matpower(out).baseMVA, value, rel_tol=1e-9)

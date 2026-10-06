@@ -30,9 +30,17 @@ def _fmt(value: float) -> str:
         return "NaN"
     if math.isinf(value):
         return "Inf" if value > 0 else "-Inf"
-    if value == int(value) and abs(value) < 1e15:
-        return str(int(value))
-    return f"{value:.10g}"
+    text = f"{value:.10g}"
+    rounded = float(text)
+    if math.isinf(rounded):
+        # Rounding to 10 digits pushed a value near the float maximum past
+        # it; that text would read back as Inf. Write it exactly instead.
+        text, rounded = repr(value), value
+    # Decide the integer form on the ROUNDED value, so a value that rounds to
+    # an integer is written the same way the second time (idempotence).
+    if rounded == int(rounded) and abs(rounded) < 1e15:
+        return str(int(rounded))
+    return text
 
 
 def _write_bus_row(b: Bus) -> str:
