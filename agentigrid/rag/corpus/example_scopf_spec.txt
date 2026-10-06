@@ -1,0 +1,9 @@
+[source: hand-written methodology exemplar | example network: case118 (held out from the evaluation)]
+Request: "Assess the security of case118 under single-element outages."
+Correct specification:
+  application: scopflow
+  base_case: case118.m
+  contingencies: case118.cont (every contingency in the file, not a subset)
+  metric: post-contingency feasibility and cost
+  acceptance: feasible under all listed contingencies
+Note: a SCOPFLOW run that selects only some of the contingencies, or none, still converges and returns a cost, but it does not answer an N-1 question.

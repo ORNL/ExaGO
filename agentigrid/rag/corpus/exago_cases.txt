@@ -1,0 +1,8 @@
+[source: case file: data/case39.m | harvested: 2026-09-07 | auto-generated, review before trusting]
+case39.m: 39 buses, 10 generators, 46 branches. MATPOWER-format network case usable with ExaGO OPF apps (pass via the app's network/case option).
+
+[source: case file: data/case9modalt.m | harvested: 2026-09-07 | auto-generated, review before trusting]
+case9modalt.m: 9 buses, 3 generators, 9 branches. MATPOWER-format network case usable with ExaGO OPF apps (pass via the app's network/case option).
+
+[source: case file: data/case_ACTIVSg200.m | harvested: 2026-09-07 | auto-generated, review before trusting]
+case_ACTIVSg200.m: 200 buses, 49 generators, 245 branches. MATPOWER-format network case usable with ExaGO OPF apps (pass via the app's network/case option).

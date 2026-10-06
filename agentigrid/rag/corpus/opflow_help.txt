@@ -1,0 +1,16 @@
+ExaGO 2.0.0 built on Sep  5 2026
+
+Arguments for %s:
+	-help
+		Print help message (type: flag)
+
+	-version
+		Print version information (type: flag)
+
+	-config
+		Print configuration options used to build ExaGO (type: flag)
+
+	-options_file
+		Path to options file used to load additional ExaGO configuration options (type: flag)
+
+Please enter a valid application name.
