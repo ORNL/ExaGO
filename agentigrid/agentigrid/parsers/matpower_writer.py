@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import math
+import re
 from pathlib import Path
 
 from agentigrid.parsers.matpower_model import (
@@ -15,9 +17,19 @@ from agentigrid.parsers.matpower_model import (
 
 logger = logging.getLogger("agentigrid.parsers.matpower")
 
+_FUNC_RE = re.compile(r"^function\s+mpc\s*=\s*\w+", re.MULTILINE)
+
 
 def _fmt(value: float) -> str:
-    """Format a numeric value, writing integers without decimals."""
+    """Format a numeric value, writing integers without decimals.
+
+    Infinities and NaN are written as MATLAB ``Inf`` / ``-Inf`` / ``NaN``
+    (the parser reads them back).
+    """
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Inf" if value > 0 else "-Inf"
     if value == int(value) and abs(value) < 1e15:
         return str(int(value))
     return f"{value:.10g}"
@@ -31,7 +43,7 @@ def _write_bus_row(b: Bus) -> str:
     ]
     for val in (b.lam_P, b.lam_Q, b.mu_Vmax, b.mu_Vmin):
         if val is not None:
-            parts.append(f"{val:.4f}")
+            parts.append(_fmt(val))
     return "\t" + "\t".join(parts) + ";"
 
 
@@ -93,14 +105,22 @@ def write_matpower(network: MATNetwork, path: Path) -> None:
     lines: list[str] = []
 
     # --- Header ---
-    lines.append(network.header_comments.rstrip("\n"))
-    # Ensure function line is present (header_comments includes it)
-    if f"function mpc = {network.casename}" not in network.header_comments:
-        lines.append(f"function mpc = {network.casename}")
+    # The function line always carries network.casename: an existing one in
+    # header_comments is renamed, a missing one is added as the first line.
+    header = network.header_comments.rstrip("\n")
+    func_line = f"function mpc = {network.casename}"
+    if _FUNC_RE.search(header):
+        header = _FUNC_RE.sub(lambda _m: func_line, header, count=1)
+    else:
+        header = func_line + ("\n" + header if header else "")
+    lines.append(header)
 
     # --- Version & baseMVA ---
-    lines.append("")
-    lines.append(f"%% MATPOWER Case Format : Version {network.version}")
+    # The header read back from a file already holds the format comment;
+    # adding it again would grow the file on every read/write round trip.
+    if "MATPOWER Case Format" not in header:
+        lines.append("")
+        lines.append(f"%% MATPOWER Case Format : Version {network.version}")
     lines.append(f"mpc.version = '{network.version}';")
     lines.append("")
     lines.append("%%-----  Power Flow Data  -----%%")
@@ -154,5 +174,6 @@ def write_matpower(network: MATNetwork, path: Path) -> None:
 
     lines.append("")
 
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Always LF line endings, whatever the platform or the source file used.
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     logger.info("Wrote MATPOWER file: %s", path)
