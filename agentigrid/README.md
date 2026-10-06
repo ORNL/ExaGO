@@ -226,6 +226,10 @@ When resuming, the goal and journal are loaded from the saved session, but the L
 
 The launcher sidebar includes a "Session Save/Resume" section with a Save button (available after search completes or while running) and a dropdown to resume from previously saved sessions.
 
+## Retrieval Grounding (optional RAG)
+
+AgentiGrid can ground the LLM's proposals in a curated, provenance-tagged corpus (`rag/corpus/`: ExaGO tool help, case metadata, certified response examples). It is **off by default**, touches only the generation step (never the deterministic validator), and degrades to the no-RAG baseline on any retrieval failure. Modes are `off`, `basic` and `corrective`, set with `AGENTIGRID_RAG_MODE` or the UI's **Advanced** panel. Setup, optional dependencies (`requirements-rag.txt`) and troubleshooting: [docs/RAG_USAGE.md](docs/RAG_USAGE.md).
+
 ## Interactive Steering
 
 While a search is running, you can inject steering directives from the terminal (CLI) or the GUI — without stopping and restarting the search.

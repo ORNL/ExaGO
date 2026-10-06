@@ -4,6 +4,56 @@ This document records significant changes made by Claude Code, grouped by the pr
 
 ---
 
+## Optional retrieval grounding (RAG) for LLM proposals (2026-10-06)
+
+**What.** AgentiGrid can add a short block of reference material, retrieved from a curated corpus, to the LLM's per-iteration prompt. It is **off by default**: with RAG off, behaviour and dependencies are unchanged. Retrieval touches only the generation step. The deterministic validator never sees it, and any retrieval failure leaves the prompt unchanged, so the run behaves like the baseline.
+
+### Package `agentigrid/rag/`
+
+| File | Role |
+|---|---|
+| `__init__.py` | `build_retriever()` chooses the mode from `AGENTIGRID_RAG_MODE` (`off` / `basic` / `corrective`; legacy `AGENTIGRID_RAG=1` means `basic`), the grader and the thresholds |
+| `retriever.py` | Basic mode: top `k=3` chunks with cosine similarity of at least `0.35`. Counts calls, errors and empty results |
+| `corrective.py` | Corrective mode: grade hits (CORRECT / AMBIGUOUS / INCORRECT), refine to relevant sentences, reformulate once, withhold context when still INCORRECT |
+| `grader_reranker.py` | Optional local cross-encoder grader (`sentence-transformers`). Failures fall back to cosine and are counted |
+| `embed.py`, `store.py` | Ollama embeddings (`nomic-embed-text`) and a persistent Chroma index; `chromadb` is imported lazily |
+| `ingest.py`, `corpus_hash.py` | Build the index; record the corpus SHA-256 and chunking scheme; `corpus_status()` checks a store against the frozen corpus |
+
+### Integration
+
+- **`engine/agent_loop.py`.** Builds the retriever at start-up. Before each per-iteration LLM call it retrieves with the goal text and prepends "Section B: Reference Material (retrieved)". It emits a `rag_retrieved:<refs>:<top score>` phase when RAG is on, and records `rag_enabled` / `rag_config` (mode, thresholds, grader, call/error counts) at the end of the run. Post-search analysis is not grounded.
+- **`engine/journal.py`.** Exports `rag_enabled` and `rag_config`.
+- **`launcher/app.py`, `launcher/session_manager.py`.** "Reference knowledge (RAG)" selector under **Advanced** (default **Off**). The relevance grader choice appears for corrective mode, and the reranker is offered only when `sentence-transformers` is installed. A grounding caption shows on the live monitor and on the results page.
+
+### Corpus and tools
+
+- **`rag/corpus/` (frozen v1, 12 files, manifest SHA-256 `da4b77a5…`).** ExaGO `--help` text per application, case metadata, methodology notes, certified schema exemplars, and solver-certified worked examples from successful runs.
+- **`rag/tools/rag_harvest.py`.** Generates tool help and case metadata from the binaries and `.m` files.
+- **`rag/tools/rag_schema_exemplars.py`.** Builds response examples, certified by AgentiGrid's own parser, validator and modifier on `case118`.
+- **`rag/tools/corpus_guard.py`.** Hold-out leakage and personal-path audit, plus `--freeze`.
+
+### Dependencies
+
+`requirements-rag.txt` (optional): `chromadb`, `requests`, and `sentence-transformers` (commented out) for the reranker. The core `requirements.txt` is unchanged.
+
+### Tests
+
+`tests/rag/` has 23 tests, using fake embeddings and fake models, so no Ollama, Chroma or model download is needed:
+
+- off by default;
+- references reach the prompt and the journal;
+- a failed retrieval leaves the prompt unchanged;
+- retrieval errors are counted;
+- the corrective grader contract;
+- the chunking scheme;
+- the shipped corpus matches its manifest and contains no personal paths;
+- the schema exemplars certify on `case118`;
+- the guard flags.
+
+With chromadb installed and a fake embedder: ingest of `rag/corpus` gives 92 chunks and the manifest hash; basic returns 3 references, corrective returns refined strips, and off returns nothing.
+
+---
+
 ## Agent loop and LLM backends: robust iterations, honest UI, usage accounting (2026-10-03)
 
 **Motivation.** Long runs with local models (Ollama) showed iterations that went wrong in ways the UI hid or misreported: a malformed action crashed the run; a rejected iteration re-emitted the previous card, so the timeline showed stale or out-of-order cards (e.g. "Iteration 6" after iteration 20); analysis and completion entries were labelled FAILED; a modify that applied no command showed "No description"; and the summary counted the base case as an iteration ("Iterations 3" for max 2). Separately, Anthropic runs re-sent the same system prompt at full price on every iteration, and some newer models reject the `temperature` parameter.

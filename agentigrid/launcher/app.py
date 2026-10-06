@@ -168,6 +168,10 @@ def start_search(base_case_path, goal, backend, model, temperature,
     st.session_state.steering_history = []
     st.session_state.search_paused = False
     st.session_state.explore_status = None
+    st.session_state.rag_last_refs = None
+    st.session_state.rag_run_config = None
+    st.session_state.rag_run_enabled = os.environ.get("AGENTIGRID_RAG") == "1"
+    st.session_state.rag_run_mode = os.environ.get("AGENTIGRID_RAG_MODE") or ("basic" if st.session_state.rag_run_enabled else "off")
 
     try:
         manager.start_search(config_overrides=overrides, goal=goal)
@@ -219,6 +223,70 @@ def render_sidebar() -> dict:
             "Temperature", 0.0, 1.0, 0.3, step=0.05,
             disabled=disabled,
         )
+
+        # ── Advanced ─────────────────────────────────────────────────────
+        with st.expander("🔧 Advanced"):
+            rag_mode = st.radio(
+                "Reference knowledge (RAG)",
+                options=["off", "basic", "corrective"],
+                index=0,  # default: off (RAG needs optional dependencies and an embedding server)
+                format_func=lambda m: {
+                    "off": "Off — no grounding",
+                    "basic": "Basic",
+                    "corrective": "Corrective (experimental)",
+                }[m],
+                horizontal=True,
+                disabled=disabled,
+                help=(
+                    "Ground the AI's proposals in a curated knowledge base via retrieval. "
+                    "Basic returns the top matches above a similarity threshold. "
+                    "Corrective grades the retrieval and withholds weak context "
+                    "(needs threshold calibration — see the note when selected)."
+                ),
+            )
+            if rag_mode == "corrective":
+                st.info(
+                    "**Corrective RAG — calibrate before trusting results.**\n\n"
+                    "1. Build + ingest the corpus first (harvest tools → `ingest`).\n"
+                    "2. Run a few searches and watch the grounding indicator's scores "
+                    "to see your similarity distribution.\n"
+                    "3. Set thresholds in `rag/corrective.py`: `tau_upper` (score treated "
+                    "as \"correct\"), `tau_lower` (below → \"incorrect\", context withheld), "
+                    "`strip_min_score` (refinement cutoff). Defaults 0.50 / 0.30 / 0.30 are "
+                    "**starting points, not calibrated**.\n\n"
+                    "Corrective withholds context on low confidence, so on a thin or "
+                    "uncalibrated corpus it may behave like the baseline — that is expected."
+                )
+                # Relevance grader (corrective only). The reranker is offered only
+                # when sentence-transformers is installed, so a run can never claim
+                # a grader that didn't run.
+                import importlib.util
+                _graders = ["cosine"]
+                if importlib.util.find_spec("sentence_transformers") is not None:
+                    _graders.append("reranker")
+                crag_grader = st.radio(
+                    "Relevance grader",
+                    options=_graders,
+                    index=0,
+                    format_func=lambda g: {
+                        "cosine": "Cosine (deterministic)",
+                        "reranker": "Reranker (local cross-encoder)",
+                    }[g],
+                    horizontal=True,
+                    disabled=disabled,
+                    help=(
+                        "How Corrective RAG grades retrieved chunks. Cosine is the "
+                        "reproducible default. The reranker scores each (goal, chunk) "
+                        "pair with a local cross-encoder (needs sentence-transformers)."
+                    ),
+                )
+            else:
+                crag_grader = "cosine"
+        # AGENTIGRID_RAG_MODE is the mode axis; keep the legacy AGENTIGRID_RAG flag
+        # in sync so the existing grounding indicator (which checks it) still works.
+        os.environ["AGENTIGRID_RAG_MODE"] = rag_mode
+        os.environ["AGENTIGRID_RAG"] = "0" if rag_mode == "off" else "1"
+        os.environ["AGENTIGRID_CRAG_GRADER"] = crag_grader
 
         # ── Search Parameters ────────────────────────────────────────────
         st.header("⚙️ Search Parameters")
@@ -752,6 +820,7 @@ def render_live_monitor():
                 st.session_state.base_opflow = manager.get_base_opflow()
                 st.session_state.best_opflow = manager.get_best_opflow()
                 st.session_state.goal_classification = manager.get_goal_classification()
+                st.session_state.rag_run_config = manager.get_rag_config()
                 # Append to session history
                 session = manager.get_session()
                 if session:
@@ -768,20 +837,27 @@ def render_live_monitor():
                 st.session_state.iteration_log.append(update)
                 st.session_state.current_iteration = update["iteration"]
             elif update["type"] == "phase":
-                phase_labels = {
-                    "llm_request": "Sending prompt to LLM...",
-                    "applying_commands": "Applying modifications...",
-                    "running_simulation": "Running simulation...",
-                    "parsing_results": "Parsing results...",
-                    "computing_pareto_front": "Computing Pareto front...",
-                }
                 raw_phase = update["phase"]
-                if raw_phase.startswith("running_simulation ("):
-                    st.session_state.current_phase = f"Running {raw_phase.split('(')[1].rstrip(')')}..."
+
+                if raw_phase.startswith("rag_retrieved:"):
+                    _parts = raw_phase.split(":")
+                    try:
+                        st.session_state.rag_last_refs = int(_parts[1])
+                        st.session_state.rag_top_score = float(_parts[2]) if len(_parts) > 2 else None
+                    except (ValueError, IndexError):
+                        pass
                 else:
-                    st.session_state.current_phase = phase_labels.get(
-                        raw_phase, raw_phase
-                    )
+                    phase_labels = {
+                        "llm_request": "Sending prompt to LLM...",
+                        "applying_commands": "Applying modifications...",
+                        "running_simulation": "Running simulation...",
+                        "parsing_results": "Parsing results...",
+                        "computing_pareto_front": "Computing Pareto front...",
+                    }
+                    if raw_phase.startswith("running_simulation ("):
+                        st.session_state.current_phase = f"Running {raw_phase.split('(')[1].rstrip(')')}..."
+                    else:
+                        st.session_state.current_phase = phase_labels.get(raw_phase, raw_phase)
             elif update["type"] == "pause_state":
                 st.session_state.search_paused = update["paused"]
             elif update["type"] == "explore_status":
@@ -798,6 +874,7 @@ def render_live_monitor():
         st.session_state.base_opflow = manager.get_base_opflow()
         st.session_state.best_opflow = manager.get_best_opflow()
         st.session_state.goal_classification = manager.get_goal_classification()
+        st.session_state.rag_run_config = manager.get_rag_config()
         if not st.session_state.search_error:
             st.session_state.search_error = "Search thread terminated unexpectedly."
         st.rerun()
@@ -805,6 +882,29 @@ def render_live_monitor():
 
     # 2. Header
     st.header("🔄 Search in Progress...")
+
+    _rag_mode = os.environ.get("AGENTIGRID_RAG_MODE") or ("basic" if os.environ.get("AGENTIGRID_RAG") == "1" else "off")
+    _rag_on = _rag_mode != "off"
+    _refs = st.session_state.get("rag_last_refs")
+    _top = st.session_state.get("rag_top_score")
+    if _rag_on:
+        # Pull the effective retriever config (thresholds etc.) from the running
+        # controller so Live shows the same values as the Search-Complete page.
+        if not st.session_state.get("rag_run_config") and manager is not None:
+            st.session_state.rag_run_config = manager.get_rag_config()
+        _cfg = st.session_state.get("rag_run_config") or {}
+        if _refs is not None:
+            _s = f" · top {_top:.2f}" if _top else ""
+            # For corrective, 0 refs means context was withheld (low confidence).
+            st.caption(f"🔎 Grounding: {_rag_mode} · {_refs} ref(s){_s}")
+        else:
+            st.caption(f"🔎 Grounding: {_rag_mode} · enabled")
+        if _cfg.get("mode") == "corrective":
+            st.caption(
+                f"k={_cfg.get('k')}, min_score={_cfg.get('min_score')}, "
+                f"τ_lower={_cfg.get('tau_lower')}, τ_upper={_cfg.get('tau_upper')}, "
+                f"strip_min={_cfg.get('strip_min_score')}, grader={_cfg.get('grader')}"
+            )
 
     # 3. Two-column layout
     left_col, right_col = st.columns([2, 1])
@@ -1108,6 +1208,21 @@ def render_results():
         return
 
     st.header("✅ Search Complete")
+    _rag_used = getattr(session, "rag_enabled", None)
+    if _rag_used is None:
+        _rag_used = st.session_state.get("rag_run_enabled")
+    if _rag_used:
+        _cfg = st.session_state.get("rag_run_config") or {}
+        _mode = _cfg.get("mode", st.session_state.get("rag_run_mode", "basic"))
+        if _mode == "corrective":
+            _details = (
+                f" — k={_cfg.get('k')}, min_score={_cfg.get('min_score')}, "
+                f"τ_lower={_cfg.get('tau_lower')}, τ_upper={_cfg.get('tau_upper')}, "
+                f"strip_min={_cfg.get('strip_min_score')}, grader={_cfg.get('grader')}"
+            )
+        else:
+            _details = ""  # basic/off: the fixed defaults aren't worth showing
+        st.caption(f"🔎 This run used RAG grounding (mode: {_mode}){_details}.")
 
     tab1, tab2, tab3 = st.tabs([
         "📊 Overview", "🔍 Detailed Results", "📝 Analysis & Report",

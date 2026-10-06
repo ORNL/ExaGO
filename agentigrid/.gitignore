@@ -114,3 +114,7 @@ desktop.ini
 AGENTS.md
 opencode.md
 /prompts/
+
+# RAG index (build locally: python -m agentigrid.rag.ingest rag/corpus)
+rag/store/
+rag/store_*/

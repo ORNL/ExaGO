@@ -1084,8 +1084,12 @@ class SearchJournal:
             data["session_best"] = self.session_best
         if self.load_factor is not None:
             data["load_factor"] = self.load_factor
+        if getattr(self, "rag_enabled", None) is not None:
+            data["rag_enabled"] = self.rag_enabled
         if getattr(self, "llm_usage", None) is not None:
             data["llm_usage"] = self.llm_usage
+        if getattr(self, "rag_config", None) is not None:
+            data["rag_config"] = self.rag_config
         if getattr(self, "discarded_actions", None):
             data["discarded_actions"] = self.discarded_actions
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")

@@ -1,0 +1,72 @@
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow]
+Request: Set voltage limits on every bus to 0.97-1.03 pu.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "All-bus voltage band 0.97-1.03 pu", "reasoning": "A system-wide band is one set_all_bus_vlimits command, nested in modify.", "commands": [{"action": "set_all_bus_vlimits", "Vmin": 0.97, "Vmax": 1.03}]}
+Note: set_all_bus_vlimits is a COMMAND, not an action. Wrong: {"action": "set_all_bus_vlimits", "Vmin": 0.97, "Vmax": 1.03} as the whole response. Right: nest it in the "commands" list of a "modify" action.
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow]
+Request: Tighten the voltage limits of bus 12 only to 0.98-1.02 pu.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Bus 12 voltage band 0.98-1.02 pu", "reasoning": "Single-bus limits use set_bus_vlimits.", "commands": [{"action": "set_bus_vlimits", "bus": 12, "Vmin": 0.98, "Vmax": 1.02}]}
+Note: In OPFLOW/SCOPFLOW, bus voltages are decision variables: constrain them with set_bus_vlimits / set_all_bus_vlimits, not with set_gen_voltage.
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow, pflow]
+Request: Increase all loads in the network by 8%.
+Correct response (JSON): {"action": "modify", "mode": "fresh", "description": "Uniform load scaling x1.08", "reasoning": "Uniform scaling of every load is scale_all_loads with factor 1.08.", "commands": [{"action": "scale_all_loads", "factor": 1.08}]}
+Note: factor is a multiplier: 1.08 = +8%, 0.9 = -10%. mode "fresh" applies the change to the base case; "accumulative" stacks it on the current state.
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow, pflow]
+Request: Set the load at bus 15 to 95 MW and 30 MVAr.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Bus 15 load 95 MW / 30 MVAr", "reasoning": "Absolute load values use set_load.", "commands": [{"action": "set_load", "bus": 15, "Pd": 95.0, "Qd": 30.0}]}
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow, pflow]
+Request: Add a new 40 MW load at bus 20 on top of its existing load.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Add 40 MW at bus 20", "reasoning": "add_load_at_bus adds to the existing load; set_load would replace it.", "commands": [{"action": "add_load_at_bus", "bus": 20, "Pd": 40.0, "Qd": 0.0}]}
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow, pflow]
+Request: Take the generator at bus 10 out of service.
+Correct response (JSON): {"action": "modify", "mode": "fresh", "description": "Generator at bus 10 offline", "reasoning": "Generator outage is set_gen_status with status 0.", "commands": [{"action": "set_gen_status", "bus": 10, "status": 0}]}
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: pflow]
+Request: Set the output of the generator at bus 12 to 150 MW.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Bus 12 generator Pg = 150 MW", "reasoning": "In PFLOW the dispatch is fixed by set_gen_dispatch; Pg must lie in [Pmin, Pmax].", "commands": [{"action": "set_gen_dispatch", "bus": 12, "Pg": 150.0}]}
+Note: In OPFLOW/SCOPFLOW the optimizer re-dispatches generators; to force an output there, bound it instead (this command sets Pg as the starting value).
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: pflow]
+Request: Raise the voltage setpoint of the generator at bus 10 to 1.04 pu.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Bus 10 Vg = 1.04 pu", "reasoning": "In PFLOW the generator voltage setpoint is enforced, so it is the primary voltage control.", "commands": [{"action": "set_gen_voltage", "bus": 10, "Vg": 1.04}]}
+Note: Only meaningful in PFLOW. In OPFLOW/SCOPFLOW the solver overrides Vg.
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: pflow]
+Request: Add 25 MVAr of capacitive shunt support at bus 44.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Bus 44 shunt Bs = 25", "reasoning": "Positive Bs is capacitive and raises the local voltage.", "commands": [{"action": "set_shunt_susceptance", "bus": 44, "Bs": 25.0}]}
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: pflow]
+Request: Change the tap ratio of the transformer between buses 8 and 5 to 1.0.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Transformer 8-5 tap = 1.0", "reasoning": "Tap changes use set_tap_ratio on a transformer branch.", "commands": [{"action": "set_tap_ratio", "fbus": 8, "tbus": 5, "ratio": 1.0}]}
+Note: Only transformer branches (ratio != 0 in the case) accept a tap change.
+
+[source: schema exemplar | generated from AgentiGrid's command set | schema-validated only (not applicable to reference case: Branch 30-17 is not a phase shifter (angle is 0)) | apps: pflow]
+Request: Set the phase shifter between buses 30 and 17 to 4 degrees.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Phase shift 30-17 = 4 deg", "reasoning": "Phase-shifter angle changes use set_phase_shift_angle.", "commands": [{"action": "set_phase_shift_angle", "fbus": 30, "tbus": 17, "angle": 4.0}]}
+Note: Only branches that are phase shifters (angle != 0 in the case) accept this command.
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow, pflow]
+Request: Take the line between buses 23 and 24 out of service.
+Correct response (JSON): {"action": "modify", "mode": "fresh", "description": "Line 23-24 out of service", "reasoning": "A branch outage is set_branch_status with status 0.", "commands": [{"action": "set_branch_status", "fbus": 23, "tbus": 24, "status": 0}]}
+Note: In SCOPFLOW this permanently changes the topology; contingencies come from the contingency file, not from set_branch_status.
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow, pflow]
+Request: Raise the thermal rating of the line between buses 30 and 38 to 250 MVA.
+Correct response (JSON): {"action": "modify", "mode": "accumulative", "description": "Line 30-38 rateA = 250 MVA", "reasoning": "Branch ratings use set_branch_rate (rateA in MVA).", "commands": [{"action": "set_branch_rate", "fbus": 30, "tbus": 38, "rateA": 250.0}]}
+
+[source: schema exemplar | generated from AgentiGrid's command set | validated: parsed and applied on held-out case118 | apps: opflow, scopflow]
+Request: Scale all loads by 1.05 and set the voltage band on every bus to 0.96-1.04 pu in one step.
+Correct response (JSON): {"action": "modify", "mode": "fresh", "description": "Loads x1.05 with 0.96-1.04 pu band", "reasoning": "Several commands go in one commands list, applied in order.", "commands": [{"action": "scale_all_loads", "factor": 1.05}, {"action": "set_all_bus_vlimits", "Vmin": 0.96, "Vmax": 1.04}]}
+
+[source: schema exemplar | generated from AgentiGrid's command set | structure-validated | apps: opflow, scopflow, pflow]
+Request: List the 3 buses nearest to bus 49 before deciding.
+Correct response (JSON): {"action": "analyze", "query_type": "nearest_neighbors", "bus": 49, "k": 3, "reasoning": "Topology questions use a structured query_type, not free text."}
+
+[source: schema exemplar | generated from AgentiGrid's command set | structure-validated | apps: opflow, scopflow, pflow]
+Request: The target is met; stop and report.
+Correct response (JSON): {"action": "complete", "reasoning": "The last feasible solve satisfies the stated target.", "findings": {"summary": "One-sentence answer to the goal, with the key number.", "details": "Iteration, objective value and constraint status supporting it."}}
+Note: complete carries findings; it does not carry commands.
