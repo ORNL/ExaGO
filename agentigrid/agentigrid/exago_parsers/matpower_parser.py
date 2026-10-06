@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from pathlib import Path
 
@@ -26,6 +27,25 @@ _BASEMVA_RE = re.compile(r"mpc\.baseMVA\s*=\s*([\d.]+)")
 # Match  mpc.<section> = [  or  mpc.<section> = {
 _SECTION_RE = re.compile(r"^mpc\.(\w+)\s*=\s*([{\[])", re.MULTILINE)
 
+# Only MATPOWER case format version 2 is supported (ExaGO reads version 2).
+_SUPPORTED_VERSIONS = ("2",)
+
+# Sections parsed into dataclasses; any other section is kept as raw text.
+_KNOWN_SECTIONS = ("bus", "gen", "branch", "gencost")
+# Column limits per known section. Bus rows have 13 input columns plus up to
+# 4 optional solution columns (lam_P, lam_Q, mu_Vmax, mu_Vmin); gen and
+# branch rows may carry any number of extra columns, which are kept.
+_MIN_COLS = {"bus": 13, "gen": 10, "branch": 13, "gencost": 4}
+_MAX_COLS = {"bus": 17}
+# 0-based columns that must hold integers (MATPOWER BUS_I, BUS_TYPE,
+# BUS_AREA, ZONE; GEN_BUS, GEN_STATUS; F_BUS, T_BUS, BR_STATUS; MODEL, NCOST).
+_INT_COLS = {
+    "bus": (0, 1, 6, 10),
+    "gen": (0, 7),
+    "branch": (0, 1, 10),
+    "gencost": (0, 3),
+}
+
 
 def _parse_float(s: str) -> float:
     """Parse a string as float, handling MATLAB Inf/NaN."""
@@ -39,21 +59,61 @@ def _parse_float(s: str) -> float:
     return float(sl)
 
 
-def _split_data_row(line: str) -> list[str]:
-    """Split a MATPOWER data row into tokens, stripping comments and semicolons."""
-    # Remove inline comment
-    idx = line.find("%")
-    if idx >= 0:
-        line = line[:idx]
-    # Remove trailing semicolons and whitespace
-    line = line.rstrip().rstrip(";").rstrip()
-    return line.split()
+def _parse_rows(section: str, block: str) -> list[list[float]]:
+    """Parse the rows of a known numeric section (one row per line).
+
+    Anything that would otherwise be misread raises ``ValueError`` naming the
+    section and the 1-based data row: unsupported syntax (several rows on one
+    line, commas, ``...`` continuations), non-numeric values, a column count
+    outside the section's limits, or a non-integral value in an integer column.
+    Rows are never skipped silently.
+    """
+    rows: list[list[float]] = []
+    for line in block.split("\n"):
+        idx = line.find("%")
+        if idx >= 0:
+            line = line[:idx]
+        line = line.strip().rstrip(";").rstrip()
+        if not line:
+            continue
+        where = f"mpc.{section} row {len(rows) + 1}"
+        if "..." in line:
+            raise ValueError(f"{where}: line continuation '...' is not supported")
+        if ";" in line:
+            raise ValueError(
+                f"{where}: several rows on one line are not supported; "
+                "put each row on its own line"
+            )
+        if "," in line:
+            raise ValueError(
+                f"{where}: comma-separated values are not supported; "
+                "separate values with spaces or tabs"
+            )
+        try:
+            values = [_parse_float(t) for t in line.split()]
+        except ValueError:
+            raise ValueError(f"{where}: non-numeric value in {line!r}") from None
+        lo, hi = _MIN_COLS[section], _MAX_COLS.get(section)
+        if len(values) < lo or (hi is not None and len(values) > hi):
+            expected = f"{lo}-{hi}" if hi is not None else f"at least {lo}"
+            raise ValueError(f"{where}: {len(values)} columns, expected {expected}")
+        for col in _INT_COLS[section]:
+            v = values[col]
+            if not math.isfinite(v) or v != int(v):
+                raise ValueError(f"{where}: column {col + 1} must be an integer, got {v!r}")
+        rows.append(values)
+    return rows
 
 
-def _extract_section_block(text: str, start: int, bracket: str) -> tuple[str, int]:
+def _extract_section_block(
+    text: str, start: int, bracket: str, section: str = "?"
+) -> tuple[str, int]:
     """Extract text from *start* until the matching closing bracket.
 
     Returns (block_content, end_position).
+
+    Raises:
+        ValueError: If the block is never closed.
     """
     close = "]" if bracket == "[" else "}"
     # Find the end of the section
@@ -66,6 +126,8 @@ def _extract_section_block(text: str, start: int, bracket: str) -> tuple[str, in
         elif ch == close:
             depth -= 1
         i += 1
+    if depth > 0:
+        raise ValueError(f"mpc.{section}: '{bracket}' block is not terminated")
     return text[start:i - 1], i
 
 
@@ -80,6 +142,11 @@ def _collect_section_comment(text: str, section_start: int) -> str:
         else:
             break
     comment_lines.reverse()
+    # Drop surrounding blank lines so a read/write round trip is stable.
+    while comment_lines and not comment_lines[0].strip():
+        comment_lines.pop(0)
+    while comment_lines and not comment_lines[-1].strip():
+        comment_lines.pop()
     return "\n".join(comment_lines)
 
 
@@ -180,7 +247,8 @@ def parse_matpower(path: Path) -> MATNetwork:
     if not path.exists():
         raise FileNotFoundError(f"MATPOWER file not found: {path}")
 
-    text = path.read_text(encoding="utf-8")
+    # Normalise line endings: CRLF (Windows-authored) files read the same as LF.
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
 
     # --- Function name ---
     m = _FUNC_RE.search(text)
@@ -191,6 +259,11 @@ def parse_matpower(path: Path) -> MATNetwork:
     # --- Version ---
     m = _VERSION_RE.search(text)
     version = m.group(1) if m else "2"
+    if version not in _SUPPORTED_VERSIONS:
+        raise ValueError(
+            f"Unsupported MATPOWER case version '{version}' in {path}; "
+            f"supported: {', '.join(_SUPPORTED_VERSIONS)}"
+        )
 
     # --- baseMVA ---
     m = _BASEMVA_RE.search(text)
@@ -222,12 +295,13 @@ def parse_matpower(path: Path) -> MATNetwork:
         if section_name in ("version", "baseMVA"):
             continue
 
-        block_content, _ = _extract_section_block(text, block_start, bracket)
+        block_content, _ = _extract_section_block(text, block_start, bracket, section_name)
 
         # Collect preceding comment
         line_start = text.rfind("\n", 0, match.start()) + 1
         comment = _collect_section_comment(text, line_start)
         _section_comments[section_name] = comment
+        prefix = comment + "\n" if comment else ""
 
         if bracket == "{":
             # Cell array (bus_name, gentype, genfuel, etc.) → store as raw
@@ -235,23 +309,19 @@ def parse_matpower(path: Path) -> MATNetwork:
             # mpc.genfuel by searching for "};", so a bare "}" makes it skip the
             # fuel types (and with them the default ramp rates and the
             # renewable Pmin=0 relaxation).
-            raw_text = comment + "\n" + text[match.start():block_start] + block_content + "};"
+            raw_text = prefix + text[match.start():block_start] + block_content + "};"
             extra_sections[section_name] = raw_text
             continue
 
-        # Numeric matrix section — parse rows
-        rows: list[list[float]] = []
-        for line in block_content.split("\n"):
-            stripped = line.strip()
-            if not stripped or stripped.startswith("%"):
-                continue
-            tokens = _split_data_row(line)
-            if not tokens:
-                continue
-            try:
-                rows.append([_parse_float(t) for t in tokens])
-            except ValueError:
-                logger.warning("Skipping unparseable row in mpc.%s: %s", section_name, line.strip())
+        if section_name not in _KNOWN_SECTIONS:
+            # Unknown numeric section (areas, dcline, ...) → store as raw
+            raw_text = prefix + text[match.start():block_start] + block_content + "];"
+            extra_sections[section_name] = raw_text
+            logger.debug("Stored unknown section mpc.%s as raw text", section_name)
+            continue
+
+        # Known numeric matrix section — parse rows (raises on bad input)
+        rows = _parse_rows(section_name, block_content)
 
         if section_name == "bus":
             buses = [_row_to_bus(r) for r in rows]
@@ -265,11 +335,9 @@ def parse_matpower(path: Path) -> MATNetwork:
         elif section_name == "gencost":
             gencost = [_row_to_gencost(r) for r in rows]
             logger.debug("Parsed %d gencost entries", len(gencost))
-        else:
-            # Unknown numeric section → store as raw
-            raw_text = comment + "\n" + text[match.start():block_start] + block_content + "];"
-            extra_sections[section_name] = raw_text
-            logger.debug("Stored unknown section mpc.%s as raw text", section_name)
+
+    if "bus" not in _section_comments:
+        raise ValueError(f"Cannot find mpc.bus in {path}")
 
     # Store section comments on the network for the writer
     net = MATNetwork(
