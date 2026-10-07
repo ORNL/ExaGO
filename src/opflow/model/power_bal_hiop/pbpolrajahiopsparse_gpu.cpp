@@ -11,6 +11,7 @@
 
 void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
                                                  const double *x_dev,
+                                                 const int *perm_dev,
                                                  double *jacd_dev) {
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
@@ -55,14 +56,14 @@ void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
           double apf_delP_minus_delPg = apf * delP - delPg;
 
           /* Row 0: d/d{Pg, delPg, delP} of (apf*delP - delPg)*(Pg - pt) */
-          jacd_dev[base + 0] = apf_delP_minus_delPg;
-          jacd_dev[base + 1] = -(Pg - pt);
-          jacd_dev[base + 2] = apf * (Pg - pt);
+          jacd_dev[perm_dev[base + 0]] = apf_delP_minus_delPg;
+          jacd_dev[perm_dev[base + 1]] = -(Pg - pt);
+          jacd_dev[perm_dev[base + 2]] = apf * (Pg - pt);
 
           /* Row 1: d/d{Pg, delPg, delP} of (delPg - apf*delP)*(pb - Pg) */
-          jacd_dev[base + 3] = apf_delP_minus_delPg;
-          jacd_dev[base + 4] = pb - Pg;
-          jacd_dev[base + 5] = -apf * (pb - Pg);
+          jacd_dev[perm_dev[base + 3]] = apf_delP_minus_delPg;
+          jacd_dev[perm_dev[base + 4]] = pb - Pg;
+          jacd_dev[perm_dev[base + 5]] = -apf * (pb - Pg);
         });
   }
 
@@ -118,15 +119,15 @@ void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
 
             double dQg = Vset - V;
             /* Row 0 entry for this gen's Qg */
-            jacd_dev[base + k] = dQg;
+            jacd_dev[perm_dev[base + k]] = dQg;
             /* Row 1 entry for this gen's Qg */
-            jacd_dev[base + ngen + 1 + k] = dQg;
+            jacd_dev[perm_dev[base + ngen + 1 + k]] = dQg;
           }
 
           /* Row 0: V derivative entry (last in this row) */
-          jacd_dev[base + ngen] = Qmax - Q;
+          jacd_dev[perm_dev[base + ngen]] = Qmax - Q;
           /* Row 1: V derivative entry (last in this row) */
-          jacd_dev[base + ngen + 1 + ngen] = Qmin - Q;
+          jacd_dev[perm_dev[base + ngen + 1 + ngen]] = Qmin - Q;
         });
   }
 
@@ -216,25 +217,29 @@ void ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(OPFLOW opflow,
           double dQt_dVmf = Vmt * (-Btf * cos_tf + Gtf * sin_tf);
 
           /* Row 0 (Sf2): derivatives w.r.t. thetaf, Vmf, thetat, Vmt */
-          jacd_dev[base + 0] = dSf2_dPf * dPf_dthetaf + dSf2_dQf * dQf_dthetaf;
-          jacd_dev[base + 1] = dSf2_dPf * dPf_dVmf + dSf2_dQf * dQf_dVmf;
-          jacd_dev[base + 2] = dSf2_dPf * dPf_dthetat + dSf2_dQf * dQf_dthetat;
-          jacd_dev[base + 3] = dSf2_dPf * dPf_dVmt + dSf2_dQf * dQf_dVmt;
+          jacd_dev[perm_dev[base + 0]] =
+              dSf2_dPf * dPf_dthetaf + dSf2_dQf * dQf_dthetaf;
+          jacd_dev[perm_dev[base + 1]] =
+              dSf2_dPf * dPf_dVmf + dSf2_dQf * dQf_dVmf;
+          jacd_dev[perm_dev[base + 2]] =
+              dSf2_dPf * dPf_dthetat + dSf2_dQf * dQf_dthetat;
+          jacd_dev[perm_dev[base + 3]] =
+              dSf2_dPf * dPf_dVmt + dSf2_dQf * dQf_dVmt;
 
           /* Row 1 (St2): derivatives w.r.t. thetaf, Vmf, thetat, Vmt */
-          jacd_dev[base + row_stride + 0] =
+          jacd_dev[perm_dev[base + row_stride + 0]] =
               dSt2_dPt * dPt_dthetaf + dSt2_dQt * dQt_dthetaf;
-          jacd_dev[base + row_stride + 1] =
+          jacd_dev[perm_dev[base + row_stride + 1]] =
               dSt2_dPt * dPt_dVmf + dSt2_dQt * dQt_dVmf;
-          jacd_dev[base + row_stride + 2] =
+          jacd_dev[perm_dev[base + row_stride + 2]] =
               dSt2_dPt * dPt_dthetat + dSt2_dQt * dQt_dthetat;
-          jacd_dev[base + row_stride + 3] =
+          jacd_dev[perm_dev[base + row_stride + 3]] =
               dSt2_dPt * dPt_dVmt + dSt2_dQt * dQt_dVmt;
 
           /* Slack variable entries (Step 5) */
           if (has_slack) {
-            jacd_dev[base + 4] = -1.0;
-            jacd_dev[base + row_stride + 4] = -1.0;
+            jacd_dev[perm_dev[base + 4]] = -1.0;
+            jacd_dev[perm_dev[base + row_stride + 4]] = -1.0;
           }
         });
   }

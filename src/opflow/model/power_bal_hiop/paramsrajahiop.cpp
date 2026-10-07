@@ -914,29 +914,32 @@ void PbpolModelRajaHiop::destroy(OPFLOW opflow) {
   genparams.destroy(opflow);
 
 #ifdef EXAGO_ENABLE_GPU
+  // These arrays get allocated only with sparse GPU model, each group when its
+  // sparsity pattern is first computed. Hence, this business of checking if
+  // the array is NULL
+  auto &resmgr = umpire::ResourceManager::getInstance();
+  umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
+  umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
+
   if (i_jaceq != NULL) {
-    // These arrays get allocated only with sparse GPU model. For other models,
-    // they are not allocated. Hence, this business of checking if the array is
-    // NULL
-
-    auto &resmgr = umpire::ResourceManager::getInstance();
-    umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-    umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
-
     h_allocator_.deallocate(i_jaceq);
     h_allocator_.deallocate(j_jaceq);
     h_allocator_.deallocate(perm_jaceq);
     d_allocator_.deallocate(perm_jaceq_dev);
+  }
 
+  if (i_hess != NULL) {
     h_allocator_.deallocate(i_hess);
     h_allocator_.deallocate(j_hess);
     h_allocator_.deallocate(perm_hess);
     d_allocator_.deallocate(perm_hess_dev);
+  }
 
-    if (opflow->nconineq) {
-      h_allocator_.deallocate(i_jacineq);
-      h_allocator_.deallocate(j_jacineq);
-    }
+  if (i_jacineq != NULL) {
+    h_allocator_.deallocate(i_jacineq);
+    h_allocator_.deallocate(j_jacineq);
+    h_allocator_.deallocate(perm_jacineq);
+    d_allocator_.deallocate(perm_jacineq_dev);
   }
 #endif
 }
