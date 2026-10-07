@@ -11,17 +11,6 @@ target_include_directories(
 # Numbers of copies of the base network to test
 set(num_copies 1 3 600)
 
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/cecj.csv ${CMAKE_CURRENT_BINARY_DIR}/cecj.csv
-  COPYONLY
-)
-foreach(n IN LISTS num_copies)
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/CECJ_unittestx${n}.m
-    ${CMAKE_CURRENT_BINARY_DIR}/CECJ_unittestx${n}.m COPYONLY
-  )
-endforeach()
-
 set(solvers "")
 set(models "")
 set(dependencies "")
@@ -68,8 +57,12 @@ if(EXAGO_RUN_TESTS)
         ${model}
         -opflow_solver
         ${solver}
+        -netfile
+        ${CMAKE_CURRENT_SOURCE_DIR}/CECJ_unittestx${num}.m
         -num_copies
         ${num}
+        -validation
+        ${CMAKE_CURRENT_SOURCE_DIR}/cecj.csv
       )
       set_tests_properties(${testname} PROPERTIES SKIP_RETURN_CODE 2)
     endforeach()

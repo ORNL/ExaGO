@@ -71,7 +71,7 @@ A 5-bus system **CICJ_unittestx1.m** will be used as a basis for this test. In a
 ### Test files
 
 - `CICJ_unittestx<N>.m`: N copies of the 5-bus system (N = 1, 3, 600). Regenerate with `python3 gen_network.py <N>`.
-- `CICJ_nolinelimits_unittestx<N>.m`: the same networks with zero line ratings, so OPFLOW creates no line flow constraints and only the generator bus rows remain. Regenerate with `python3 gen_network.py --no-line-limits <N>`. The test uses them when run with `-no_line_limits`.
+- `CICJ_nolinelimits_unittestx<N>.m`: the same networks with zero line ratings, so OPFLOW creates no line flow constraints and only the generator bus rows remain. Regenerate with `python3 gen_network.py --no-line-limits <N>`. The `_NOLINELIMITS` tests use them with `cicj_nolinelimits.csv`.
 - `cicj.csv` and `cicj_nolinelimits.csv`: reference Jacobians for N=1, written by the MATLAB script `gen_cicj.m` (set `line_limits = false` at its top for `cicj_nolinelimits.csv`). The first line holds the numbers of rows and columns, followed by a 0, and each following line one nonzero as a 1-based `row,column,value` triple. The test replicates it for N copies (see [Scaling](#scaling)).
 
 ### Parameters values in .m file

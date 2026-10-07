@@ -19,17 +19,20 @@ PetscErrorCode ConstructReferenceJacobian(Mat *J, int num_copies,
 /**
  * @brief Unit test driver for the inequality constraint Jacobian
  *
- * Computes the inequality constraint Jacobian of
- * `CICJ_unittestx<num_copies>.m` at a fixed solution vector and compares it
- * with the reference Jacobian in `cicj.csv`, replicated `num_copies` times.
- * Both files are read from the working directory.
+ * Computes the inequality constraint Jacobian of the network at a fixed
+ * solution vector and compares it with the reference Jacobian of the 5-bus
+ * network, replicated `num_copies` times.
  *
  * Options (implemented using PETSc options):
  *
- *    ~ -num_copies <number> : Number of copies of the base network (default 1).
+ *    ~ -netfile <data_file> : Network file, e.g. `CICJ_unittestx<N>.m` or
+ * `CICJ_nolinelimits_unittestx<N>.m`.
  *
- *    ~ -no_line_limits : Uses the network with zero line ratings, which has no
- * line flow constraints, and its reference Jacobian.
+ *    ~ -validation <csv_file> : Reference Jacobian of the 5-bus network, e.g.
+ * `cicj.csv` or `cicj_nolinelimits.csv`.
+ *
+ *    ~ -num_copies <number> : Number of copies N of the 5-bus network in the
+ * network file (default 1). If this is not set properly, the test fails.
  *
  */
 int main(int argc, char **argv) {
@@ -51,14 +54,13 @@ int main(int argc, char **argv) {
   int num_copies = 1;
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-num_copies", &num_copies, &flg));
 
-  PetscBool no_line_limits = PETSC_FALSE;
-  PetscCall(PetscOptionsGetBool(NULL, NULL, "-no_line_limits", &no_line_limits,
-                                &flg));
-
-  std::string variant = no_line_limits ? "_nolinelimits" : "";
-  std::string netfile =
-      "CICJ" + variant + "_unittestx" + std::to_string(num_copies) + ".m";
-  std::string reffile = "cicj" + variant + ".csv";
+  /* Get network and reference Jacobian files from command line */
+  char netfile[PETSC_MAX_PATH_LEN] = "";
+  char reffile[PETSC_MAX_PATH_LEN] = "";
+  PetscCall(PetscOptionsGetString(NULL, NULL, "-netfile", netfile,
+                                  PETSC_MAX_PATH_LEN, &flg));
+  PetscCall(PetscOptionsGetString(NULL, NULL, "-validation", reffile,
+                                  PETSC_MAX_PATH_LEN, &flg));
 
   Mat J_ineq_ref;
   PetscCall(ConstructReferenceJacobian(&J_ineq_ref, num_copies, reffile));
@@ -68,7 +70,7 @@ int main(int argc, char **argv) {
 
   /* Set up test opflow */
   PetscCall(OPFLOWCreate(PETSC_COMM_WORLD, &opflowtest));
-  PetscCall(OPFLOWReadMatPowerData(opflowtest, netfile.c_str()));
+  PetscCall(OPFLOWReadMatPowerData(opflowtest, netfile));
   PetscCall(OPFLOWSetGenBusVoltageType(opflowtest, FIXED_WITHIN_QBOUNDS));
   PetscCall(OPFLOWSetUp(opflowtest));
 
@@ -115,7 +117,7 @@ PetscErrorCode ConstructSolutionVector(Vec *X, int num_copies) {
 
   std::vector<PetscReal> x_base = {0, 2, 0, 2, 30 * PI / 180.0, 2, 1.6, -2.2,
                                    0, 2, 0, 2};
-  int nvals_base = 12;
+  int nvals_base = x_base.size();
   int nvals = (nvals_base - 2) * num_copies + 2;
   std::vector<PetscReal> x;
   x.reserve(nvals);

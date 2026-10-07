@@ -11,25 +11,6 @@ target_include_directories(
 # Numbers of copies of the base network to test
 set(num_copies 1 3 600)
 
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/cicj.csv ${CMAKE_CURRENT_BINARY_DIR}/cicj.csv
-  COPYONLY
-)
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/cicj_nolinelimits.csv
-  ${CMAKE_CURRENT_BINARY_DIR}/cicj_nolinelimits.csv COPYONLY
-)
-foreach(n IN LISTS num_copies)
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/CICJ_unittestx${n}.m
-    ${CMAKE_CURRENT_BINARY_DIR}/CICJ_unittestx${n}.m COPYONLY
-  )
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/CICJ_nolinelimits_unittestx${n}.m
-    ${CMAKE_CURRENT_BINARY_DIR}/CICJ_nolinelimits_unittestx${n}.m COPYONLY
-  )
-endforeach()
-
 set(solvers "")
 set(models "")
 set(dependencies "")
@@ -76,8 +57,12 @@ if(EXAGO_RUN_TESTS)
         ${model}
         -opflow_solver
         ${solver}
+        -netfile
+        ${CMAKE_CURRENT_SOURCE_DIR}/CICJ_unittestx${num}.m
         -num_copies
         ${num}
+        -validation
+        ${CMAKE_CURRENT_SOURCE_DIR}/cicj.csv
       )
       set_tests_properties(${testname} PROPERTIES SKIP_RETURN_CODE 2)
 
@@ -93,9 +78,12 @@ if(EXAGO_RUN_TESTS)
         ${model}
         -opflow_solver
         ${solver}
+        -netfile
+        ${CMAKE_CURRENT_SOURCE_DIR}/CICJ_nolinelimits_unittestx${num}.m
         -num_copies
         ${num}
-        -no_line_limits
+        -validation
+        ${CMAKE_CURRENT_SOURCE_DIR}/cicj_nolinelimits.csv
       )
       set_tests_properties(
         ${testname}_NOLINELIMITS PROPERTIES SKIP_RETURN_CODE 2
