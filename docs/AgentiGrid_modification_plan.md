@@ -163,7 +163,7 @@ Slice 1 (✅ done): add-entity primitives + binary-feasibility sweep + sweep rep
 
 ---
 
-## Open decisions for you / Slaven
+## Open decisions
 
 1. Confirm slice ordering — in particular whether B.1 (token view) jumps ahead of C1, given it gates the scaling half of the paper.
 2. Prompt 18 (min hot reserve under N-1) is the heaviest single item (SCOPFLOW + custom minimization) — is it in-scope for this paper, or deferred?

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [develop]
 
+## [2.1]
+
+### General
+- Fixed bug with strings in PETSc allocated strctures (#61)
+- Update dependencies to PETSc >=3.25 and ROCm >= 6.4 (#70)
+
+### User Interface
+- Add AgentiGrid experimental agentic AI user interface (#65)
+- Refactored visualizer (#69)
+
+### TCOPFLOW
+- Fix ramp parsing and GENRAMP indexing in TCOPFLOW (#62)
+- Improve preallocation of sparse matrices in TCOPFLOW (#71)
+
+
 ## [2.0]
 
 ### General

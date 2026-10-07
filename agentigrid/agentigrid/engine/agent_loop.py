@@ -916,7 +916,7 @@ class AgentLoopController:
         return args if args else None
 
     def _normalize_sopflow_wind_base(self) -> None:
-        """REVIEW (Slaven sign-off): model base-case wind as curtailable for SOPFLOW.
+        """REVIEW: model base-case wind as curtailable for SOPFLOW.
 
         case_ACTIVSg200 ships wind generators as must-run (Pmin = Pmax = nameplate),
         so any scenario whose wind availability is below nameplate is infeasible in
@@ -1000,7 +1000,7 @@ class AgentLoopController:
         logger.info("Parsing base case: %s", base_case)
         self._base_network = parse_matpower(base_case)
         self._current_network = self._base_network
-        # REVIEW (Slaven sign-off): model base-case wind as curtailable for SOPFLOW
+        # REVIEW: model base-case wind as curtailable for SOPFLOW
         # so scenarios with sub-nameplate wind are feasible (see the method + the
         # search.sopflow_curtailable_wind_base flag). No-op for non-SOPFLOW / disabled.
         self._normalize_sopflow_wind_base()

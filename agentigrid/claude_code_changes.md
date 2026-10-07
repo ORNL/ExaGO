@@ -32,7 +32,7 @@ Confirmed `_augment_generator_mutation` already pins `Qmin == Qmax` (forced, not
 
 Prompt 13 re-ran an identical sweep 3× (50,504 tokens), prompt 17 2×.
 - `agentigrid/prompts/system_prompt.py`: explicit rule "DO NOT RE-RUN AN IDENTICAL SWEEP".
-- `agentigrid/engine/agent_loop.py` (deterministic backstop): session-level `_sweep_signature_cache` keyed by `_sweep_cache_key(data)` (mode + entity + mutation + candidate_set + feasibility + metric + predicate + dispatchable/cost params; excludes description/reasoning). An identical re-request is served via `_serve_cached_sweep` (journaled "cached — not re-solved", no re-solve); changed parameters → different signature → still executes. Soft guard, never blocks a changed sweep. **Decision flagged for Slaven:** nudge-only vs. nudge + cache (both implemented here).
+- `agentigrid/engine/agent_loop.py` (deterministic backstop): session-level `_sweep_signature_cache` keyed by `_sweep_cache_key(data)` (mode + entity + mutation + candidate_set + feasibility + metric + predicate + dispatchable/cost params; excludes description/reasoning). An identical re-request is served via `_serve_cached_sweep` (journaled "cached — not re-solved", no re-solve); changed parameters → different signature → still executes. Soft guard, never blocks a changed sweep. **Decision flagged for further discussion:** nudge-only vs. nudge + cache (both implemented here).
 
 ### Tests — `tests/test_sweep_corrections.py` (15)
 
@@ -123,7 +123,7 @@ A **named registry of verified primitives** (Phase 1; not free-form LLM code), e
 
 C2 generator primitive (dispatchable bounds + non-zero cost, fixed-injection regression, explicit coeffs, median mid-merit, fallback); registry (defaults, needs-base, direction, unknown-name raises, extensibility); `max_delta_v` (true max abs diff, max bus ≠ candidate bus, None without base); `reactive_adequacy` (adequate, inadequate-with-reason, non-convergence); standard predicate unchanged; `_augment_generator_mutation` (dispatchable resolution, explicit-strategy error, Q-pin, non-generator untouched); sweep-handler integration (unknown metric/predicate clean error, metric recorded, **default payload unchanged**, dispatched-Pg recorded). Full suite: **868 passed, 3 skipped**.
 
-### Decisions flagged for Slaven (non-blocking)
+### Decisions flagged for further discussion (non-blocking)
 
 1. Added-generator cost curve: case-median (default) vs an explicit typical mid-merit curve — drives the prompt-13 ranking entirely.
 2. Prompt-15 switched-in load size (`switched_load_mw`) — the voltage step scales with it.
@@ -173,7 +173,7 @@ For each candidate bus, a bisection on injection magnitude finds the largest inj
 
 System PF + PF-spec; candidate mutation on real ACTIVSg200 (PF ray, generator fixed injection, base untouched); binding identification (thermal/voltage with element, type-only fallback); bisection algorithm via synthetic oracle (boundary within tol, probe bound, cap-not-reached, first-probe-infeasible, convergence-as-infeasible); token-bounded boundary view (full vs summary, top-N bound, descending rank, 2000-bus size bound, grouped undetermined, threshold 0); `map_callables` (index order, exception capture, progress count); `_handle_boundary_sweep` orchestration (journals `max_feasible_mw`, one-LLM-turn invariant, base-infeasible abort, invalid-entity reject). Full suite: 836 passed, 3 skipped.
 
-### Decisions flagged for Slaven (non-blocking)
+### Decisions flagged for further discussion (non-blocking)
 
 1. Generator reactive handling: `Qg` free within `±0.4·ΔP` (current default) vs fixed at 0 — affects voltage-limited hosting numbers.
 2. PF source for the load prompt: system-average (default) vs each bus's own PF vs a stated PF.

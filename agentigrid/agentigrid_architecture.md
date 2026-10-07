@@ -7,8 +7,7 @@
 | Project | AgentiGrid (in process of integration into ExaGO) |
 | Version | 0.3 — PFLOW Direct Optimization |
 | Date | May 2026 |
-| Author | Samim K., University of Sarajevo |
-| Supervisor | Slaven P., Oak Ridge National Laboratory |
+| Author | Samim Konjicija, University of Sarajevo |
 | Target Platform | Linux (OpenSUSE Leap 15.6), Python 3.10+ |
 
 ---

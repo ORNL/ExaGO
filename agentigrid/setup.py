@@ -13,7 +13,7 @@ setup(
     description="LLM-driven iterative simulation and analysis tool for ExaGO",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Slaven Peles",
+    author="Samim Konjicija",
     python_requires=">=3.10",
     packages=find_packages(exclude=["tests"]),
     install_requires=[

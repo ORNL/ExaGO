@@ -32,11 +32,8 @@ Additionally, note that SCOPFLOW and SOPFLOW with HiOp solver use Ipopt to solve
 
 Detailed installation instructions are given at [INSTALL.md](./INSTALL.md) for information on acquiring, building and installing ExaGO.
 
-If you are a developer with access to the project, we also provide public binaries that are generated through our GitHub actions workflows documented in [README.md](.github/workflows/README.md), and with documentation about usage in the packages section of our repository. Check out a short (< 60s) demo of pulling down a version of ExaGO:
+If you are a developer with access to the project, we also provide public binaries that are generated through our GitHub actions workflows documented in [README.md](.github/workflows/README.md), and with documentation about usage in the packages section of our repository.
 
-[![asciicast](
-https://asciinema.org/a/KCi5TmUXc6zWDj7JYHzfSFxmw.png)](
-https://asciinema.org/a/KCi5TmUXc6zWDj7JYHzfSFxmw)
 
 ## Developer Guide
 
@@ -111,8 +108,8 @@ the guidelines are ambiguous or you have a particular question.
 ## Authors
 ExaGO<sup>TM</sup> was designed and implemented by Shrirang Abhyankar and has
 received significant contributions from Slaven Peles, Nicholson Koukpaizan,
-Maksudul Alam, Asher Mancinelli, Cameron Rutherford, Joshua Hambrick, Philip
-Fackler, Eve Tsybina, Bruce Palmer, Jaelyn Litzinger, William Perkins, Sayef
+Samim Konjicija, Maksudul Alam, Asher Mancinelli, Cameron Rutherford, Joshua Hambrick, Philip
+Fackler, Eve Tsybina, Shaked Regev, Bruce Palmer, Jaelyn Litzinger, William Perkins, Sayef
 Azad Sakin, Joseph Macam, and Ryan Danehy.
 
 ## Acknowledgement

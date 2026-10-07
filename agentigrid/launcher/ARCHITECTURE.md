@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** 2026-03-27
-**Authors:** Samim / Claude (collaborative design)
+**Authors:** Samim Konjicija / Claude (collaborative design)
 
 ---
 
