@@ -189,9 +189,11 @@ int main(int argc, char **argv) {
     ierr = MatGetRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
     CHKERRQ(ierr);
     for (int j = 0; j < nvals; j++, ref_count++) {
-      ref_rows[ref_count] = opflow->nconeq + i;
-      ref_cols[ref_count] = cols[j];
-      ref_vals[ref_count] = vals[j];
+      if (ref_count < nnz) { // Excess entries counted, reported below
+        ref_rows[ref_count] = opflow->nconeq + i;
+        ref_cols[ref_count] = cols[j];
+        ref_vals[ref_count] = vals[j];
+      }
     }
     ierr = MatRestoreRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
     CHKERRQ(ierr);
