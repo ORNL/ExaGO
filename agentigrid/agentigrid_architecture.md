@@ -298,7 +298,7 @@ Session best (feasible): $29,924.90  [iter 5, variant A]
 ```
 When no feasible variant has been found yet (first explore), this line is omitted. The session_best includes non-selected variants, so the LLM can detect regression even when selected iterations show higher costs.
 
-**PFLOW "Reading Variant Results" paragraph:** Added to the PFLOW system prompt (both concurrent and sequential) via `_PFLOW_VARIANT_READING_GUIDANCE`. Contains three bullets: (1) identical cost → skipped command diagnosis, (2) regression detection via Session best, (3) session best as primary cost reference not journal selected-iteration costs. Located at `agentigrid/prompts/system_prompt.py` lines 354–367.
+**PFLOW "Reading Variant Results" paragraph:** Added to the PFLOW system prompt (both concurrent and sequential) via `_PFLOW_VARIANT_READING_GUIDANCE`. Contains three bullets: (1) identical cost → skipped command diagnosis, (2) regression detection via Session best, (3) session best as primary cost reference not journal selected-iteration costs. Located at `agentigrid/prompts/exago/system_prompt.py` lines 354–367.
 
 **Section G — Network Metadata (static, computed once):** Structural facts about the base case that constrain which actions can have an effect. Computed once at session start by `network_metadata(MATNetwork)` and injected into the system prompt:
 
@@ -495,7 +495,7 @@ Each explore+select cycle costs **one iteration** against `max_iterations`, but 
 | `_handle_explore()` | `agentigrid/engine/agent_loop.py` | Parses variant command lists, applies each to a deep copy of the base/current network, runs all simulations concurrently via `run_parallel()`, computes Pareto front, stores results in `_explore_cache`. |
 | `_handle_select()` | `agentigrid/engine/agent_loop.py` | Validates selection against cache, updates `_current_network` to selected variant's network, creates journal entry with `explored_variants` metadata, clears cache. |
 | `SimulationExecutor.run_parallel()` | `agentigrid/engine/executor.py` | Thin ThreadPoolExecutor wrapper that runs N simulations concurrently. Each simulation is an independent subprocess. |
-| System prompt | `agentigrid/prompts/system_prompt.py` | Dynamic action schema (5 actions for concurrent PFLOW vs 3 for standard). `explore` is action #1 (primary) when concurrent mode is on. Search heuristics are rewritten to recommend parallel search patterns. |
+| System prompt | `agentigrid/prompts/exago/system_prompt.py` | Dynamic action schema (5 actions for concurrent PFLOW vs 3 for standard). `explore` is action #1 (primary) when concurrent mode is on. Search heuristics are rewritten to recommend parallel search patterns. |
 
 #### Search Strategy
 

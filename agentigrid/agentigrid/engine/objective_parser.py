@@ -31,9 +31,9 @@ def build_objective_extraction_prompt(
         Tuple of (system_prompt, user_prompt).
     """
     system = (
-        "You are analyzing a power grid optimization request to identify "
-        "what objectives should be tracked. Extract structured objectives "
-        "from the text. Respond ONLY with a JSON object, no other text."
+        "You are reading a power grid study request to find what it explicitly "
+        "asks to optimize or keep within a limit. Extract only those, as "
+        "structured objectives. Respond ONLY with a JSON object, no other text."
     )
 
     user = (
@@ -53,12 +53,14 @@ def build_objective_extraction_prompt(
         f'  ]\n'
         f'}}\n\n'
         f"Rules:\n"
-        f"- Use metric names from the available list when they match the intent.\n"
-        f"- Every goal has at least one primary objective.\n"
-        f"- Constraints mentioned (like 'keep voltages above 0.95') become constraint-type objectives.\n"
+        f"- Use metric names from the available list when they match the text.\n"
+        f"- Return only objectives the text states. Do not infer or add any.\n"
+        f"- A limit the text states (like 'keep voltages above 0.95') becomes a constraint-type objective.\n"
+        f"- Numbers that describe the change or test being studied (like 'connect a 50 MW load' or "
+        f"'a 100 MW generator') are not objectives or limits.\n"
+        f"- If the text only asks for a test, screen, list or report, return {{\"objectives\": []}}.\n"
         f"- If the text mentions monitoring something without optimizing it, use priority='watch'.\n"
         f"- For simple single-objective goals (e.g. 'minimize cost'), return just one objective.\n"
-        f"- Only return objectives that are clearly stated or strongly implied.\n"
     )
 
     return system, user

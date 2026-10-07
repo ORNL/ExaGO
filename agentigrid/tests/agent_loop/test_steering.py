@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agentigrid.engine.agent_loop import AgentLoopController
-from agentigrid.prompts.user_prompt import build_user_prompt
+from agentigrid.prompts.exago.user_prompt import build_user_prompt
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

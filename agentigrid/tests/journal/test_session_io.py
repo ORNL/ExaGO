@@ -88,6 +88,18 @@ class TestSessionSaveLoad:
         assert loaded["journal_entries"][2].objective_value == 48000
         assert len(loaded["steering_history"]) == 1
 
+    def test_roundtrip_keeps_complete_findings(self, tmp_path, sample_journal):
+        findings = {"summary": "VERDICT: load@8 passes N-1", "details": "no failures"}
+        sample_journal.add_complete(iteration=3, summary=findings["summary"], findings=findings)
+        save_dir = tmp_path / "test_session"
+        save_session(
+            save_dir=save_dir, goal="g", application="opflow", base_case_path=Path("/data/case.m"),
+            config_path=None, journal=sample_journal, steering_history=[],
+            active_steering_directives=[], current_network=None, total_prompt_tokens=0,
+            total_completion_tokens=0, last_iteration=3,
+        )
+        assert load_session(save_dir)["journal_entries"][-1].findings == findings
+
     def test_load_restores_objective_registry(self, tmp_path, sample_journal):
         save_dir = tmp_path / "test_session"
         save_session(

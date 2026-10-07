@@ -545,7 +545,7 @@ class TestConfigConcurrentPflow:
 class TestSystemPromptConcurrent:
 
     def test_pflow_concurrent_includes_explore(self):
-        from agentigrid.prompts.system_prompt import build_system_prompt
+        from agentigrid.prompts.exago.system_prompt import build_system_prompt
         prompt = build_system_prompt(
             command_schema="test",
             network_summary="test",
@@ -557,7 +557,7 @@ class TestSystemPromptConcurrent:
         assert "Pareto" in prompt or "pareto" in prompt.lower()
 
     def test_pflow_non_concurrent_no_explore(self):
-        from agentigrid.prompts.system_prompt import build_system_prompt
+        from agentigrid.prompts.exago.system_prompt import build_system_prompt
         prompt = build_system_prompt(
             command_schema="test",
             network_summary="test",
@@ -568,7 +568,7 @@ class TestSystemPromptConcurrent:
         assert '"select"' not in prompt
 
     def test_opflow_concurrent_no_explore(self):
-        from agentigrid.prompts.system_prompt import build_system_prompt
+        from agentigrid.prompts.exago.system_prompt import build_system_prompt
         prompt = build_system_prompt(
             command_schema="test",
             network_summary="test",
@@ -585,7 +585,7 @@ class TestSystemPromptConcurrent:
 class TestUserPromptExploreText:
 
     def test_explore_text_replaces_results(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         result = build_user_prompt(
             goal="test goal",
             journal_text=None,
@@ -596,7 +596,7 @@ class TestUserPromptExploreText:
         assert "Latest Results" not in result
 
     def test_no_explore_text_shows_results(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         result = build_user_prompt(
             goal="test goal",
             journal_text=None,
@@ -606,7 +606,7 @@ class TestUserPromptExploreText:
         assert "Neighborhood Exploration" not in result
 
     def test_explore_text_none_shows_results(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         result = build_user_prompt(
             goal="test goal",
             journal_text=None,
@@ -955,7 +955,7 @@ class TestSystemPromptConcurrentMode:
     """Extended tests for the system prompt with concurrent_pflow mode."""
 
     def test_pflow_concurrent_has_explore_and_select(self):
-        from agentigrid.prompts.system_prompt import build_system_prompt
+        from agentigrid.prompts.exago.system_prompt import build_system_prompt
         prompt = build_system_prompt(
             command_schema="test", network_summary="net",
             application="pflow", concurrent_pflow=True,
@@ -966,7 +966,7 @@ class TestSystemPromptConcurrentMode:
         assert "neighborhood" in prompt.lower()
 
     def test_pflow_concurrent_has_pareto_star(self):
-        from agentigrid.prompts.system_prompt import build_system_prompt
+        from agentigrid.prompts.exago.system_prompt import build_system_prompt
         prompt = build_system_prompt(
             command_schema="test", network_summary="net",
             application="pflow", concurrent_pflow=True,
@@ -974,7 +974,7 @@ class TestSystemPromptConcurrentMode:
         assert "★" in prompt or "Pareto" in prompt
 
     def test_pflow_non_concurrent_no_explore(self):
-        from agentigrid.prompts.system_prompt import build_system_prompt
+        from agentigrid.prompts.exago.system_prompt import build_system_prompt
         prompt = build_system_prompt(
             command_schema="test", network_summary="net",
             application="pflow", concurrent_pflow=False,
@@ -983,7 +983,7 @@ class TestSystemPromptConcurrentMode:
         assert '"select"' not in prompt
 
     def test_opflow_concurrent_no_explore_section(self):
-        from agentigrid.prompts.system_prompt import build_system_prompt
+        from agentigrid.prompts.exago.system_prompt import build_system_prompt
         prompt = build_system_prompt(
             command_schema="test", network_summary="net",
             application="opflow", concurrent_pflow=True,
