@@ -61,6 +61,28 @@ Beyond the default cost metric and standard V-band/loading feasibility, a sweep 
 - **`metric: "max_delta_v"`** — ranks buses by the worst *system-wide* voltage step `max_b |V_candidate[b] − V_base[b]|` caused by switching in a load block (`search.switched_load_mw`) at the candidate bus. A power-quality flag; the largest step need not be at the switched bus. Requires (and triggers) a one-time base-case solve for the reference voltages.
 - **`feasibility_predicate: "reactive_adequacy"`** — replaces standard feasibility with a reactive-headroom test: a feasible OPF must exist with the added unit forced to `(P = Pmax, Q = Qmax)` (the sweep pins `Qmin = Qmax`). Returns the limiting quantity when it fails.
 
+## Transient Stability (GridKit)
+
+`--tool gridkit` runs transient-stability studies with GridKit's `DynamicSimulation`
+on a GridKit case (`*.case.json`). The LLM turns the goal into one fault screen
+(one bus short circuit to ground per run: given buses, every bus, or a POI and the
+buses one branch away); AgentiGrid adds the fault devices to a copy of the case,
+runs GridKit, and judges each run with PJM checks (angle stability, voltage recovery
+0.70 pu at 2.5 s, 3% damping, final voltage). PJM tests that need elements GridKit
+does not have (line/generator trips, reclosing, relays, load ride-through) are
+listed as SKIPPED, never passed.
+
+```bash
+agentigrid --tool gridkit --config configs/local_config.yaml \
+  data/gridkit/examples/IEEE39.case.json \
+  "Assume a short circuit fault at each bus of the system, tell me if the system can survive without blackout."
+```
+
+Link the GridKit binaries and cases first (see [applications/gridkit/README.md](applications/gridkit/README.md)
+and [data/gridkit/README.md](data/gridkit/README.md)). Sessions are written to
+`workdir/gridkit/session_<time>/` (element map, case copies, one folder per fault,
+`journal.json`); logs to `logs/gridkit/`.
+
 ## Search Modes
 
 - **Boundary finding** — "Find the maximum load scaling factor before infeasibility"
@@ -409,6 +431,8 @@ pip install -e .
 ```
 
 Copy or symlink ExaGO binaries into `applications/exago/` (see [applications/exago/README.md](applications/exago/README.md)) and place your own network data files in `data/exago/datafiles/`; ExaGO's example data is linked into `data/exago/examples/` (see [data/exago/README.md](data/exago/README.md)).
+
+For transient studies, link GridKit's binaries into `applications/gridkit/` and its example cases into `data/gridkit/examples/` (see the READMEs in those folders).
 
 ## Configuration
 

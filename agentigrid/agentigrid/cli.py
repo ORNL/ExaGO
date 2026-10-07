@@ -202,6 +202,13 @@ def build_parser() -> argparse.ArgumentParser:
              "--set report.network_summary_max_generators=40 (repeatable)",
     )
     parser.add_argument(
+        "--tool",
+        choices=["exago", "gridkit"],
+        default="exago",
+        help="Simulation tool: exago (steady state, .m case) or gridkit "
+             "(transient stability, .case.json case). Default: exago",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -393,6 +400,45 @@ def run_search(cfg: AppConfig, goal: str, quiet: bool = False) -> None:
     controller.run(cfg.search.base_case, goal)
 
 
+def run_gridkit(cfg: AppConfig, args: argparse.Namespace) -> None:
+    """Run a GridKit transient-stability study (``--tool gridkit``)."""
+    from agentigrid.gridkit_engine.agent_loop import GridkitAgentLoop
+    from agentigrid.gridkit_engine.settings import GridkitSettings
+
+    if args.resume:
+        raise SystemExit("--resume is not available with --tool gridkit yet")
+    settings = GridkitSettings.from_config(cfg)
+    setup_logging(settings.logs_dir, verbose=cfg.output.verbose)
+    case_file = Path(args.base_case) if args.base_case else None
+    if case_file is None or args.goal is None:
+        raise SystemExit("base_case (GridKit .case.json) and goal are required")
+    if not case_file.exists():
+        logger.error("Case file does not exist: %s", case_file)
+        sys.exit(1)
+    if args.dry_run:
+        print(f"GridKit settings: {settings}")
+        return
+    quiet = getattr(args, "quiet", False) or False
+    if not quiet:
+        print("=" * 60)
+        print("  AgentiGrid — transient stability with GridKit")
+        print("=" * 60)
+        print(f"  Backend:        {cfg.llm.backend} ({cfg.llm.model})")
+        print(f"  Case:           {case_file}")
+        print(f"  Goal:           {args.goal}")
+        print(f"  Max iterations: {settings.max_iterations}")
+        print("=" * 60)
+    from agentigrid.gridkit_parsers.case_parser import CaseFileError
+
+    try:
+        session = GridkitAgentLoop(cfg, settings=settings, quiet=quiet).run(case_file, args.goal)
+    except (FileNotFoundError, CaseFileError) as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
+    if session.termination_reason in ("llm_error", "base_case_failed", "parse_failures"):
+        sys.exit(1)
+
+
 def run_regenerate_report(argv: list[str] | None = None) -> None:
     """Offline `regenerate-report` subcommand: rebuild analysis+PDF from a journal.
 
@@ -458,6 +504,10 @@ def main(argv: list[str] | None = None) -> None:
 
     overrides = _cli_overrides(args)
     cfg = load_config(Path(args.config), cli_overrides=overrides)
+
+    if args.tool == "gridkit":
+        run_gridkit(cfg, args)
+        return
 
     # Set up logging
     verbose = cfg.output.verbose
