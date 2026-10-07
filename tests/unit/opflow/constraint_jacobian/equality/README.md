@@ -35,7 +35,12 @@ Dimensions of the matrix are:
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
-A 5-bus system **CECJ-unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
+A 5-bus system **CECJ_unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
+
+### Test files
+
+- `CECJ_unittestx<N>.m`: N copies of the 5-bus system (N = 1, 3, 600). Regenerate with `python3 gen_network.py <N>`.
+- `cecj.csv`: reference Jacobian for N=1, written by the MATLAB script `gen_cecj.m`. The first line holds the numbers of rows and columns, followed by a 0, and each following line one nonzero as a 1-based `row,column,value` triple. The test replicates it for N copies (see [Scaling](#scaling)).
 
 ### Parameters values in .m file
 
@@ -70,10 +75,10 @@ In general, solution vector has following elements per bus:
 3. Generator MW (if generator bus)
 4. Generator MVar (if generator bus)
 
-For the 5-bus system **CECJ-unittestx1.m**, solution vector is:
+For the 5-bus system **CECJ_unittestx1.m**, solution vector is:
 <table>
 <tr>
-<td>0</td> <td>2</td> <td>0</td> <td>2</td> <td>30</td> <td>2</td> <td>1.6</td> <td>-2.2</td> <td>0</td> <td>2</td> <td>0</td> <td>2</td> 
+<td>0</td> <td>2</td> <td>0</td> <td>2</td> <td>30*PI/180.0</td> <td>2</td> <td>1.6</td> <td>-2.2</td> <td>0</td> <td>2</td> <td>0</td> <td>2</td> 
 </tr>
 </table>
 
@@ -132,10 +137,10 @@ With the parameters of the example network the matrix is:
 <td>Q1</td> <td>-1.6</td> <td>-2.0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>P2</td> <td>-0.8</td> <td>-0.8</td> <td>0.8</td> <td>2.8</td> <td>0.8</td> <td>-0.2</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>-0.8</td> <td>0</td> <td>0</td>
+<td>P2</td> <td>-0.8</td> <td>-0.8</td> <td>0.8</td> <td>1.81</td> <td>0.8</td> <td>-0.2</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>-0.8</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>Q2</td> <td>1.6</td> <td>-0.4</td> <td>-3.6</td> <td>-3.8</td> <td>0.4</td> <td>0.4</td> <td>0</td> <td>0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td>
+<td>Q2</td> <td>1.6</td> <td>-0.4</td> <td>-3.6</td> <td>-3.998</td> <td>0.4</td> <td>0.4</td> <td>0</td> <td>0</td> <td>1.6</td> <td>-0.4</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
 <td>P3</td> <td>0</td> <td>0</td> <td>-0.8</td> <td>0.2</td> <td>0.8</td> <td>1.8</td> <td>-1</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
@@ -170,7 +175,7 @@ To scale the solution vector, following needs to be done:
 For N=3 the solution vector is:
 <table>
 <tr>
-<td>0   2   0   2   30   2   1.6   -2.2   0   2   0   2</td> <td>0   2   30   2   1.6   -2.2   0   2   0   2</td><td>0   2   30   2   1.6   -2.2   0   2   0   2</td>
+<td>0   2   0   2   30*PI/180.0   2   1.6   -2.2   0   2   0   2</td> <td>0   2   30*PI/180.0   2   1.6   -2.2   0   2   0   2</td><td>0   2   30*PI/180.0   2   1.6   -2.2   0   2   0   2</td>
 </tr>
 </table>
 
@@ -181,3 +186,7 @@ To build a Jacobian matrix when the network is being multiplied the process for 
 ![img1.png](Jacobian.jpg)
 
 ### Jacobian for N=3
+
+The network with N copies has 4N+1 buses and N generators, because each copy after the first starts at the last bus of the previous one. The Jacobian therefore has 8N+2 rows and 10N+2 columns, 26 x 32 for N=3.
+
+It is built by placing the N=1 matrix above N times, shifting copy n (n = 0, ..., N-1) by 8n rows and 10n columns. The first two rows and columns of copy n then fall on the last two of copy n-1, and the entries of that shared bus are added.
