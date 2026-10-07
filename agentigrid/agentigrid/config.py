@@ -80,6 +80,8 @@ DEFAULTS: dict[str, Any] = {
         "load_factor": None,
         "relief_tap_steps": [0.90, 0.95, 1.00, 1.05, 1.10],
         "relief_curtail_tol_mw": 1.0,
+        "relief_shed_max_fraction": 0.10,
+        "relief_shed_max_depth": 3,
         "relief_max_solves": 2000,
         "reserve_max_solves": 4000,
     },
@@ -182,6 +184,8 @@ class SearchConfig:
     # Contingency relief (C.7) — bounds for the per-failure relief-measure search
     relief_tap_steps: list = field(default_factory=lambda: [0.90, 0.95, 1.00, 1.05, 1.10])  # transformer tap ratios tried
     relief_curtail_tol_mw: float = 1.0  # Load-curtailment bisection stops below this MW gap
+    relief_shed_max_fraction: float = 0.10  # Max share of each bus's load that relief may shed
+    relief_shed_max_depth: int = 3  # Load shedding grows tier by tier around the outage up to this depth
     relief_max_solves: int = 2000  # Total relief solves budget across all failed contingencies
     # Reserve minimization (C.8-revised Path A) — solve budget for the greedy de-commitment search
     reserve_max_solves: int = 4000  # Total OPF solves budget across the greedy reserve-minimization pass

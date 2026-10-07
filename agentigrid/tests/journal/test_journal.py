@@ -540,7 +540,7 @@ class TestSessionBest:
 class TestSessionBestInPrompt:
 
     def test_format_session_best_contains_cost(self):
-        from agentigrid.prompts.user_prompt import _format_session_best
+        from agentigrid.prompts.exago.user_prompt import _format_session_best
         sb = {"cost": 29924.90, "iteration": 5, "variant_label": "A", "commands": []}
         text = _format_session_best(sb)
         assert "29,924.90" in text
@@ -548,7 +548,7 @@ class TestSessionBestInPrompt:
         assert "variant A" in text
 
     def test_session_best_injected_in_user_prompt(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         sb = {"cost": 12345.67, "iteration": 3, "variant_label": "B",
               "commands": [{"action": "scale_all_loads", "factor": 1.1}]}
         prompt = build_user_prompt(
@@ -561,7 +561,7 @@ class TestSessionBestInPrompt:
         assert "Session best" in prompt
 
     def test_no_session_best_section_when_absent(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         prompt = build_user_prompt(
             goal="test",
             journal_text=None,
@@ -748,6 +748,17 @@ class TestAddComplete:
         assert entry.objective_value is None
         assert "completed" in entry.description.lower()
 
+    def test_add_complete_keeps_findings(self, tmp_path):
+        """The full answer (not just the summary line) is kept and exported."""
+        j = SearchJournal()
+        findings = {"summary": "VERDICT: load@8 does NOT pass N-1", "details": "branch 8-7 out | did not converge"}
+        entry = j.add_complete(iteration=2, summary=findings["summary"], findings=findings)
+        assert entry.findings == findings
+        csv_path = tmp_path / "journal.csv"
+        j.export_csv(csv_path)
+        row = list(csv.DictReader(csv_path.open()))[0]
+        assert json.loads(row["findings"]) == findings
+
     def test_add_complete_appears_in_entries(self):
         j = SearchJournal()
         j.add_entry(_make_entry(0, obj=1000.0))
@@ -886,7 +897,7 @@ class TestIterationBudgetInPrompt:
     """Tests for iteration counter and budget warning in build_user_prompt."""
 
     def test_iteration_counter_with_budget(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         prompt = build_user_prompt(
             goal="test",
             journal_text=None,
@@ -898,7 +909,7 @@ class TestIterationBudgetInPrompt:
         assert "remaining: 15" in prompt
 
     def test_iteration_counter_no_budget(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         prompt = build_user_prompt(
             goal="test",
             journal_text=None,
@@ -910,7 +921,7 @@ class TestIterationBudgetInPrompt:
         assert "no budget limit" in prompt
 
     def test_budget_warning_when_remaining_2(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         prompt = build_user_prompt(
             goal="test",
             journal_text=None,
@@ -922,7 +933,7 @@ class TestIterationBudgetInPrompt:
         assert "Prioritize consolidation" in prompt
 
     def test_budget_warning_absent_when_remaining_10(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         prompt = build_user_prompt(
             goal="test",
             journal_text=None,
@@ -933,7 +944,7 @@ class TestIterationBudgetInPrompt:
         assert "Prioritize consolidation" not in prompt
 
     def test_budget_warning_absent_when_no_budget(self):
-        from agentigrid.prompts.user_prompt import build_user_prompt
+        from agentigrid.prompts.exago.user_prompt import build_user_prompt
         prompt = build_user_prompt(
             goal="test",
             journal_text=None,
@@ -970,32 +981,32 @@ class TestFormatBenchmarkForPrompt:
     }
 
     def test_real_benchmark_contains_bus189(self):
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt
         text = format_benchmark_for_prompt(self.REAL_BENCHMARK)
         assert "189" in text
 
     def test_real_benchmark_contains_delta(self):
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt
         text = format_benchmark_for_prompt(self.REAL_BENCHMARK)
         assert "352" in text
 
     def test_real_benchmark_over_dispatched_note(self):
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt
         text = format_benchmark_for_prompt(self.REAL_BENCHMARK)
         assert "over-dispatched" in text
 
     def test_not_converged_returns_unavailable(self):
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt
         text = format_benchmark_for_prompt({"opflow_converged": False})
         assert text == "Benchmark unavailable."
 
     def test_none_returns_unavailable(self):
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt
         text = format_benchmark_for_prompt(None)
         assert text == "Benchmark unavailable."
 
     def test_negligible_cost_gap_note(self):
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt
         bench = {
             "opflow_converged": True,
             "opflow_objective": 10000.0,
@@ -1008,7 +1019,7 @@ class TestFormatBenchmarkForPrompt:
         assert "negligible" in text
 
     def test_large_gap_no_negligible_note(self):
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt
         bench = {
             "opflow_converged": True,
             "opflow_objective": 10000.0,

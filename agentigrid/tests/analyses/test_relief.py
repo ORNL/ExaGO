@@ -2,8 +2,13 @@
 
 Covers:
 - priority order respected (first resolving measure returned; earlier ones logged failed)
-- generator_redispatch pass-through (no command applied, never resolves)
-- load_curtailment backstop (always resolves, reports minimum MW within tolerance)
+- generator_redispatch is not a measure (committed units already redispatch in OPF)
+- line_switching switches nearby lines out, and open ones in (never the outaged ones)
+- load_curtailment sheds tier by tier around the outage, at most
+  relief_shed_max_fraction of each bus, bisecting the share in the first tier that works;
+  the load the mutation added is never shed
+- relief guard: relief_measures is dropped unless the goal (or a steering directive)
+  asks for relief; a dropped request is served from the plain screen's cache
 - determinism (identical inputs → identical ReliefResult)
 - handler: an N-2 run with seeded failures attaches per-failure relief entries to the
   view and journal, with no LLM/backend call inside the screen
@@ -22,6 +27,7 @@ from agentigrid.config import (
 )
 from agentigrid.engine import contingency as C
 from agentigrid.engine import relief
+from agentigrid.engine import topology as T
 from agentigrid.engine.agent_loop import AgentLoopController
 from agentigrid.engine.executor import SimulationResult
 from agentigrid.parsers.matpower_parser import parse_matpower
@@ -34,6 +40,8 @@ _has_118 = IEEE118.exists()
 _CFG = SimpleNamespace(
     relief_tap_steps=[0.90, 0.95, 1.00, 1.05, 1.10],
     relief_curtail_tol_mw=1.0,
+    relief_shed_max_fraction=0.10,
+    relief_shed_max_depth=3,
     relief_max_solves=2000,
 )
 
@@ -59,8 +67,11 @@ def net118():
 
 @pytest.fixture
 def branch_contingency(net118):
-    # A single branch outage at a neighbor of bus 77.
-    return C.enumerate_contingencies(net118, 77, 3, order=1, components=("branch",))[0]
+    # A single branch outage (47-69) in the substations around a load at bus 77.
+    affected = C.find_affected_elements(net118, C.ChangedElement(kind="load", bus=77), 3)
+    pool = C.outages_from(affected, ("branch",))
+    ctgs = C.enumerate_contingencies(pool, order=1)
+    return next(c for c in ctgs if c.label() == "branch 47-69 out")
 
 
 # ---------------------------------------------------------------------------
@@ -80,63 +91,142 @@ class TestFindRelief:
 
         res = relief.find_relief(
             net118, branch_contingency,
-            ["transformer_ratio", "generator_redispatch", "line_switching"],
+            ["transformer_ratio", "line_switching"],
             0.9, 1.1, solve_fn, _CFG,
         )
         assert res.resolved is True
         assert res.action.measure == "line_switching"
+        assert res.action.detail.startswith("switch out branch")
         # Earlier measures recorded as attempted-and-failed, in order.
-        assert res.attempts[0] == ("transformer_ratio", False)
-        assert res.attempts[1] == ("generator_redispatch", False)
-        assert res.attempts[-1] == ("line_switching", True)
+        assert res.attempts == [("transformer_ratio", False), ("line_switching", True)]
 
-    def test_generator_redispatch_passthrough_never_resolves(self, net118, branch_contingency):
-        calls = {"n": 0}
+    def test_generator_redispatch_is_not_a_measure(self):
+        assert "generator_redispatch" not in relief.MEASURE_ORDER
 
-        def solve_fn(net):
-            calls["n"] += 1
-            return _opflow(feasible=True)  # would resolve anything that actually solves
-
-        res = relief.find_relief(
-            net118, branch_contingency, ["generator_redispatch"],
-            0.9, 1.1, solve_fn, _CFG,
-        )
-        assert res.resolved is False
-        assert res.attempts == [("generator_redispatch", False)]
-        # Pass-through applies no command → performs no solve.
-        assert calls["n"] == 0
-
-    def test_load_curtailment_backstop_resolves_min_mw(self, net118, branch_contingency):
+    def test_line_switching_switches_open_line_in(self, net118, branch_contingency):
+        """An open line at the contingency's buses is switched back in."""
+        import copy
+        net = copy.deepcopy(net118)
         focus = relief._focus_buses(branch_contingency)
-        base = sum(b.Pd for b in net118.buses if b.bus_i in focus and (b.Pd or b.Qd))
-        assert base > 0, "need load at focus buses for this test"
-        thresh = 0.4 * base
+        outaged = relief._outaged_branch_keys(branch_contingency)
+        spare, key = next(
+            (br, k) for br, k in relief._incident_branches_sorted(net, focus) if k not in outaged
+        )
+        spare.status = 0  # a normally-open line near the outage
+
+        def solve_fn(n):
+            br = next(b for b in n.branches if (b.fbus, b.tbus) == (spare.fbus, spare.tbus))
+            return _opflow(feasible=br.status == 1)
+
+        res = relief.find_relief(net, branch_contingency, ["line_switching"], 0.9, 1.1, solve_fn, _CFG)
+        assert res.resolved is True
+        assert res.action.detail == f"switch in branch {spare.fbus}-{spare.tbus}"
+        assert res.action.commands[0]["status"] == 1
+
+    def test_line_switching_never_switches_outaged_line_back_in(self, net118, branch_contingency):
+        outaged = relief._outaged_branch_keys(branch_contingency)
+        seen = []
+
+        def solve_fn(n):
+            for b in n.branches:
+                key = (min(b.fbus, b.tbus), max(b.fbus, b.tbus), 0)
+                if key in outaged:
+                    seen.append(b.status)
+            return _opflow(feasible=False)
+
+        relief.find_relief(net118, branch_contingency, ["line_switching"], 0.9, 1.1, solve_fn, _CFG)
+        assert seen and all(st == 0 for st in seen)
+
+    def _tiers(self, net, contingency):
+        """Load buses per tier around the contingency, as the shedding search sees them."""
+        scope = T.substations_within(net, sorted(relief._focus_buses(contingency)), 3)
+        tiers = [[] for _ in range(4)]
+        for b in sorted(net.buses, key=lambda b: b.bus_i):
+            if b.Pd > 0 and b.bus_i in scope.tier_of:
+                tiers[scope.tier_of[b.bus_i]].append(b.bus_i)
+        return tiers
+
+    @staticmethod
+    def _shed(base_net, net, buses):
+        base = {b.bus_i: b.Pd for b in base_net.buses}
+        return sum(base[b.bus_i] - b.Pd for b in net.buses if b.bus_i in buses)
+
+    def test_load_shedding_resolves_in_tier0(self, net118, branch_contingency):
+        tiers = self._tiers(net118, branch_contingency)
+        assert tiers[0], "need load in tier 0 for this test"
+        tier0_pd = sum(b.Pd for b in net118.buses if b.bus_i in tiers[0])
+        thresh = 0.04 * tier0_pd  # 4% at tier 0 is enough
 
         def solve_fn(net):
-            curtailed = base - sum(b.Pd for b in net.buses if b.bus_i in focus)
-            return _opflow(feasible=curtailed >= thresh - 1e-9)
+            return _opflow(feasible=self._shed(net118, net, tiers[0]) >= thresh - 1e-9)
 
-        res = relief.find_relief(
-            net118, branch_contingency, ["load_curtailment"],
-            0.9, 1.1, solve_fn, _CFG,
-        )
+        res = relief.find_relief(net118, branch_contingency, ["load_curtailment"], 0.9, 1.1, solve_fn, _CFG)
         assert res.resolved is True
         assert res.action.measure == "load_curtailment"
-        # Minimum feasible curtailment ≈ threshold, within the bisection tolerance.
-        curtailed_mw = base - sum(c["Pd"] for c in res.action.commands)
-        assert abs(curtailed_mw - thresh) <= 2.0
+        assert {c["bus"] for c in res.action.commands} == set(tiers[0])
+        shed = sum(
+            next(b.Pd for b in net118.buses if b.bus_i == c["bus"]) - c["Pd"]
+            for c in res.action.commands
+        )
+        assert abs(shed - thresh) <= 2.0
+        assert "tier 0" in res.action.detail and "tier 1" not in res.action.detail
 
-    def test_load_curtailment_always_resolves_at_full(self, net118, branch_contingency):
+    def test_load_shedding_moves_to_next_tier(self, net118, branch_contingency):
+        """10% at tier 0 is not enough, so tier 0 stays at 10% and tier 1 is added."""
+        tiers = self._tiers(net118, branch_contingency)
+        assert tiers[0] and tiers[1]
+        tier0_pd = sum(b.Pd for b in net118.buses if b.bus_i in tiers[0])
+        tier1_pd = sum(b.Pd for b in net118.buses if b.bus_i in tiers[1])
+        need = 0.10 * tier0_pd + 0.05 * tier1_pd
+
         def solve_fn(net):
-            # Feasible only when ALL local load removed (f == 1).
-            total = sum(b.Pd for b in net.buses if b.bus_i in relief._focus_buses(branch_contingency))
-            return _opflow(feasible=total <= 1e-6)
+            return _opflow(feasible=self._shed(net118, net, tiers[0] + tiers[1]) >= need - 1e-9)
+
+        res = relief.find_relief(net118, branch_contingency, ["load_curtailment"], 0.9, 1.1, solve_fn, _CFG)
+        assert res.resolved is True
+        pd = {b.bus_i: b.Pd for b in net118.buses}
+        by_bus = {c["bus"]: c["Pd"] for c in res.action.commands}
+        assert set(by_bus) == set(tiers[0] + tiers[1])
+        for b in tiers[0]:
+            assert by_bus[b] == pytest.approx(0.9 * pd[b])
+        for b in tiers[1]:
+            assert 0.9 * pd[b] <= by_bus[b] < pd[b]
+        assert "tier 1" in res.action.detail
+
+    def test_load_shedding_never_exceeds_cap(self, net118, branch_contingency):
+        """Unresolved when 10% at every tier is not enough; no bus is ever shed more."""
+        pd = {b.bus_i: b.Pd for b in net118.buses}
+        worst = {"share": 0.0}
+
+        def solve_fn(net):
+            for b in net.buses:
+                if pd[b.bus_i] > 0:
+                    worst["share"] = max(worst["share"], 1 - b.Pd / pd[b.bus_i])
+            return _opflow(feasible=False)
+
+        res = relief.find_relief(net118, branch_contingency, ["load_curtailment"], 0.9, 1.1, solve_fn, _CFG)
+        assert res.resolved is False
+        assert worst["share"] <= 0.10 + 1e-12
+
+    def test_load_shedding_never_sheds_added_load(self, net118, branch_contingency):
+        """Protected (added) load stays; only the bus's other load counts toward the 10%."""
+        tiers = self._tiers(net118, branch_contingency)
+        bus = tiers[0][0]
+        pd = {b.bus_i: b.Pd for b in net118.buses}
+        protected = {bus: (0.5 * pd[bus], 0.0)}  # half of this bus's load is "new"
+        lowest = {"pd": pd[bus]}
+
+        def solve_fn(net):
+            lowest["pd"] = min(lowest["pd"], next(b.Pd for b in net.buses if b.bus_i == bus))
+            return _opflow(feasible=False)
 
         res = relief.find_relief(
-            net118, branch_contingency, ["load_curtailment"],
-            0.9, 1.1, solve_fn, _CFG,
+            net118, branch_contingency, ["load_curtailment"], 0.9, 1.1, solve_fn, _CFG,
+            protected_load=protected,
         )
-        assert res.resolved is True
+        assert res.resolved is False
+        # At most 10% of the unprotected half is shed: Pd never drops below 0.95 * Pd.
+        assert lowest["pd"] == pytest.approx(0.5 * pd[bus] + 0.9 * 0.5 * pd[bus])
 
     def test_unresolved_when_nothing_helps(self, net118, branch_contingency):
         def solve_fn(net):
@@ -160,7 +250,7 @@ class TestFindRelief:
             n_oos = sum(1 for b in net.branches if b.status == 0)
             return _opflow(feasible=n_oos > n_outaged)
 
-        measures = ["transformer_ratio", "generator_redispatch", "line_switching"]
+        measures = ["transformer_ratio", "line_switching", "load_curtailment"]
         r1 = relief.find_relief(net118, branch_contingency, measures, 0.9, 1.1, solve_fn, _CFG)
         r2 = relief.find_relief(net118, branch_contingency, measures, 0.9, 1.1, solve_fn, _CFG)
         assert r1 == r2
@@ -226,13 +316,15 @@ class TestReliefHandler:
     def test_relief_entries_attached_for_failures(self, tmp_path, net118):
         controller, backend_mock = self._controller(tmp_path)
         data = {
-            "mode": "contingency", "target_bus": 77,
-            "neighbor_count": 1, "contingency_order": 2, "components": ["branch"],
+            "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
+            "substation_depth": 1, "contingency_order": 2, "components": ["branch"],
             "feasibility": {"Vmin": 0.9, "Vmax": 1.1},
             "relief_measures": ["line_switching", "load_curtailment"],
             "description": "N-2 + relief",
         }
-        n = len(C.enumerate_contingencies(net118, 77, 1, 2, ("branch",)))
+        affected = C.find_affected_elements(net118, C.ChangedElement(kind="load", bus=77), 1)
+        pool = C.outages_from(affected, ("branch",))
+        n = len(C.enumerate_contingencies(pool, 2))
         assert n >= 3  # need at least 2 failures + some passers
 
         state = {"i": 0}
@@ -271,18 +363,110 @@ class TestReliefHandler:
         with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(False)):
             kind, ok = controller._handle_contingency_sweep(1, {
-                "mode": "contingency", "target_bus": 77,
-                "neighbor_count": 1, "contingency_order": 1, "components": ["branch"],
+                "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
+                "substation_depth": 1, "contingency_order": 1, "components": ["branch"],
             })
         assert (kind, ok) == ("sweep", True)
         entry = controller._journal.entries[-1]
         assert all("relief" not in s for s in entry.explored_variants)
         assert "Relief for failed contingencies" not in controller._latest_results_text
 
+    def test_mutation_load_is_protected_in_handler(self, tmp_path, net118):
+        """End to end: relief never sheds the 50 MW the mutation adds at bus 77."""
+        controller, _ = self._controller(tmp_path)
+        base_pd77 = next(b.Pd for b in net118.buses if b.bus_i == 77)
+        state = {"i": 0}
+        lowest = {"pd": float("inf")}
+        real_solve = controller._executor.run
+
+        def fake_parse(sim, application="opflow", bus_limits=None):
+            state["i"] += 1
+            return _opflow(state["i"] == 1)  # reference passes, everything else fails
+
+        def fake_run(net, *a, **k):
+            lowest["pd"] = min(lowest["pd"], next(b.Pd for b in net.buses if b.bus_i == 77))
+            return real_solve(net, *a, **k)
+
+        controller._executor.run = fake_run
+        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+                   side_effect=fake_parse):
+            controller._handle_contingency_sweep(1, {
+                "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
+                "substation_depth": 1, "contingency_order": 1, "components": ["branch"],
+                "relief_measures": ["load_curtailment"],
+            })
+        assert lowest["pd"] != float("inf"), "relief solves ran"
+        assert lowest["pd"] >= 50.0 + 0.9 * base_pd77 - 1e-9
+
+    def test_relief_request_not_served_from_plain_screen_cache(self, tmp_path):
+        """A screen with relief_measures is a different study; it must not reuse the cache."""
+        controller, _ = self._controller(tmp_path)
+        base = {
+            "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
+            "substation_depth": 1, "contingency_order": 1, "components": ["branch"],
+        }
+        with_relief = dict(base, relief_measures=["line_switching"])
+        assert controller._sweep_cache_key(base) != controller._sweep_cache_key(with_relief)
+
+    _SCREEN = {
+        "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
+        "substation_depth": 1, "contingency_order": 1, "components": ["branch"],
+    }
+
+    def _sweep(self, controller, data):
+        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+                   return_value=_opflow(False)):
+            return controller._handle_sweep(1, dict(data))
+
+    def test_guard_drops_relief_when_goal_does_not_ask(self, tmp_path):
+        controller, _ = self._controller(tmp_path)
+        controller._current_goal = "Connect a 50 MW load to bus 77 and test N-1 contingencies."
+        kind, _ = self._sweep(controller, dict(self._SCREEN, relief_measures=["line_switching"]))
+        assert kind == "sweep"
+        entry = controller._journal.entries[-1]
+        assert all("relief" not in v for v in entry.explored_variants)
+        assert "relief_measures ignored" in controller._latest_results_text
+        assert "Relief for failed contingencies" not in controller._latest_results_text
+
+    def test_guard_keeps_relief_when_goal_asks(self, tmp_path):
+        controller, _ = self._controller(tmp_path)
+        controller._current_goal = "Connect a 50 MW load to bus 77, test N-1 and suggest relief measures."
+        self._sweep(controller, dict(self._SCREEN, relief_measures=["line_switching"]))
+        entry = controller._journal.entries[-1]
+        failed = [v for v in entry.explored_variants if not v["passed"]]
+        assert failed and all("relief" in v for v in failed)
+        assert "relief_measures ignored" not in controller._latest_results_text
+
+    def test_guard_keeps_relief_when_steering_asks(self, tmp_path):
+        controller, _ = self._controller(tmp_path)
+        controller._current_goal = "Connect a 50 MW load to bus 77 and test N-1 contingencies."
+        controller._active_steering_directives = [{"directive": "Also try relief measures."}]
+        self._sweep(controller, dict(self._SCREEN, relief_measures=["line_switching"]))
+        assert "relief_measures ignored" not in controller._latest_results_text
+
+    def test_guard_dropped_request_served_from_cache(self, tmp_path):
+        """Plain screen, then the same screen with unrequested relief: no new solves."""
+        controller, _ = self._controller(tmp_path)
+        controller._current_goal = "Connect a 50 MW load to bus 77 and test N-1 contingencies."
+        self._sweep(controller, self._SCREEN)
+        with patch.object(controller, "_handle_contingency_sweep") as screen:
+            self._sweep(controller, dict(self._SCREEN, relief_measures=["line_switching"]))
+        screen.assert_not_called()
+        assert "relief_measures ignored" in controller._latest_results_text
+
+    def test_generator_redispatch_rejected(self, tmp_path):
+        controller, _ = self._controller(tmp_path)
+        kind, ok = controller._handle_contingency_sweep(1, {
+            "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
+            "relief_measures": ["generator_redispatch", "load_curtailment"],
+        })
+        assert kind == "error"
+        assert "generator_redispatch" in (controller._error_feedback or "")
+
     def test_invalid_relief_measure_rejected(self, tmp_path):
         controller, _ = self._controller(tmp_path)
         kind, ok = controller._handle_contingency_sweep(1, {
-            "mode": "contingency", "target_bus": 77,
+            "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
             "relief_measures": ["nonsense_measure"],
         })
         assert kind == "error"
@@ -297,8 +481,8 @@ class TestReliefHandler:
         with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(False)):
             kind, ok = controller._handle_contingency_sweep(1, {
-                "mode": "contingency", "target_bus": 77,
-                "neighbor_count": 1, "contingency_order": 1, "components": ["branch"],
+                "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
+                "substation_depth": 1, "contingency_order": 1, "components": ["branch"],
                 "relief_measures": ["line_switching"],
             })
         assert (kind, ok) == ("sweep", True)

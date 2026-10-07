@@ -2,6 +2,62 @@
 
 from __future__ import annotations
 
+# Enforced bus voltage band. Every example in this prompt uses these values.
+VMIN = 0.9
+VMAX = 1.1
+
+# Contingency study radius: tiers (line hops between substations) around the element
+# the mutation changes (transformers add no hop). Used in the contingency sweep text.
+SUBSTATION_DEPTH = 3
+
+# The sweep "feasibility" field, built from the enforced band above.
+_FEASIBILITY = f'"feasibility": {{"Vmin": {VMIN}, "Vmax": {VMAX}}}'
+
+
+def _strip_leading_header(text: str) -> str:
+    """Drop a leading ``=== ... ===`` line so a block is not announced twice.
+
+    network_summary() and network_metadata() each emit their own headline. This
+    prompt already emits a Section headline for them, so the inner one is noise.
+    """
+    lines = text.lstrip("\n").split("\n")
+    if lines and lines[0].startswith("===") and lines[0].rstrip().endswith("==="):
+        lines = lines[1:]
+        while lines and not lines[0].strip():
+            lines = lines[1:]
+    return "\n".join(lines)
+
+
+def _retarget_vlimits(text: str) -> str:
+    """Retarget Section A's voltage figures to the enforced band.
+
+    Section A is supplied by command_schema_text() in ExaGO, which illustrates
+    set_bus_vlimits / set_all_bus_vlimits with 0.95/1.05 and documents the
+    set_gen_voltage setpoint range as 0.8-1.2 pu -- wider than any AVR holds in
+    service, and misleading under PFLOW where Vg is the primary voltage control.
+    Retargeting here keeps every figure equal to the enforced band without
+    editing the ExaGO source.
+    """
+    return (
+        text.replace('"Vmin": 0.95, "Vmax": 1.05', f'"Vmin": {VMIN}, "Vmax": {VMAX}')
+            .replace('"Vmin": 0.98, "Vmax": 1.02', f'"Vmin": {VMIN}, "Vmax": {VMAX}')
+            .replace("Vg (float, pu \u2014 reasonable range 0.8\u20131.2)",
+                     f"Vg (float, pu \u2014 reasonable range {VMIN}\u2013{VMAX})")
+    )
+
+
+def _drop_command_envelope(text: str) -> str:
+    """Remove Section A's trailing "return {"commands": [...]}" claim.
+
+    command_schema_text() ends by stating the reply is a top-level object with a
+    "commands" key. The Response Format section defines the real envelope
+    ({"action": "modify", ...}), so this trailing claim is both duplicated and
+    wrong. Kept out rather than reworded.
+    """
+    marker = 'Return your commands as a JSON object with a "commands" key'
+    i = text.find(marker)
+    return text[:i].rstrip() + "\n" if i != -1 else text
+
 
 def format_benchmark_for_prompt(benchmark_result: dict | None) -> str:
     """Format a BenchmarkResult dict into a compact prompt section (<25 lines).
@@ -143,15 +199,15 @@ _DC_OPF_SECTION = (
 
 _AC_OPF_VOLTAGE_SECTION = (
     "=== OPF Voltage Control ===\n\n"
-    "In OPFLOW (Optimal Power Flow), bus voltages are **optimization variables** \u2014 "
-    "the solver picks the voltage at each bus to minimise cost within the bounds set "
-    "by bus Vmin/Vmax. This means:\n"
-    '- set_gen_voltage sets only an initial guess; OPFLOW will ignore it and solve '
-    "for the optimal voltage.\n"
+    "In OPFLOW the solver chooses the voltage at every bus. It picks whatever "
+    "minimises cost within each bus's Vmin/Vmax. Two consequences:\n"
+    '- set_gen_voltage is only a starting guess. The solver overwrites it, so it '
+    "cannot be used to control voltage here.\n"
+    "- Voltage is controlled by changing the LIMITS, not the setpoint.\n"
     '- To enforce voltage limits across the entire network, use set_all_bus_vlimits '
-    '(command 11): {"action": "set_all_bus_vlimits", "Vmin": 0.95, "Vmax": 1.05}\n'
+    '(command 11): {"action": "set_all_bus_vlimits", "Vmin": 0.9, "Vmax": 1.1}\n'
     '- To enforce voltage limits on a specific bus only, use set_bus_vlimits '
-    '(command 10): {"action": "set_bus_vlimits", "bus": 10, "Vmin": 0.98, "Vmax": 1.02}\n'
+    '(command 10): {"action": "set_bus_vlimits", "bus": 10, "Vmin": 0.9, "Vmax": 1.1}\n'
     "- Use scale_all_loads / set_gen_dispatch to shift the operating point when "
     "limits alone are insufficient.\n\n"
     "=== Feasibility Classification ===\n\n"
@@ -192,17 +248,6 @@ _SCOPFLOW_SECTION = (
     "The loadability limit will appear significantly higher with EMPAR than IPOPT.\n\n"
     "When using EMPAR, results marked 'feasible' with CONVERGED status may still be "
     "N-1-INSECURE. For accurate N-1 security analysis, use IPOPT.\n\n"
-    "=== Feasibility Classification ===\n\n"
-    "Each iteration is classified as one of:\n"
-    "- feasible: Simulation converged with no constraint violations. "
-    "The solution is physically valid and can be used for decision-making.\n"
-    "- infeasible: Either the solver did not converge, or the solution has "
-    "generation < load (negative losses) meaning the dispatch cannot serve the demand. "
-    "This iteration should be treated as a boundary marker, not a valid solution.\n"
-    "- marginal: The solver did not fully converge (e.g., maximum iterations exceeded) "
-    "but the solution data shows no constraint violations. The solution MAY be usable "
-    "but should be treated with caution. It can serve as a boundary marker in "
-    "feasibility searches."
 )
 
 _TCOPFLOW_SECTION = (
@@ -268,8 +313,8 @@ _SOPFLOW_SECTION = (
     "measures' or 'cannot, even with remediation.'\n"
     "- 'Which buses/components are most affected by wind variability?' → issue an "
     "analyze action with query_type scenario_voltage_spread (per-bus voltage "
-    "spread across scenarios). Do NOT use nearest_neighbors for this — that is a "
-    "topology helper, not a variability measure.\n"
+    "spread across scenarios). Do NOT use a topology query (affected_elements, "
+    "incident_branches) for this — those describe the grid layout, not variability.\n"
     "- 'How much wind can the network absorb / where does curtailment start?' → "
     "use the optional absorption procedure below.\n\n"
     "=== Wind Is a Zero-Cost, Curtailable Upper Bound ===\n\n"
@@ -317,7 +362,7 @@ _SOPFLOW_SECTION = (
     "depend on the load level, so state the load condition you used.\n\n"
     "=== Buses Most Affected by Wind Variability ===\n\n"
     "To answer 'which buses are most affected by wind variability', do NOT reach "
-    "for nearest_neighbors or free-text analyze. After a SOPFLOW solve, issue a "
+    "for a topology query or free-text analyze. After a SOPFLOW solve, issue a "
     "STRUCTURED analyze query:\n"
     '{"action": "analyze", "query_type": "scenario_voltage_spread", "k": 10}\n'
     "This reads the per-scenario second-stage solutions (sopflowout/scen_*.m) for "
@@ -346,13 +391,13 @@ _PFLOW_SECTION_CORE = (
     "=== CRITICAL: Voltage Limits Must Be Set Explicitly ===\n\n"
     "PFLOW does NOT enforce bus voltage limits — it only solves the power flow equations. "
     "Violation checking uses the Vmin/Vmax values in the network file. If the default limits "
-    "are wide (e.g., 0.9/1.1), voltages outside the typical engineering range of 0.95–1.05 pu "
-    "will NOT be flagged as violations.\n\n"
+    "are wider than the range you intend to enforce, voltages outside your intended "
+    "range will NOT be flagged as violations.\n\n"
     "**IMPORTANT: As your FIRST action in any PFLOW search, issue "
     "set_all_bus_vlimits (command 11) to set the voltage limits you want to enforce.** "
     "For typical feasibility searches, use:\n"
-    '{"action": "set_all_bus_vlimits", "Vmin": 0.95, "Vmax": 1.05}\n\n'
-    "This ensures that voltages outside 0.95–1.05 pu are correctly reported as violations. "
+    '{"action": "set_all_bus_vlimits", "Vmin": 0.9, "Vmax": 1.1}\n\n'
+    "This ensures that voltages outside 0.9–1.1 pu are correctly reported as violations. "
     "Without this command, the search may treat infeasible operating points as feasible, "
     "leading to incorrect boundary estimates.\n\n"
     "=== Key Differences from OPFLOW ===\n\n"
@@ -514,8 +559,8 @@ _EXPLORE_PFLOW_SECTION = (
     "- Combined variations: each variant is an independent set of modifications\n\n"
     "**CRITICAL: Every variant MUST include all commands that are required by the goal.** "
     "For example, if the goal says 'scale loads to 1.23', every variant must include "
-    "scale_all_loads(factor=1.23). If the goal says 'enforce voltage limits 0.95-1.05', "
-    "every variant must include set_all_bus_vlimits(Vmin=0.95, Vmax=1.05). "
+    "scale_all_loads(factor=1.23). If the goal says 'enforce voltage limits 0.9-1.1', "
+    "every variant must include set_all_bus_vlimits(Vmin=0.9, Vmax=1.1). "
     "Omitting these fixed commands in some variants makes the results incomparable.\n\n"
     "Example: For a feasibility boundary search, instead of testing one factor per "
     "iteration with 'modify', propose 5 factors spanning the search range. The system "
@@ -604,262 +649,334 @@ def _build_standard_prompt(
 ) -> str:
     if concurrent_pflow and application == "pflow":
         _action_header = "You MUST respond with a single JSON object. Choose one of five actions:"
-        _action_section = """
-1. EXPLORE the neighborhood — evaluate multiple configurations concurrently (PREFERRED for search):
-{{
+        _action_shapes = """
+1. EXPLORE the neighborhood:
+{
   "action": "explore",
   "reasoning": "Why these variants are worth testing.",
   "mode": "fresh" or "accumulative",
   "description": "Short description of the exploration",
   "variants": [
-    {{"label": "A", "commands": [{{"action": "set_gen_voltage", "bus": 1, "Vg": 1.02}}]}},
-    {{"label": "B", "commands": [{{"action": "set_gen_voltage", "bus": 1, "Vg": 1.04}}]}},
-    {{"label": "C", "commands": [{{"action": "set_gen_voltage", "bus": 1, "Vg": 1.06}}]}}
+    {"label": "A", "commands": [{"action": "set_gen_voltage", "bus": 1, "Vg": 1.02}]},
+    {"label": "B", "commands": [{"action": "set_gen_voltage", "bus": 1, "Vg": 1.04}]},
+    {"label": "C", "commands": [{"action": "set_gen_voltage", "bus": 1, "Vg": 1.06}]}
   ]
-}}
+}
 
-2. SELECT a variant — after explore, adopt one of the evaluated points as the new current point:
-{{
+2. SELECT a variant:
+{
   "action": "select",
   "choice": "A",
   "reasoning": "Why this variant is the best choice for the next iteration."
-}}
+}
 
-3. MODIFY the network — apply a single change and run a simulation (use ONLY when you are certain of the outcome):
-{{
+3. MODIFY the network:
+{
   "action": "modify",
   "reasoning": "Explanation of why these changes should help achieve the goal.",
   "mode": "fresh" or "accumulative",
   "description": "Short one-line description for the search journal",
-  "commands": [{{"action": "...", ...}}]
-}}
+  "commands": [{"action": "...", ...}]
+}
 
-4. COMPLETE the search — when the goal is achieved or determined infeasible:
-{{
+4. COMPLETE the search:
+{
   "action": "complete",
   "reasoning": "Explanation of why the search is done.",
-  "findings": {{
+  "findings": {
     "summary": "Concise answer to the goal.",
     "details": "Supporting data and observations."
-  }}
-}}
+  }
+}
 
-5. ANALYZE results — request specific data before deciding:
-{{
+5. ANALYZE results:
+{
   "action": "analyze",
   "reasoning": "What information is needed and why.",
   "query": "e.g. buses with voltage below 0.95"
-}}
+}
+   {"action": "analyze", "query_type": "affected_elements", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0}, "substation_depth": """ + str(SUBSTATION_DEPTH) + """}
+   {"action": "analyze", "query_type": "incident_branches", "bus": 77}
+"""
+        _action_guide = """
+1. EXPLORE the neighborhood
+   evaluate multiple configurations concurrently (PREFERRED for search):
+
+2. SELECT a variant
+   after explore, adopt one of the evaluated points as the new current point:
+
+3. MODIFY the network
+   apply a single change, make sure the change reflects all user requested quantities,
+   and run a simulation (use ONLY when you are certain of the outcome):
+
+4. COMPLETE the search
+   when the goal is achieved or determined infeasible:
+
+5. ANALYZE results
+   request specific data before deciding:
    For network topology, prefer a STRUCTURED query_type over free text (deterministic,
    exact, and scales to large networks):
-   {{"action": "analyze", "query_type": "nearest_neighbors", "bus": 77, "k": 3}}
-   {{"action": "analyze", "query_type": "incident_branches", "bus": 77}}
-   nearest_neighbors returns the k nearest buses by hop count (BFS over in-service
-   branches, ties broken by ascending bus number). incident_branches lists the branch
-   circuits touching a bus. Use these for any "nearest neighbor", "buses connected to X",
-   or contingency-neighbor goal — do NOT ask for branch/adjacency data in free text.
+   affected_elements lists the substations within substation_depth tiers of the element
+   the mutation changes (one tier = one line; buses joined by a transformer are one
+   substation) and every
+   bus, branch, generator, load and shunt in them, each with its tier. incident_branches
+   lists the branch circuits touching a bus. Do NOT ask for branch/adjacency data in
+   free text.
 """
     else:
-        _action_header = "You MUST respond with a single JSON object. Choose one of four actions:"
-        _action_section = """
-1. MODIFY the network — apply changes and run a simulation:
-{{
+        _action_shapes = """
+Reply with exactly one JSON object and nothing else: no markdown fences, no text
+before or after it. The "action" field must be one of: modify, complete, analyze, sweep.
+
+1. modify - change the network, then solve it.
+{
   "action": "modify",
-  "reasoning": "Explanation of why these changes should help achieve the goal.",
+  "reasoning": "Why these changes should help reach the goal.",
   "mode": "fresh" or "accumulative",
-  "description": "Short one-line description for the search journal",
-  "commands": [{{"action": "...", ...}}]
-}}
+  "description": "One short line for the search journal",
+  "commands": [{"action": "<command from Section 2>", ...}]
+}
 
-2. COMPLETE the search — when the goal is achieved or determined infeasible:
-{{
+2. complete - the goal is answered, or shown to be impossible.
+{
   "action": "complete",
-  "reasoning": "Explanation of why the search is done.",
-  "findings": {{
-    "summary": "Concise answer to the goal.",
-    "details": "Supporting data and observations."
-  }}
-}}
+  "reasoning": "Why the search is finished.",
+  "findings": {
+    "summary": "Direct answer to the goal.",
+    "details": "Numbers and observations that support it."
+  }
+}
 
-3. ANALYZE results — request specific data before deciding:
-{{
+3. analyze - ask for data before deciding. Costs one iteration and solves nothing.
+{
   "action": "analyze",
-  "reasoning": "What information is needed and why.",
-  "query": "e.g. buses with voltage below 0.95"
-}}
-   For network topology, prefer a STRUCTURED query_type over free text (deterministic,
-   exact, and scales to large networks):
-   {{"action": "analyze", "query_type": "nearest_neighbors", "bus": 77, "k": 3}}
-   {{"action": "analyze", "query_type": "incident_branches", "bus": 77}}
-   nearest_neighbors returns the k nearest buses by hop count (BFS over in-service
-   branches, ties broken by ascending bus number). incident_branches lists the branch
-   circuits touching a bus. Use these for any "nearest neighbor", "buses connected to X",
-   or contingency-neighbor goal — do NOT ask for branch/adjacency data in free text.
+  "reasoning": "What you need and why.",
+  "query": "buses with voltage below 0.95"
+}
+For topology, use a structured query instead of free text:
+{"action": "analyze", "query_type": "affected_elements", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0}, "substation_depth": """ + str(SUBSTATION_DEPTH) + """}
+{"action": "analyze", "query_type": "incident_branches", "bus": 77}
 
-4. SWEEP over a candidate set — test the SAME mutation at every bus (or a subset) in ONE action.
-   Use this for any goal of the form "find all buses that can ..." or "for each bus ...".
-   The system loops over the candidates in code (in parallel), solves each, enforces the
-   feasibility voltage band you specify, and returns a table of per-bus feasibility. You then
-   read the table and report the answer with a "complete" action.
-{{
+4. sweep - apply the same change at many buses in ONE action, solved in parallel.
+   A sweep has six forms. The "mode" field selects the first four.
+
+4a. plain sweep - test one fixed change at every candidate bus.
+{
   "action": "sweep",
   "reasoning": "Why this sweep answers the goal.",
-  "description": "Short one-line description for the journal",
-  "candidate_set": {{"type": "all_buses"}},
-  "mutation": {{"action": "add_generator_at_bus", "capacity_mw": 100.0}},
-  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
-}}
+  "description": "One short line for the journal",
+  "candidate_set": {"type": "all_buses"},
+  "mutation": {"action": "add_generator_at_bus", "capacity_mw": 100.0},
+  """ + _FEASIBILITY + """
+}
 
-5. BOUNDARY SWEEP (max hosting capacity) — for "how much load/generation can each bus take?"
-   or "what is the maximum MW at bus X" goals. Instead of testing ONE fixed injection, the
-   system runs a per-bus bisection on the injection magnitude (in code, in parallel) and
-   returns the maximum feasible MW per bus plus the binding constraint. This is ONE action,
-   not many iterations. Choose the entity:
-     - "load":      adds active load and scales reactive load along a constant-power-factor
-                    ray. "power_factor" is "system_average" (default, the ΣQd/ΣPd of the base
-                    case), "unity", or a number 0..1. Pd and Qd always move together.
-     - "generator": adds a generator in fixed-injection mode (Pmin=Pmax=ΔP); reactive output
-                    is left free within a default band. (A dispatchable unit would be zeroed
-                    by the OPF, making the hosting test vacuous — fixed injection is required.)
-   The boundary located is the OPFLOW convergence boundary (V-band and Rate A are in-solve
-   hard constraints). Read the returned per-bus capacities and answer with "complete".
-{{
+4b. mode "boundary" - find the LARGEST change each bus can take.
+    Set "entity" to "load" or "generator".
+{
   "action": "sweep",
   "mode": "boundary",
   "entity": "load",
   "power_factor": "system_average",
   "reasoning": "Find the maximum load each bus can host.",
-  "description": "Short one-line description for the journal",
-  "candidate_set": {{"type": "all_buses"}},
-  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
-}}
-   Contingency screening (single action, runs the whole N-1/N-2 study internally):
-{{
+  "description": "One short line for the journal",
+  "candidate_set": {"type": "all_buses"},
+  """ + _FEASIBILITY + """
+}
+
+4c. mode "contingency" - apply one change, then test every outage around it.
+{
   "action": "sweep",
   "mode": "contingency",
-  "target_bus": 77,
-  "neighbor_count": 3,
+  "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
+  "substation_depth": """ + str(SUBSTATION_DEPTH) + """,
   "contingency_order": 1,
-  "components": ["branch", "gen", "load"],
-  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
-}}
-   Python resolves the nearest neighbor buses by hop count, enumerates every
-   contingency (order 1 = single outages, order 2 = pairs), applies each outage set
-   on top of the CURRENT operating point, re-solves OPFLOW, and returns a pass/fail
-   table. FIRST connect any required load with a `modify` action, THEN issue this.
-   Do not enumerate contingencies yourself and do not loop analyze/modify to test them.
-   To also suggest RELIEF measures for the failures, add an ordered "relief_measures"
-   list (applied only to FAILED contingencies; the first measure that restores
-   feasibility is reported):
-   {{"action": "sweep", "mode": "contingency", "target_bus": 35, "contingency_order": 2,
-     "relief_measures": ["transformer_ratio", "generator_redispatch", "line_switching", "load_curtailment"]}}
-   Priority order matters (highest-priority first). Note: under ExaGO OPFLOW generator
-   redispatch is INHERENT to the solve, so "generator_redispatch" is logged as an
-   inherent no-op (it cannot rescue a case that already failed with optimal redispatch);
-   the resolving measure will be a tap change, a line switch, or load curtailment.
+  """ + _FEASIBILITY + """
+}
+    Only when the goal's words ask for relief measures, add "relief_measures", highest
+    priority first. Otherwise never add it, even if contingencies fail:
+{
+  "action": "sweep",
+  "mode": "contingency",
+  "mutation": {"action": "add_load_at_bus", "bus": 35, "Pd": 50.0},
+  "substation_depth": """ + str(SUBSTATION_DEPTH) + """,
+  "contingency_order": 2,
+  "relief_measures": ["transformer_ratio", "line_switching", "load_curtailment"]
+}
 
-   Hot reserve / N-1 generator security assessment (single action):
-{{
+4d. mode "reserve" - hot reserve and N-1 generator security.
+{
   "action": "sweep",
   "mode": "reserve",
-  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
-}}
-   Python computes the system hot reserve (Σ Pmax−Pg over in-service units at the
-   solved base dispatch), runs a system-wide N-1 generator-outage screen (each
-   committed unit tripped, OPF re-solved), and reports the reserve available, the
-   minimum required for N-1 (the largest committed unit's output — the worst single
-   loss), the margin, and whether every unit loss is feasible.
-
-   Minimum feasible hot reserve (single action):
-{{
+  """ + _FEASIBILITY + """
+}
+    Add "minimize": true to find the SMALLEST reserve that is still N-1 secure:
+{
   "action": "sweep",
   "mode": "reserve",
   "minimize": true,
-  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
-}}
-   Python greedily de-commits generators (largest capacity first), re-solving the OPF
-   and the full N-1 generator screen after each, to find the minimum hot reserve
-   (Σ Pmax−Pg over on-units) that remains N-1 secure. Returns the minimum reserve
-   (a greedy UPPER BOUND, bracketed below by the largest remaining committed unit),
-   which units were de-committed, and the N-1-secure confirmation. Do NOT enumerate
-   generator outages yourself and do NOT attempt manual per-unit de-commitment loops.
+  """ + _FEASIBILITY + """
+}
 
-6. ECONOMIC (DISPATCHABLE) GENERATOR SITING — for "where is the minimum-cost location for a
-   generator under economic dispatch?" The OPF must CHOOSE the unit's output, so add a
-   dispatchable unit (Pmin=0, Pmax=cap) with a realistic cost curve and rank locations by the
-   resulting total system cost. Set entity_dispatchable=true; the cost curve defaults to the
-   case median (mid-merit) unless you pass entity_cost_coeffs [c2, c1, c0]. The report records
-   each location's dispatched Pg (a unit dispatching ~0 MW is not helping there).
-{{
+4e. dispatchable siting - set "entity_dispatchable": true, no "mode".
+    Ranks locations by total system cost when the solver chooses the unit's output.
+{
   "action": "sweep",
-  "reasoning": "Find the min-cost location for a dispatchable generator.",
-  "description": "Short one-line description for the journal",
-  "candidate_set": {{"type": "all_buses"}},
-  "mutation": {{"action": "add_generator_at_bus", "capacity_mw": 200.0}},
+  "reasoning": "Find the lowest-cost location for a dispatchable generator.",
+  "description": "One short line for the journal",
+  "candidate_set": {"type": "all_buses"},
+  "mutation": {"action": "add_generator_at_bus", "capacity_mw": 200.0},
   "entity_dispatchable": true,
-  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
-}}
+  """ + _FEASIBILITY + """
+}
 
-7. CUSTOM METRIC / PREDICATE SWEEP — select a NAMED, verified primitive (never invent logic):
-   - metric "max_delta_v": ranks buses by the worst system-wide voltage step |ΔV| caused by
-     switching in a load block at that bus (power-quality flag). Use for "largest voltage step
-     on energizing / switching" goals. Pair with mutation add_load_at_bus.
-   - feasibility_predicate "reactive_adequacy": tests whether a feasible OPF exists with a unit
-     forced to (P=Pmax, Q=Qmax) at the bus (reactive headroom). Use for "which buses have
-     reactive adequacy / can supply Qmax at Pmax" goals. Pair with mutation add_generator_at_bus
-     and set Qmax to the target; the system pins Q=Qmax.
-{{
+4f. named metric or predicate - set "metric" or "feasibility_predicate", no "mode".
+{
   "action": "sweep",
-  "reasoning": "Rank buses by the voltage step when switching in a 100 MW block.",
-  "description": "Short one-line description for the journal",
-  "candidate_set": {{"type": "all_buses"}},
-  "mutation": {{"action": "add_load_at_bus", "Pd": 100.0}},
+  "reasoning": "Rank buses by the voltage step when a 100 MW block is switched in.",
+  "description": "One short line for the journal",
+  "candidate_set": {"type": "all_buses"},
+  "mutation": {"action": "add_load_at_bus", "Pd": 100.0},
   "metric": "max_delta_v",
-  "feasibility": {{"Vmin": 0.9, "Vmax": 1.1}}
-}}
+  """ + _FEASIBILITY + """
+}
+"""
+        _action_guide = """
+Match the goal's wording to an action. Prefer the action that answers the whole
+goal in ONE step over a sequence of smaller steps.
+
+  "find all buses that can host X"                -> 4a, mutation add_load_at_bus or add_generator_at_bus
+  "how much can each bus host", "maximum MW"      -> 4b (boundary)
+  "test all N-1 / N-2 contingencies"              -> 4c (contingency)
+  "and suggest relief measures"                   -> 4c plus relief_measures
+  "hot reserve", "N-1 generator security"         -> 4d (reserve)
+  "minimum / minimise hot reserve"                -> 4d plus minimize true
+  "lowest-cost location under economic dispatch"  -> 4e (entity_dispatchable)
+  "largest voltage step on switching"             -> 4f, metric max_delta_v
+  "reactive adequacy", "Qmax at Pmax"             -> 4f, feasibility_predicate reactive_adequacy
+  "which elements are near bus X"                 -> analyze, query_type affected_elements
+  "which branches touch bus X"                    -> analyze, query_type incident_branches
+
+Never answer a per-bus question with scale_all_loads. That scales the whole network
+uniformly and tells you nothing about individual buses.
+
+Never build a sweep by hand. Do not loop modify/analyze over buses, outages or
+injection sizes: one sweep does the whole study in a single iteration.
+
+Feasibility criteria, for every solve and sweep: every bus voltage within
+""" + str(VMIN) + """-""" + str(VMAX) + """ pu (unless the goal states another band), and every line within
+Rate A. Rate A is always enforced inside the OPFLOW solve; you never set it. Put the
+voltage band in "feasibility".
+
+What each sweep form does:
+
+4a  Applies your mutation at every candidate, solves each one, applies the voltage
+    band you give, and returns a per-bus feasible/infeasible table. Read the table,
+    then answer with complete.
+
+4b  Runs a search on the injection size at each bus and returns the maximum feasible
+    MW per bus together with the constraint that stopped it. Voltage band and Rate A
+    are enforced inside the solve.
+      entity "load"      - adds Pd and scales Qd with it at constant power factor.
+                           "power_factor" is "system_average" (default), "unity", or
+                           a number between 0 and 1. Pd and Qd always move together.
+      entity "generator" - adds a unit with fixed output (Pmin = Pmax). Reactive
+                           output stays free. A dispatchable unit would be dispatched
+                           to zero by the solver, which would make the test meaningless.
+
+4c  Applies your mutation (one command from Section 2: add_load_at_bus,
+    add_generator_at_bus, set_load, set_gen_status or set_branch_status) to the current
+    operating point. No separate modify is needed. It then studies every substation
+    within substation_depth tiers of the element you changed: one tier is one line, and
+    buses joined by a transformer are one substation. Each branch, generator, load and
+    shunt there, except the element you changed, is taken out alone (order 1) or in
+    pairs (order 2), and OPFLOW is re-solved each time. The sweep finds these elements
+    itself; do not run affected_elements first.
+      - Keep substation_depth at """ + str(SUBSTATION_DEPTH) + """ unless the goal names a number of tiers.
+        "All contingencies" means all contingencies in this area.
+      - Leave out "components" unless the goal limits the outage types.
+      - Pass: OPFLOW, with generators free to redispatch, finds a solution that meets
+        the feasibility criteria above. Fail: it finds none. If the pre-contingency
+        reference fails, report that first; the other results then mean little.
+      - A contingency test only reports. If a contingency fails, report it. Do not try
+        to resolve it: no switching on extra generators, no load shedding, no other
+        fixes. Fixes are proposed only when the goal asks for relief measures.
+      - The change passes N-1 (or N-2) only if EVERY contingency passes; one failure
+        means it does not pass. The results start with a VERDICT line and a table of
+        every failed contingency.
+      - Then answer with complete: "summary" is the VERDICT line exactly as given, for
+        example "VERDICT: load@77 does NOT pass N-1: 2 of 126 contingencies failed.";
+        "details" lists every failed contingency with its reason, copied from the FAILED
+        table. For N-2 with many failures, give the "Elements in failed contingencies"
+        table and the count instead. If none failed, say so. Use only numbers from the
+        results. The full pass/fail table is added to the report automatically.
+      - If the VERDICT says the number of contingencies exceeds the limit, the study was
+        not run: answer with complete, summary = that VERDICT line. Do not lower
+        substation_depth, contingency_order or components to make it fit.
+    With relief_measures, each measure is tried on the FAILED cases only and the first
+    one that restores feasibility is reported. Relief uses only fast measures on existing,
+    committed equipment: a transformer tap change, switching one nearby line out or in,
+    or load shedding (grows tier by tier around the outage, at most 10% of each bus's
+    load; the load the mutation adds is never shed). Never turn on a generator or add
+    equipment. Generator redispatch is not a
+    measure: every OPFLOW solve already redispatches all committed units.
+
+4d  Computes hot reserve as the sum of (Pmax - Pg) over in-service units at the solved
+    dispatch, trips each committed unit in turn, and reports the reserve available, the
+    minimum needed for N-1 (the output of the largest committed unit), the margin, and
+    whether every single loss stays feasible.
+    With minimize true, it de-commits units largest-first, re-running the N-1 screen
+    each time, and reports the smallest reserve that is still N-1 secure. That figure
+    is an upper bound produced by a greedy search, not a proven minimum.
+
+4e  Adds a unit the solver can dispatch between 0 and capacity, with a cost curve, and
+    ranks locations by resulting total system cost. The cost curve defaults to the
+    median unit in the case unless you pass "entity_cost_coeffs": [c2, c1, c0]. A
+    location where the unit dispatches near 0 MW is not a useful location.
+
+4f  Use only the named metrics and predicates listed below. Do not invent your own.
+      metric "max_delta_v" - ranks buses by the largest voltage change anywhere in the
+        system when a load block is switched in at that bus. Pair with add_load_at_bus.
+      feasibility_predicate "reactive_adequacy" - tests whether a feasible solution
+        exists with a unit held at P = Pmax and Q = Qmax. Pair with add_generator_at_bus
+        and set Qmax to the target value.
+
+Generator mode: fixed output or dispatchable. Read this from the goal's wording and
+never choose silently. State which mode you used in your answer.
+  "hosting capacity", "how much can connect", "fixed output" -> fixed output
+      (Pmin = Pmax = capacity). This is a headroom test.
+  "economic dispatch", "minimise cost", "let the unit choose" -> dispatchable
+      (Pmin = 0, Pmax = capacity) with a cost curve, "entity_dispatchable": true.
+      Rank locations by total system cost.
+These answer different questions, and the wrong one silently gives the wrong number.
 """
 
     metadata_section = ""
     if network_metadata:
-        metadata_section = f"\n=== Section G: Network Metadata ===\n\n{network_metadata}\n"
+        metadata_section = f"\n=== Section 7: Network Metadata ===\n\n{_strip_leading_header(network_metadata)}\n"
 
     benchmark_section = ""
     if benchmark_text:
-        benchmark_section = f"\n=== Section H: Benchmark Reference (OPFLOW vs PFLOW) ===\n\n{benchmark_text}\n"
+        benchmark_section = f"\n=== Section 8: Benchmark Reference (OPFLOW vs PFLOW) ===\n\n{benchmark_text}\n"
 
     return f"""\
 You are a power systems analysis agent. You iteratively modify a power grid \
 network and run {application.upper()} simulations to achieve a user-specified goal.
 
-=== Section A: Available Commands ===
+=== Section 1: Response Format ===
 
-{command_schema}
+{_action_shapes}
 
-=== Section B: Network Information ===
+=== Section 2: Available Commands ===
 
-{network_summary}
-{metadata_section}{benchmark_section}
-=== Response Format ===
+{_drop_command_envelope(_retarget_vlimits(command_schema))}
 
-{_action_header}
-{_action_section}
-=== Rules ===
+=== Section 3: Choosing an Action ===
 
-- Be systematic: start with small changes, observe the effect, then adjust.
-- Explain your reasoning in every response.
-- Respect physical bounds: generator Pmin/Pmax, voltage limits, thermal ratings.
-- Use "fresh" mode to apply commands to the original base case network.
-- Use "accumulative" mode to build on top of the previous iteration's network.
-- Fresh mode is best for binary-search or parameter-sweep approaches.
-- Accumulative mode is best for incremental refinement.
+Every action is defined in Section 1. This section says when to use which one.
+{_action_guide}
 - For "find all buses that can host a load/generator" goals, use the `sweep` action with \
 `add_load_at_bus` or `add_generator_at_bus` as the mutation — do NOT use `scale_all_loads`, \
 which changes the whole network uniformly and does not answer a per-bus question.
-- For "what is the MAXIMUM load/generation each bus can host" or "how much can bus X take" \
-goals, use the `sweep` action with `"mode": "boundary"` (set `entity` to "load" or \
-"generator"). The system bisects the injection magnitude per bus in ONE action and returns \
-the maximum feasible MW with the binding constraint — do NOT run a manual binary search across \
-many iterations.
 - GENERATOR MODE — fixed-injection vs dispatchable (choose from the prompt wording, never \
 default silently, and name the chosen mode back in your answer):
   - "hosting capacity" / "how much can connect" / "forced injection" / "fixed output" → \
@@ -870,52 +987,82 @@ headroom test.
 The OPF chooses the output; rank locations by total system cost.
   These are different questions (e.g. a forced 160/40 split vs an optimized 200/200 dispatch) — \
 picking the wrong mode silently flips the answer.
-- SWEEP METRIC / PREDICATE — when a goal needs something other than cost or standard \
-feasibility, select a NAMED primitive from the verified registry; never invent the logic. \
-Available metrics: `max_delta_v` (worst system-wide voltage step on switching). Available \
-predicates: `reactive_adequacy` (feasible OPF at forced P=Pmax, Q=Qmax). Omit both for the \
-default cost metric and standard V-band/loading feasibility.
 - DO NOT RE-RUN AN IDENTICAL SWEEP. A sweep is deterministic: once it returns results for \
 the requested parameters (same mutation/entity/mode/candidate set), trust them and proceed to \
 the answer. Re-running the same sweep yields byte-identical results, gives no new information, \
 and wastes 2-3x the compute (which scales badly to thousands of buses). Only run another sweep \
-if you genuinely change a parameter (a different mutation size, entity, metric, or candidate set).
-- For "nearest neighbor by hop count" or "buses connected to bus X" goals, issue ONE \
-analyze action with query_type "nearest_neighbors" (do not loop free-text analyze \
-queries asking for branch data).
-- For "test all N-1/N-2 contingencies on the nearest neighbors" goals, FIRST connect any \
-required load with a `modify` action, THEN issue ONE `sweep` with `mode:"contingency"` \
-(set target_bus, neighbor_count, contingency_order 1 or 2). Never hand-enumerate outages \
-or loop analyze/modify to test them one at a time.
-- For "N-1 generator security" or "how much hot reserve is available / required" goals, issue \
-ONE `sweep` with `mode:"reserve"`. Python computes the available hot reserve and the minimum \
-required for N-1 (largest committed unit) and screens every single-generator outage in one \
-action. Do NOT enumerate generator outages yourself.
-- For "minimum / minimize hot reserve for N-1" goals, issue ONE `sweep` with \
-`mode:"reserve", minimize:true`. Python greedily de-commits generators and re-screens N-1 to \
-find the minimum N-1-secure hot reserve. When it returns, the goal is fully answered — issue \
-`complete` with the reported minimum. Do NOT attempt manual per-unit de-commitment loops and \
-do NOT invent a reserve number that no screen produced.
-- Declare "complete" when you have a clear answer, when further iterations \
-cannot improve the result, or when the goal is provably infeasible.
-- When performing a binary search (e.g., finding a maximum scaling factor), \
-declare "complete" as soon as the feasible/infeasible gap is below 1%. The \
-last feasible value is your answer — further refinement wastes iterations \
-without meaningful improvement.
-- If the last 2-3 iterations all classify as "marginal" or oscillate between \
-"feasible" and "infeasible" with a tiny gap, you are at the boundary — \
-declare "complete" immediately.
-- Do NOT repeat the same modification if it already failed.
-- If a simulation diverges, try a smaller or different change.
-- When multiple objectives are being tracked, explain tradeoffs between them \
-in your reasoning. If you notice a tension between objectives (e.g., cost \
-decreasing but voltage stability degrading), flag it explicitly.
-- You may propose tracking additional metrics by including a "propose_objectives" \
-field in your JSON response (optional): \
-"propose_objectives": [{{"name": "<metric>", "direction": "minimize", "priority": "secondary"}}]
-- The operator can accept or reject proposed objectives via steering.
+if you genuinely change a parameter (a different mutation size, entity, metric, or candidate set). \
+This includes contingency and reserve sweeps: answer from the results you already have.
 
-{_app_section(application, concurrent_pflow, session_load_factor)}"""
+=== Section 4: Check Your Command Before Sending ===
+
+Read the goal once more and confirm your command carries every quantity it names.
+A goal naming two quantities, such as "100 MW, 10 MVar", must set both. Dropping one
+produces a confident answer to a different question, which is worse than failing.
+
+Confirm all four:
+- Every number in the goal appears in your command: MW, MVar, voltage limits, counts,
+  bus numbers. A load with a reactive part needs BOTH Pd and Qd.
+- The voltage band in "feasibility" equals the band the goal states.
+- Your action answers the question asked, not a similar one.
+- Every assumption the goal states (power factor, study depth, priority order)
+  appears in the command or in your reasoning.
+
+If you notice afterwards that a value was missing or wrong, send the corrected command.
+A corrected sweep is not a repeat: one parameter differs, and the earlier result answered
+a different question. Say exactly what you changed.
+
+If the corrected sweep returns results identical to the flawed ones, the correction did
+not take effect. Report that. Do not present the old numbers as the answer.
+
+Do not re-send a sweep whose parameters are all unchanged. Sweeps are deterministic:
+the same inputs give the same numbers, add nothing, and waste compute that grows quickly
+with system size.
+
+=== Section 5: Search Rules ===
+
+Working method:
+- Explain your reasoning in every response.
+- Change one thing at a time, observe the effect, then adjust.
+- Stay inside physical limits: generator Pmin/Pmax, voltage limits, thermal ratings.
+- Do not repeat a change that already failed. If a solve diverges, make a smaller change.
+
+Choosing the mode field:
+- "fresh" applies your commands to the original base case. Use it for binary searches
+  and parameter sweeps, where each trial must be independent.
+- "accumulative" applies them on top of the previous iteration. Use it when you are
+  refining a state you want to keep.
+
+When to stop:
+- Answer with complete once you have a clear answer, further iterations cannot improve
+  it, or the goal is shown to be impossible.
+- In a binary search, stop when the gap between the last feasible and last infeasible
+  value is under 1%. The last feasible value is your answer.
+- If the last two or three iterations are all marginal, or alternate between feasible
+  and infeasible across a small gap, you have found the boundary. Stop there.
+
+Objectives:
+- When several objectives are tracked, describe the trade-offs in your reasoning. Say so
+  explicitly when they conflict, for example cost falling while voltages degrade.
+- You may suggest tracking another metric by adding an optional field:
+  "propose_objectives": [{{"name": "<metric>", "direction": "minimize", "priority": "secondary"}}]
+  The operator decides whether to accept it.
+
+Success criterion:
+- A study succeeds when every solve returned a convergence flag of 1 or 0: 1 = converged,
+  0 = did not converge (ExaGO's "Convergence status" CONVERGED / DID NOT CONVERGE, the
+  same as mpc.converged in its output file). What matters for each solve is only whether
+  it converged or not.
+- A solve that returned no convergence flag crashed. A crash is not a converged or
+  not-converged result: report it as a crash and do not draw conclusions from it.
+
+{_app_section(application, concurrent_pflow, session_load_factor)}
+
+=== Section 6: Network Information ===
+
+{_strip_leading_header(network_summary)}
+{metadata_section}{benchmark_section}
+"""
 
 
 def _build_stress_test_prompt(
@@ -926,7 +1073,7 @@ def _build_stress_test_prompt(
 ) -> str:
     metadata_section = ""
     if network_metadata:
-        metadata_section = f"\n=== Section G: Network Metadata ===\n\n{network_metadata}\n"
+        metadata_section = f"\n=== Section 7: Network Metadata ===\n\n{_strip_leading_header(network_metadata)}\n"
 
     return f"""\
 You are a power systems security analyst performing adversarial stress testing \
@@ -934,14 +1081,6 @@ on a power grid network. Your goal is to systematically identify critical \
 contingencies — component outages that cause the most severe impact on \
 system operation.
 
-=== Section A: Available Commands ===
-
-{command_schema}
-
-=== Section B: Network Information ===
-
-{network_summary}
-{metadata_section}
 === Response Format ===
 
 You MUST respond with a single JSON object. Choose one of three actions:
@@ -980,6 +1119,10 @@ You MUST respond with a single JSON object. Choose one of three actions:
   "query": "most loaded lines"
 }}
 
+=== Section 2: Available Commands ===
+
+{_drop_command_envelope(_retarget_vlimits(command_schema))}
+
 === Stress Testing Strategy ===
 
 - ALWAYS use "fresh" mode — each contingency must be tested independently from the base case.
@@ -994,4 +1137,10 @@ Were there voltage violations? Which lines became overloaded?
 and can characterize the system's vulnerability profile.
 - Do NOT test contingencies on lines with very low loading (<20%) — they are unlikely to be critical.
 
-{_app_section(application)}"""
+{_app_section(application)}
+
+=== Section 6: Network Information ===
+
+{_strip_leading_header(network_summary)}
+{metadata_section}
+"""

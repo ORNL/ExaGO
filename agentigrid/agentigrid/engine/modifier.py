@@ -26,6 +26,7 @@ from agentigrid.engine.commands import (
     SetGenVoltage,
     SetLoad,
     SetPhaseShiftAngle,
+    SetShunt,
     SetShuntSusceptance,
     SetTapRatio,
 )
@@ -345,6 +346,18 @@ def _apply_one(cmd: ModCommand, ctx: _WorkCtx, application: str | None = None) -
         old_bs = bus.Bs
         bus.Bs = cmd.Bs
         return f"Set shunt susceptance at bus {cmd.bus}: {old_bs} -> {cmd.Bs}"
+
+    if isinstance(cmd, SetShunt):
+        idx = ctx.maps.bus_by_id[cmd.bus]
+        bus = _writable_bus(ctx, idx)
+        parts = []
+        if cmd.Gs is not None:
+            bus.Gs = cmd.Gs
+            parts.append(f"Gs={cmd.Gs}")
+        if cmd.Bs is not None:
+            bus.Bs = cmd.Bs
+            parts.append(f"Bs={cmd.Bs}")
+        return f"Set shunt at bus {cmd.bus}: {', '.join(parts)}"
 
     if isinstance(cmd, SetPhaseShiftAngle):
         bi = _branch_index_in_network(net, cmd.fbus, cmd.tbus, cmd.ckt, ctx.maps)

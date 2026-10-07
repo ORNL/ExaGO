@@ -267,7 +267,7 @@ def test_handler_minimize_maps_result_and_journals(tmp_path):
     base_gens = [_gr(10, 100.0, 300.0), _gr(20, 250.0, 400.0), _gr(30, 50.0, 200.0)]
     fake_ctgs = [
         C.Contingency(elements=(C.OutageElement(
-            kind="gen", neighbor_bus=b, hop=0, bus=b, gen_id=0),))
+            kind="gen", tier=0, bus=b, gen_id=0),))
         for b in (10, 20, 30)
     ]
 

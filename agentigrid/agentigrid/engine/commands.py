@@ -162,6 +162,19 @@ class SetShuntSusceptance:
 
 
 @dataclass
+class SetShunt:
+    """Set shunt conductance and/or susceptance at a bus.
+
+    Modifies the Gs and Bs fields of the specified bus. Gs=0, Bs=0 takes the
+    bus shunt out of service (used by the contingency screen).
+    """
+
+    bus: int
+    Gs: Optional[float] = None
+    Bs: Optional[float] = None
+
+
+@dataclass
 class SetPhaseShiftAngle:
     """Set phase shifter angle for a branch.
 
@@ -210,7 +223,7 @@ ModCommand = Union[
     SetLoad, ScaleLoad, ScaleAllLoads, SetGenStatus, SetGenDispatch,
     SetGenVoltage, SetBranchStatus, SetBranchRate, SetCostCoeffs,
     SetBusVLimits, SetAllBusVLimits, ScaleLoadProfile, ScaleWindScenario,
-    SetTapRatio, SetShuntSusceptance, SetPhaseShiftAngle,
+    SetTapRatio, SetShuntSusceptance, SetShunt, SetPhaseShiftAngle,
     AddLoadAtBus, AddGeneratorAtBus,
 ]
 
@@ -231,6 +244,7 @@ _COMMAND_MAP: dict[str, tuple[type, set[str]]] = {
     "scale_wind_scenario": (ScaleWindScenario, {"factor"}),
     "set_tap_ratio": (SetTapRatio, {"fbus", "tbus", "ratio"}),
     "set_shunt_susceptance": (SetShuntSusceptance, {"bus", "Bs"}),
+    "set_shunt": (SetShunt, {"bus"}),
     "set_phase_shift_angle": (SetPhaseShiftAngle, {"fbus", "tbus", "angle"}),
     "add_load_at_bus": (AddLoadAtBus, {"bus"}),
     "add_generator_at_bus": (AddGeneratorAtBus, {"bus", "capacity_mw"}),

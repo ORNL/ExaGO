@@ -23,7 +23,7 @@ from agentigrid.engine.modifier import apply_modifications
 from agentigrid.engine.validation import validate_command
 from agentigrid.engine.metric_extractor import available_metrics_for_app
 from agentigrid.engine.goal_classifier import build_classification_prompts
-from agentigrid.prompts.system_prompt import build_system_prompt, _app_section
+from agentigrid.prompts.exago.system_prompt import build_system_prompt, _app_section
 
 
 # ---------------------------------------------------------------------------
@@ -660,7 +660,9 @@ class TestPFLOWSystemPrompt:
         section = _app_section("pflow")
         assert "set_all_bus_vlimits" in section
         assert "CRITICAL" in section or "first action" in section.lower()
-        assert "0.95" in section
+        # The example uses the prompt's enforced voltage band.
+        from agentigrid.prompts.exago.system_prompt import VMAX, VMIN
+        assert f'"Vmin": {VMIN}, "Vmax": {VMAX}' in section
 
     def test_opflow_section_still_has_voltage_control(self):
         section = _app_section("opflow")

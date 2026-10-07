@@ -52,8 +52,38 @@ class JournalEntry:
     candidate_count: int = 0  # Sweep: total number of candidates tested
     feasible_buses: Optional[list[int]] = None  # Sweep: list of feasible bus ids
     exago_command: Optional[dict] = None  # Reproducible ExaGO invocation record (JSON journal only; see add_* methods)
-    contingency_meta: Optional[dict] = None  # C.5: target bus, neighbors, order, pass/fail counts
+    contingency_meta: Optional[dict] = None  # C.5: mutation, changed element, affected elements, order, pass/fail counts
     reserve_meta: Optional[dict] = None  # C.8: hot-reserve / N-1 generator security accounting
+    findings: Optional[dict] = None  # complete: the LLM's full findings (summary, details, ...)
+
+
+def describe_contingency_scope(meta: dict) -> str:
+    """One-line description of a contingency screen's scope, for UI and reports.
+
+    Reads the affected-element meta written by ``add_contingency``. Sessions saved
+    before the substation neighbor search have no such record.
+    """
+    if "affected" in meta:
+        p = meta.get("changed_element") or {}
+        if p.get("type") == "branch":
+            ckt = f" (ckt {p['ckt']})" if p.get("ckt") else ""
+            what = f"branch {p.get('fbus')}-{p.get('tbus')}{ckt}"
+        elif p.get("type") == "gen":
+            what = f"generator {p.get('gen_id', 0)} at bus {p.get('bus')}"
+        else:
+            what = f"load at bus {p.get('bus', '?')}"
+        aff = meta.get("affected") or {}
+        buses = aff.get("buses") or []
+        n_subs = len({b["substation"] for b in buses})
+        n_tiers = max((b["tier"] for b in buses), default=-1) + 1
+        return (
+            f"around {what}; {n_subs} substations in {n_tiers} tier(s) within "
+            f"substation depth {meta.get('substation_depth', '?')} "
+            f"({len(buses)} buses, {len(aff.get('branches') or [])} branches, "
+            f"{len(aff.get('gens') or [])} generators, {len(aff.get('loads') or [])} loads, "
+            f"{len(aff.get('shunts') or [])} shunts)"
+        )
+    return "study scope not recorded (session saved by an earlier AgentiGrid version)"
 
 
 def is_solve_iteration(entry: JournalEntry) -> bool:
@@ -435,12 +465,16 @@ class SearchJournal:
         self,
         iteration: int,
         description: str,
-        target_bus: int,
-        neighbors: list[tuple[int, int]],
+        mutation: dict,
+        changed_element: dict,
+        substation_depth: int,
+        affected: dict,
         order: int,
         contingency_summaries: list[dict],
         passed_count: int,
         failed_count: int,
+        passes: Optional[bool] = None,
+        verdict: str = "",
         llm_reasoning: str = "",
         steering_directive: Optional[str] = None,
         exago_command: Optional[dict] = None,
@@ -449,9 +483,14 @@ class SearchJournal:
 
         Modeled on ``add_sweep``: a lightweight entry whose ``explored_variants``
         holds the full per-contingency pass/fail summaries and whose
-        ``contingency_meta`` captures the reproducible study parameters (target
-        bus, resolved neighbors, order, and pass/fail counts) so the JSON journal
-        is a complete, reproducible record of the N-1/N-2 study.
+        ``contingency_meta`` captures the reproducible study parameters (the mutation
+        command and the element it changed, substation depth, the five affected-element lists from the
+        neighbor search, order, and pass/fail counts) so the JSON journal is a
+        complete, reproducible record of the N-1/N-2 study.
+
+        ``passes`` / ``verdict`` record whether the change passes N-k (every
+        contingency passed and the pre-contingency reference held); ``feasible``
+        follows ``passes`` when it is given.
 
         When a C.7 relief phase ran, each FAILED contingency summary carries a
         ``relief`` payload ({resolved, measure, detail, attempts}); these ride
@@ -462,7 +501,7 @@ class SearchJournal:
             description=description,
             commands=[],
             objective_value=None,
-            feasible=passed_count > 0,
+            feasible=passes if passes is not None else passed_count > 0,
             convergence_status="CONTINGENCY",
             violations_count=0,
             voltage_min=0.0,
@@ -480,11 +519,15 @@ class SearchJournal:
             feasible_buses=[],
             exago_command=exago_command,
             contingency_meta={
-                "target_bus": target_bus,
-                "neighbors": [[nb, hop] for nb, hop in neighbors],
+                "mutation": mutation,
+                "changed_element": changed_element,
+                "substation_depth": substation_depth,
+                "affected": affected,
                 "order": order,
                 "passed_count": passed_count,
                 "failed_count": failed_count,
+                "passes": passes,
+                "verdict": verdict,
             },
         )
         self._entries.append(entry)
@@ -578,11 +621,14 @@ class SearchJournal:
         self,
         iteration: int,
         summary: str,
+        findings: Optional[dict] = None,
     ) -> JournalEntry:
         """Record a 'complete' action in the journal.
 
         Creates a lightweight entry so the LLM's decision to end
-        the search is visible in the search history.
+        the search is visible in the search history. ``findings`` keeps the
+        LLM's full answer (e.g. the failed-contingency table in ``details``),
+        not just the one-line summary.
         """
         entry = JournalEntry(
             iteration=iteration,
@@ -601,6 +647,7 @@ class SearchJournal:
             mode="complete",
             elapsed_seconds=0.0,
             feasibility_detail="",
+            findings=findings,
         )
         self._entries.append(entry)
         return entry
@@ -1092,7 +1139,7 @@ class SearchJournal:
             "mode", "elapsed_seconds", "timestamp", "steering_directive",
             "tracked_metrics", "feasibility_detail", "solver", "num_steps", "num_scenarios",
             "explored_variants", "candidate_count", "feasible_buses", "exago_command",
-            "contingency_meta", "reserve_meta",
+            "contingency_meta", "reserve_meta", "findings",
         ]
 
         with open(path, "w", newline="", encoding="utf-8") as f:
@@ -1107,6 +1154,7 @@ class SearchJournal:
                 row["exago_command"] = json.dumps(row.get("exago_command") or None)
                 row["contingency_meta"] = json.dumps(row.get("contingency_meta") or None)
                 row["reserve_meta"] = json.dumps(row.get("reserve_meta") or None)
+                row["findings"] = json.dumps(row.get("findings") or None)
                 writer.writerow(row)
 
         logger.info("Journal CSV exported to %s (%d entries)", path, len(self._entries))

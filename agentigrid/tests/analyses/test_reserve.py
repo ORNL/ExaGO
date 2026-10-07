@@ -98,8 +98,7 @@ class TestAllGeneratorContingencies:
             assert ctg.order == 1
             (e,) = ctg.elements
             assert e.kind == "gen"
-            assert e.bus == e.neighbor_bus
-            assert e.hop == 0
+            assert e.tier == 0
 
     def test_deterministic_sorted_by_bus_genid(self, net118):
         ctgs = C.all_generator_contingencies(net118)
@@ -217,7 +216,7 @@ class TestReserveHandler:
         # Screen exactly these three in-service units.
         fake_ctgs = [
             C.Contingency(elements=(C.OutageElement(
-                kind="gen", neighbor_bus=b, hop=0, bus=b, gen_id=0),))
+                kind="gen", tier=0, bus=b, gen_id=0),))
             for b in (10, 20, 30)
         ]
 
@@ -268,7 +267,7 @@ class TestReserveHandler:
         ]
         fake_ctgs = [
             C.Contingency(elements=(C.OutageElement(
-                kind="gen", neighbor_bus=b, hop=0, bus=b, gen_id=0),))
+                kind="gen", tier=0, bus=b, gen_id=0),))
             for b in (10, 20)
         ]
         state = {"i": 0}

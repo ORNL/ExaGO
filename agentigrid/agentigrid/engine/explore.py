@@ -63,6 +63,13 @@ def _describe_command(cmd: ModCommand) -> str:
         return f"tap br{cmd.fbus}-{cmd.tbus}={cmd.ratio:g}"
     if name == "SetShuntSusceptance":
         return f"shunt bus{cmd.bus}={cmd.Bs:g}"
+    if name == "SetShunt":
+        parts = []
+        if cmd.Gs is not None:
+            parts.append(f"Gs={cmd.Gs:g}")
+        if cmd.Bs is not None:
+            parts.append(f"Bs={cmd.Bs:g}")
+        return f"shunt bus{cmd.bus}({','.join(parts)})"
     if name == "SetPhaseShiftAngle":
         return f"phase br{cmd.fbus}-{cmd.tbus}={cmd.angle:g}deg"
     return name

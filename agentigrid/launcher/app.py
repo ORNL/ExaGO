@@ -36,6 +36,7 @@ from charts import (
     reserve_trajectory_chart,
 )
 
+from agentigrid.engine.journal import describe_contingency_scope
 from agentigrid.parsers import parse_matpower, network_summary
 
 # ── Page Configuration ───────────────────────────────────────────────────────
@@ -1189,8 +1190,7 @@ def _render_contingency_overview(session, entry):
         st.subheader("Contingency Screening")
 
         order = meta.get("order", "?")
-        target_bus = meta.get("target_bus", "?")
-        neighbors = meta.get("neighbors", [])
+        scope_str = describe_contingency_scope(meta)
         kinds = meta.get("kinds", [])
         vmin = meta.get("vmin", 0.9)
         vmax = meta.get("vmax", 1.1)
@@ -1198,15 +1198,11 @@ def _render_contingency_overview(session, entry):
         failed_count = meta.get("failed_count", 0)
         total_count = passed_count + failed_count
 
-        neighbor_str = (
-            ", ".join(f"bus {n[0]} (hop {n[1]})" for n in neighbors[:5])
-            if neighbors else "—"
-        )
         kind_str = ", ".join(sorted(set(kinds))) if kinds else "all"
 
         st.caption(
-            f"N-{order} contingency screen | target bus {target_bus} | "
-            f"neighbors: {neighbor_str} | components: {kind_str} | "
+            f"N-{order} contingency screen | {scope_str} | "
+            f"components: {kind_str} | "
             f"V-band [{vmin:.2f}, {vmax:.2f}] p.u. | "
             f"{passed_count}/{total_count} contingencies feasible."
         )
@@ -1260,14 +1256,15 @@ def _render_contingency_overview(session, entry):
                             else:  # tolerate a dict shape defensively
                                 measure = a.get("measure") or a.get("action", "?")
                                 resolved = a.get("resolved", False)
-                            note = " [inherent to OPF]" if measure == "generator_redispatch" else ""
-                            parts.append(f"{measure} {'✓' if resolved else '✗'}{note}")
+                            parts.append(f"{measure} {'✓' if resolved else '✗'}")
                         trail = ", ".join(parts)
                         st.caption(f"{v.get('label', '?')}: {trail}")
                 st.caption(
-                    "Relief scope: local modifications only (transformer ratio, generator "
-                    "redispatch at neighboring buses, line switching, load curtailment). "
-                    "Load curtailment is applied uniformly across all loads at the affected bus."
+                    "Relief scope: fast measures on existing, committed equipment only "
+                    "(transformer ratio, switching a line out or in, load shedding). Load "
+                    "shedding grows tier by tier around the outage, at most "
+                    "relief_shed_max_fraction of each bus's load; the load the mutation "
+                    "adds is never shed."
                 )
 
         if passed_variants:

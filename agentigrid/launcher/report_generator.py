@@ -23,7 +23,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 from agentigrid.engine.agent_loop import SearchSession
-from agentigrid.engine.journal import is_solve_iteration
+from agentigrid.engine.journal import describe_contingency_scope, is_solve_iteration
 from agentigrid.parsers.opflow_results import OPFLOWResult
 
 try:
@@ -616,19 +616,11 @@ class ReportGenerator:
         if contingency_entry is not None:
             meta = contingency_entry.contingency_meta or {}
             order = meta.get("order", "?")
-            target = meta.get("target_bus", "?")
-            neighbors = meta.get("neighbors") or []
             passed = meta.get("passed_count", 0)
             failed = meta.get("failed_count", 0)
             total = passed + failed
-            nb_parts = [
-                f"bus {nb} ({hop} hop{'s' if hop != 1 else ''})"
-                for nb, hop in neighbors
-            ]
-            nb_str = ", ".join(nb_parts) if nb_parts else "—"
             headline = (
-                f"N-{order} contingency screen on the {len(neighbors)} nearest "
-                f"neighbors of bus {target} ({nb_str}): "
+                f"N-{order} contingency screen ({describe_contingency_scope(meta)}): "
                 f"{passed}/{total} contingencies feasible, {failed} failed."
             )
             cont_lines = [headline]
@@ -1304,23 +1296,15 @@ class ReportGenerator:
         else:
             meta = entry.contingency_meta or {}
             order = meta.get("order", "?")
-            target_bus = meta.get("target_bus", "?")
-            neighbors = meta.get("neighbors") or []
             passed_count = meta.get("passed_count", 0)
             failed_count = meta.get("failed_count", 0)
             total = passed_count + failed_count
 
             # Infer component kinds from variant data
             kinds = sorted({k for v in variants for k in (v.get("kinds") or [])})
-            nb_parts = [
-                f"bus {nb} ({hop} hop{'s' if hop != 1 else ''})"
-                for nb, hop in neighbors
-            ]
-            nb_str = ", ".join(nb_parts) if nb_parts else "—"
 
             intro = (
-                f"N-{order} contingency screen: {len(neighbors)} nearest neighbors of "
-                f"bus {target_bus} ({nb_str}); "
+                f"N-{order} contingency screen: {describe_contingency_scope(meta)}; "
                 f"components tested: {', '.join(kinds) if kinds else 'all'}; "
                 f"feasibility band: V ∈ [{v_min:.2f}, {v_max:.2f}] pu, Rate A. "
                 f"Result: {passed_count}/{total} feasible, {failed_count} failed."
@@ -1405,11 +1389,10 @@ class ReportGenerator:
             elements.append(Spacer(1, 0.4 * cm))
             elements.append(Paragraph("Relief attempts audit", s["heading2"]))
             elements.append(Paragraph(
-                "Priority-ordered relief search for each failed contingency. "
-                "generator_redispatch is an inherent OPF no-op: generator Pg is an "
-                "optimization variable, so the post-contingency OPF already includes "
-                "economic redispatch. It is listed for completeness but performs no "
-                "additional solve and never resolves a failure on its own.",
+                "Priority-ordered relief search for each failed contingency, using only "
+                "fast measures on existing, committed equipment. Generator redispatch "
+                "is not a separate measure: every post-contingency OPF already "
+                "redispatches all committed units.",
                 s["caption"],
             ))
             elements.append(Spacer(1, 0.2 * cm))
@@ -1422,9 +1405,7 @@ class ReportGenerator:
                 attempts = rel.get("attempts") or []
                 parts = []
                 for m, resolved in attempts:
-                    if m == "generator_redispatch":
-                        parts.append(f"{m} ✗ [inherent to OPF]")
-                    elif resolved:
+                    if resolved:
                         parts.append(f"{m} ✓")
                     else:
                         parts.append(f"{m} ✗")

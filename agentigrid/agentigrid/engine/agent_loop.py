@@ -61,7 +61,7 @@ def _count_scenario_rows(scenario_path: Path) -> int:
         return max(len(lines) - 1, 1)
     except (OSError, UnicodeDecodeError):
         return 1
-from agentigrid.prompts import build_system_prompt, build_user_prompt
+from agentigrid.prompts.exago import build_system_prompt, build_user_prompt
 from agentigrid.engine.goal_classifier import build_classification_prompts, parse_goal_classification
 
 logger = logging.getLogger("agentigrid.engine.agent_loop")
@@ -783,6 +783,8 @@ class AgentLoopController:
         # Sweep dedup (Fix 4): cache results by sweep signature within this session
         # so an identical re-requested sweep is served from cache, not re-solved.
         self._sweep_signature_cache: dict[str, dict] = {}
+        # Goal text of the running session (set each iteration); the relief guard reads it.
+        self._current_goal: str = ""
 
         # Pause/resume
         self._pause_event = threading.Event()
@@ -1019,7 +1021,7 @@ class AgentLoopController:
         ):
             try:
                 from agentigrid.engine.benchmark import _run_opflow_on_base_case
-                from agentigrid.prompts.system_prompt import format_benchmark_for_prompt
+                from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt
                 self._print("[Session] Running OPFLOW baseline for benchmark reference...")
                 opflow_baseline = _run_opflow_on_base_case(base_case, self._config)
                 if opflow_baseline is not None:
@@ -1075,7 +1077,7 @@ class AgentLoopController:
             self._journal.load_factor = self._session_load_factor
 
         # Build system prompt once (static per session)
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt as _fmt_bench
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt as _fmt_bench
         self._system_prompt = build_system_prompt(
             command_schema=command_schema_text(),
             network_summary=net_summary_text,
@@ -1276,6 +1278,7 @@ class AgentLoopController:
         goal: str,
     ) -> tuple[str, bool]:
         """Execute one iteration. Returns (action_type, should_continue)."""
+        self._current_goal = goal
         # Drain the steering queue at the iteration boundary
         new_directives: list[dict] = []
         while True:
@@ -2111,10 +2114,38 @@ class AgentLoopController:
         "mode", "entity", "power_factor", "mutation", "candidate_set", "feasibility",
         "metric", "feasibility_predicate", "entity_dispatchable", "entity_cost_coeffs",
         # C.5 contingency screen — an identical study is deterministic and served from cache.
-        "target_bus", "neighbor_count", "contingency_order", "components",
+        "substation_depth", "contingency_order", "components",
+        # C.7 relief — a screen with relief is a different study from one without.
+        "relief_measures",
         # C.8 Path A reserve minimization — the minimize flag changes the study.
         "minimize",
     )
+
+    def _relief_requested(self) -> bool:
+        """True if the goal or an active steering directive asks for relief measures."""
+        texts = [self._current_goal] + [
+            d.get("directive", "") for d in self._active_steering_directives
+        ]
+        return any("relief" in (t or "").lower() for t in texts)
+
+    def _strip_unrequested_relief(self, iteration: int, data: dict) -> str:
+        """Drop ``relief_measures`` from a request when the user did not ask for relief.
+
+        A contingency test only reports; relief runs only when the goal (or an
+        operator steering directive) asks for relief measures. Returns a note for
+        the agent when relief was dropped, else "".
+        """
+        if not data.get("relief_measures") or self._relief_requested():
+            return ""
+        data.pop("relief_measures")
+        self._print(
+            f"[Iter {iteration}] relief_measures ignored: the goal does not ask for relief"
+        )
+        return (
+            "\n\n[relief_measures ignored: the goal does not ask for relief measures. "
+            "The screen was run as a test only. Report its result with complete; "
+            "do not request relief.]"
+        )
 
     def _sweep_cache_key(self, data: dict) -> str:
         """Stable signature for a sweep request (Fix 4 dedup)."""
@@ -2175,21 +2206,32 @@ class AgentLoopController:
             )
             return "error", True
 
+        # Relief guard: relief is run only when the user asked for it. Checked before
+        # the cache so a stripped request matches the plain screen that already ran.
+        relief_note = self._strip_unrequested_relief(iteration, data)
+
         # Fix 4: a sweep is deterministic — if an identical signature already ran
         # this session, serve the cached result instead of re-solving. Covers both
         # the feasibility/metric path and the boundary path (checked before dispatch).
         cache_key = self._sweep_cache_key(data)
         if cache_key in self._sweep_signature_cache:
-            return self._serve_cached_sweep(iteration, data, cache_key)
+            result = self._serve_cached_sweep(iteration, data, cache_key)
+            if relief_note:
+                self._latest_results_text = (self._latest_results_text or "") + relief_note
+            return result
 
         # Boundary (hosting-capacity) mode: per-candidate bisection on injection magnitude.
         if data.get("mode") == "boundary":
             return self._handle_boundary_sweep(iteration, data)
 
-        # Contingency (N-1/N-2) mode: enumerate outages on the target's neighbors,
+        # Contingency (N-1/N-2) mode: apply the mutation, enumerate outages within the
+        # substations around the changed element,
         # re-solve each on top of the current operating point, tabulate pass/fail.
         if data.get("mode") == "contingency":
-            return self._handle_contingency_sweep(iteration, data)
+            result = self._handle_contingency_sweep(iteration, data)
+            if relief_note and result[0] != "error":
+                self._latest_results_text = (self._latest_results_text or "") + relief_note
+            return result
 
         # Hot-reserve / minimum N-1 generator security (C.8): system-wide gen screen.
         if data.get("mode") == "reserve":
@@ -2931,7 +2973,7 @@ class AgentLoopController:
                     "label": ctg.label(),
                     "order": ctg.order,
                     "kinds": [e.kind for e in ctg.elements],
-                    "neighbor_buses": [e.neighbor_bus for e in ctg.elements],
+                    "tiers": [e.tier for e in ctg.elements],
                     "elements": [e.to_command() for e in ctg.elements],
                     "passed": False,
                     "voltage_min": 0.0,
@@ -2960,7 +3002,7 @@ class AgentLoopController:
                 "label": ctg.label(),
                 "order": ctg.order,
                 "kinds": [e.kind for e in ctg.elements],
-                "neighbor_buses": [e.neighbor_bus for e in ctg.elements],
+                "tiers": [e.tier for e in ctg.elements],
                 "elements": [e.to_command() for e in ctg.elements],
                 "passed": passed,
                 "voltage_min": opflow.voltage_min if opflow else 0.0,
@@ -2989,10 +3031,14 @@ class AgentLoopController:
     ) -> tuple[str, bool]:
         """Handle a contingency (N-1/N-2) screen — one LLM action, whole study in Python.
 
-        Enumerates outages drawn from the k nearest neighbor buses of a target,
-        applies each outage set ON TOP OF THE CURRENT OPERATING POINT (so a prior
-        `modify` that connected the load is included), re-solves OPFLOW, and judges
-        pass/fail.
+        Applies the ``mutation`` (one command, e.g. add_load_at_bus) to a copy of the
+        CURRENT OPERATING POINT, then enumerates outages of every element (branch,
+        generator, load, shunt) in the substations within ``substation_depth`` line
+        hops of the element the mutation changed, excluding that element. Buses
+        joined by a transformer form one substation (0 hops). Each outage set is
+        applied on top of the mutated operating point, OPFLOW is re-solved, and
+        pass/fail is judged. The mutation is applied for this study only; the
+        session's current network is unchanged.
 
         Feasibility semantics: under OPFLOW the V-band (via set_all_bus_vlimits)
         and Rate A are in-solve hard constraints, so a contingency PASSES iff the
@@ -3016,23 +3062,29 @@ class AgentLoopController:
         reasoning = data.get("reasoning", "")
 
         # --- validate parameters ---
-        raw_target = data.get("target_bus")
-        if raw_target is None:
-            self._error_feedback = "contingency sweep requires a 'target_bus' (integer bus number)."
+        # Operating point: the CURRENT network with the mutation applied (study only).
+        if "mutation" not in data:
+            self._error_feedback = (
+                'contingency sweep requires "mutation", the one command the goal describes, '
+                f"with action one of {list(contingency.MUTATION_ACTIONS)}, e.g. "
+                '{"action": "add_load_at_bus", "bus": 77, "Pd": 50.0}.'
+            )
             return "error", True
+        before = self._current_network or self._base_network
         try:
-            target_bus = int(raw_target)
-        except (TypeError, ValueError):
-            self._error_feedback = f"contingency 'target_bus' must be an integer, got {raw_target!r}."
+            net, changed = contingency.apply_mutation(before, data["mutation"])
+        except ValueError as exc:
+            self._error_feedback = f"contingency 'mutation' error: {exc}"
             return "error", True
 
+        raw_depth = data.get("substation_depth", contingency.DEFAULT_SUBSTATION_DEPTH)
         try:
-            neighbor_count = int(data.get("neighbor_count", 3))
+            depth = int(raw_depth)
         except (TypeError, ValueError):
-            self._error_feedback = f"contingency 'neighbor_count' must be an integer, got {data.get('neighbor_count')!r}."
+            self._error_feedback = f"contingency 'substation_depth' must be an integer, got {raw_depth!r}."
             return "error", True
-        if neighbor_count < 1:
-            self._error_feedback = "contingency 'neighbor_count' must be >= 1."
+        if depth < 0:
+            self._error_feedback = "contingency 'substation_depth' must be >= 0."
             return "error", True
 
         try:
@@ -3044,14 +3096,14 @@ class AgentLoopController:
             self._error_feedback = "contingency 'contingency_order' must be 1 (N-1) or 2 (N-2)."
             return "error", True
 
-        components = data.get("components", ["branch", "gen", "load"])
+        components = data.get("components", list(contingency.OUTAGE_KINDS))
         if not isinstance(components, list) or not components:
             self._error_feedback = (
                 "contingency 'components' must be a non-empty list drawn from "
-                "['branch', 'gen', 'load']."
+                f"{list(contingency.OUTAGE_KINDS)}."
             )
             return "error", True
-        _valid_kinds = {"branch", "gen", "load"}
+        _valid_kinds = set(contingency.OUTAGE_KINDS)
         if any(c not in _valid_kinds for c in components):
             self._error_feedback = (
                 f"contingency 'components' may only contain {sorted(_valid_kinds)}; "
@@ -3081,40 +3133,64 @@ class AgentLoopController:
                 )
                 return "error", True
 
-        # Operating point: apply the screen on top of the CURRENT network (post-modify).
-        net = self._current_network or self._base_network
-
         # --- enumerate ---
         try:
-            contingencies = contingency.enumerate_contingencies(
-                net, target_bus, neighbor_count, order, tuple(components),
-            )
+            affected = contingency.find_affected_elements(net, changed, depth)
+            pool = contingency.outages_from(affected, tuple(components))
+            contingencies = contingency.enumerate_contingencies(pool, order)
         except ValueError as exc:
             self._error_feedback = f"contingency enumeration error: {exc}"
             return "error", True
 
         if not contingencies:
             self._error_feedback = (
-                f"No contingencies enumerated for target bus {target_bus} "
-                f"(neighbors={neighbor_count}, components={components}). The neighbor "
-                "buses may have no outage-eligible elements of the requested kinds."
+                f"No contingencies enumerated around {changed.label()} "
+                f"(substation_depth={depth}, components={components}). The substations in "
+                "scope may have no outage-eligible elements of the requested kinds."
             )
             return "error", True
 
+        # Too large: stop without solving and say so. The study is not shrunk (lower
+        # depth, order or components) — that would answer a different question.
         max_count = self._config.search.contingency_max_count
         if len(contingencies) > max_count:
-            self._error_feedback = (
-                f"Contingency screen would enumerate {len(contingencies)} contingencies, "
-                f"exceeding the guard of {max_count}. Lower neighbor_count, reduce "
-                f"contingency_order (2→1), or narrow components to shrink the study."
+            verdict = (
+                f"The number of contingencies ({len(contingencies)}) exceeds {max_count}, "
+                "the study cannot be completed with existing resources."
             )
-            return "error", True
+            self._print(f"[Iter {iteration}] {verdict}")
+            self._latest_results_text = "\n".join([
+                f"Contingency screen (N-{order}) around changed element {changed.label()}: "
+                f"{len(contingencies)} contingencies over {len(affected.substations)} "
+                f"substations / {len(affected.buses)} buses within substation depth {depth}.",
+                "",
+                f"VERDICT: {verdict}",
+                "",
+                "No contingency was solved. Answer with complete; summary = the VERDICT "
+                "line. Do not shrink the study (depth, order or components) to make it fit.",
+            ])
+            self._journal.add_contingency(
+                iteration=iteration,
+                description=f"[contingency N-{order}] {description} (not run: too many contingencies)",
+                mutation=data["mutation"],
+                changed_element=changed.to_dict(),
+                substation_depth=depth,
+                affected=affected.to_dict(),
+                order=order,
+                contingency_summaries=[],
+                passed_count=0,
+                failed_count=0,
+                passes=False,
+                verdict=f"VERDICT: {verdict}",
+                llm_reasoning=reasoning,
+            )
+            return "sweep", True
 
-        neighbors = topology.k_nearest_by_hops(net, target_bus, neighbor_count)
         self._print(
             f'[Iter {iteration}] LLM action: contingency sweep — "{description}" '
-            f"(target bus {target_bus}, N-{order}, {len(contingencies)} contingencies, "
-            f"neighbors={[nb for nb, _ in neighbors]})"
+            f"(changed {changed.label()}, N-{order}, {len(contingencies)} contingencies, "
+            f"{len(affected.substations)} substations / {len(affected.buses)} buses within "
+            f"depth {depth})"
         )
 
         if self._on_phase:
@@ -3139,6 +3215,9 @@ class AgentLoopController:
 
         passed_count = sum(1 for s in contingency_summaries if s["passed"])
         failed_count = len(contingency_summaries) - passed_count
+        passes, verdict = contingency.screen_verdict(
+            changed, order, len(contingency_summaries), failed_count, ref_passed, ref_reason,
+        )
         self._latest_opflow = reference["opflow"] or reference["first_opflow"]
 
         # --- relief phase (C.7): search relief measures for each FAILED contingency ---
@@ -3146,21 +3225,24 @@ class AgentLoopController:
             self._run_relief_phase(
                 iteration, net, contingencies, contingency_summaries,
                 relief_measures, vmin, vmax, bus_limits,
+                protected_load=contingency.added_load(before, net, changed),
             )
 
         # --- LLM-facing view (token-bounded) ---
         self._latest_results_text = self._build_contingency_llm_view(
-            target_bus=target_bus,
-            neighbors=neighbors,
+            changed=changed,
+            affected=affected,
             order=order,
             components=components,
             vmin=vmin,
             vmax=vmax,
+            contingencies=contingencies,
             contingency_summaries=contingency_summaries,
             passed_count=passed_count,
             failed_count=failed_count,
             ref_passed=ref_passed,
             ref_reason=ref_reason,
+            verdict=verdict,
             threshold=self._config.search.sweep_full_table_threshold,
             top_n=self._config.search.sweep_llm_top_n,
             relief_measures=relief_measures,
@@ -3176,18 +3258,23 @@ class AgentLoopController:
             "contingency", len(contingencies), _representative_sim,
             "Executed once per enumerated contingency. Each outage set is written into "
             "the per-contingency netfile (via set_branch_status / set_gen_status / "
-            "set_load), not passed as an ExaGO argument; only the -netfile path differs. "
+            "set_load / set_shunt), not passed as an ExaGO argument; only the -netfile "
+            "path differs. "
             "The representative shown is the pre-contingency reference solve.",
         )
         self._journal.add_contingency(
             iteration=iteration,
             description=f"[contingency N-{order}] {description} (on current operating point)",
-            target_bus=target_bus,
-            neighbors=neighbors,
+            mutation=data["mutation"],
+            changed_element=changed.to_dict(),
+            substation_depth=depth,
+            affected=affected.to_dict(),
             order=order,
             contingency_summaries=contingency_summaries,
             passed_count=passed_count,
             failed_count=failed_count,
+            passes=passes,
+            verdict=verdict,
             llm_reasoning=reasoning,
             steering_directive=active_directive,
             exago_command=_ctg_command,
@@ -3200,8 +3287,9 @@ class AgentLoopController:
         self._print(
             f"[Iter {iteration}] Contingency screen complete: "
             f"{passed_count} passed / {failed_count} failed of {len(contingencies)} "
-            f"(N-{order}, target bus {target_bus})"
+            f"(N-{order}, changed {changed.label()})"
         )
+        self._print(f"[Iter {iteration}] {verdict}")
         return "sweep", True
 
     def _handle_reserve_screen(
@@ -3590,8 +3678,12 @@ class AgentLoopController:
         vmin: float,
         vmax: float,
         bus_limits: dict,
+        protected_load: dict[int, tuple[float, float]] | None = None,
     ) -> None:
         """Search relief measures for each FAILED contingency (C.7); attach 'relief' payloads.
+
+        ``protected_load`` ({bus: (Pd, Qd)}) is the load the mutation added; load
+        shedding never touches it.
 
         Uses the same executor solve as C.5 via an injected ``solve_fn``. A shared
         solve counter enforces ``relief_max_solves``: once the budget is spent,
@@ -3638,7 +3730,7 @@ class AgentLoopController:
                 continue
             result = relief_search.find_relief(
                 net, contingencies[i], relief_measures, vmin, vmax,
-                _solve_fn, self._config.search,
+                _solve_fn, self._config.search, protected_load=protected_load,
             )
             summary["relief"] = {
                 "resolved": result.resolved,
@@ -3658,30 +3750,38 @@ class AgentLoopController:
 
     def _build_contingency_llm_view(
         self,
-        target_bus: int,
-        neighbors: list[tuple[int, int]],
+        changed: "contingency.ChangedElement",
+        affected: "contingency.AffectedElements",
         order: int,
         components: list[str],
         vmin: float,
         vmax: float,
+        contingencies: list["contingency.Contingency"],
         contingency_summaries: list[dict],
         passed_count: int,
         failed_count: int,
         ref_passed: bool,
         ref_reason: str,
+        verdict: str,
         threshold: int,
         top_n: int,
         relief_measures: list[str] | None = None,
     ) -> str:
         """Token-bounded LLM view of a contingency screen, mirroring the sweep view gating.
 
-        At or below ``threshold`` contingencies, a full pass/fail table is shown.
-        Above it, the FAILED set is listed in full (grouped by reason) with a capped
-        sample of passers plus aggregate counts and a journal/PDF pointer — the LLM
-        needs the complete failed set to answer, so failures are never truncated.
+        Always starts with the verdict (the change passes N-k only if every
+        contingency passes) and a table of every FAILED contingency — failures are
+        never truncated. For N-2 a second table counts, per element, the failed
+        pairs it appears in. At or below ``threshold`` contingencies the full
+        pass/fail table follows; above it, a capped sample of passers and a journal
+        pointer.
         """
         n_total = len(contingency_summaries)
-        nbr_str = ", ".join(f"{nb}(h{hop})" for nb, hop in neighbors)
+        tier_parts = []
+        for d, tier in enumerate(affected.tiers):
+            shown = ", ".join(str(s) for s in tier[:30])
+            more = f", ... +{len(tier) - 30} more" if len(tier) > 30 else ""
+            tier_parts.append(f"tier {d}: [{shown}{more}]")
         comp_str = "/".join(components)
         ref_line = (
             "Pre-contingency reference: FEASIBLE under the band."
@@ -3690,14 +3790,54 @@ class AgentLoopController:
                  "— base operating point does not hold under the band; interpret results with care."
         )
         header = [
-            f"Contingency screen (N-{order}) on target bus {target_bus}: "
-            f"{n_total} contingencies over nearest neighbors [{nbr_str}].",
+            f"Contingency screen (N-{order}) around changed element {changed.label()} "
+            f"(excluded from outages): {n_total} contingencies over "
+            f"{len(affected.substations)} substations / {len(affected.buses)} buses within "
+            f"substation depth {affected.depth}.",
+            "Substations by tier (id = lowest bus number; transformers add no hop): "
+            + "; ".join(tier_parts) + ".",
+            f"Affected elements: {len(affected.branches)} branches, {len(affected.gens)} "
+            f"generators, {len(affected.loads)} loads, {len(affected.shunts)} shunts.",
             f"Components: {comp_str}.  Feasibility band: Vmin={vmin}, Vmax={vmax} "
             f"(OPF-redispatch model — PASS = post-outage OPFLOW converges feasibly).",
             f"PASSED: {passed_count} / {n_total}   FAILED: {failed_count} / {n_total}",
             ref_line,
             "",
+            verdict,
+            "",
         ]
+
+        # Every failed contingency, always in full.
+        failed = [s for s in contingency_summaries if not s["passed"]]
+        header.append(f"FAILED contingencies ({failed_count} of {n_total}):")
+        if failed:
+            header.append(f"{'contingency':<36} | {'kinds':<14} | {'tier':<5} | reason")
+            for s in failed:
+                kinds_str = "+".join(s["kinds"])
+                tiers_str = ",".join(str(t) for t in s.get("tiers") or [])
+                header.append(
+                    f"{s['label']:<36} | {kinds_str:<14} | {tiers_str:<5} | "
+                    f"{s.get('reason') or 'did not converge'}"
+                )
+        else:
+            header.append("  (none)")
+        header.append("")
+
+        # N-2: which elements the failures come from.
+        if order > 1 and failed:
+            counts = contingency.failed_element_counts(
+                contingencies, [s["passed"] for s in contingency_summaries],
+            )
+            header.append(
+                "Elements in failed contingencies (failed pairs containing the element, "
+                "of all pairs containing it):"
+            )
+            header.append(f"{'element':<24} | {'tier':>4} | {'failed':>6} | {'of':>4}")
+            for elem, n_failed, n_with in counts:
+                header.append(
+                    f"{elem.label():<24} | {elem.tier:>4} | {n_failed:>6} | {n_with:>4}"
+                )
+            header.append("")
 
         # Relief section (C.7) — appended to whichever table branch is used below.
         relief_lines = self._relief_section_lines(
@@ -3707,6 +3847,7 @@ class AgentLoopController:
         # --- full-table branch ---
         if threshold > 0 and n_total <= threshold:
             lines = header + [
+                "All contingencies:",
                 f"{'contingency':<28} | {'kinds':<14} | {'pass':>4} | "
                 f"{'Vmin':>5} | {'Vmax':>5} | {'maxLoad%':>8} | reason",
             ]
@@ -3721,23 +3862,9 @@ class AgentLoopController:
             lines += relief_lines
             return "\n".join(lines)
 
-        # --- summarized branch (FAILED set never truncated) ---
+        # --- summarized branch (FAILED set above is never truncated) ---
         lines = list(header)
-        failed = [s for s in contingency_summaries if not s["passed"]]
         passed = [s for s in contingency_summaries if s["passed"]]
-
-        failed_by_reason: dict[str, list[str]] = defaultdict(list)
-        for s in failed:
-            failed_by_reason[s.get("reason") or "did not converge"].append(s["label"])
-        lines.append(f"FAILED contingencies grouped by reason ({failed_count} total):")
-        if failed_by_reason:
-            for reason in sorted(failed_by_reason):
-                labels = failed_by_reason[reason]
-                lines.append(f"  {reason} ({len(labels)}): {labels}")
-        else:
-            lines.append("  (none)")
-        lines.append("")
-
         sample = passed[:top_n]
         lines.append(
             f"Passed contingencies ({passed_count} total; showing {len(sample)}):"
@@ -3937,6 +4064,7 @@ class AgentLoopController:
         self._journal.add_complete(
             iteration=iteration,
             summary=summary_text,
+            findings=findings or None,
         )
 
         self._final_findings = findings
@@ -3972,8 +4100,14 @@ class AgentLoopController:
     def _handle_topology_analyze(
         self, iteration: int, data: dict, query_type: str
     ) -> tuple[str, bool]:
-        """Handle a structured topology query — deterministic, no LLM/backend call."""
-        _VALID = ("nearest_neighbors", "incident_branches")
+        """Handle a structured topology query — deterministic, no LLM/backend call.
+
+        affected_elements: the contingency neighbor search (five lists with tiers)
+        around the element a mutation changes — exactly what a contingency sweep
+        with the same mutation would test.
+        incident_branches: the branch circuits touching one bus.
+        """
+        _VALID = ("affected_elements", "incident_branches")
         if query_type not in _VALID:
             self._error_feedback = (
                 f"Unknown query_type '{query_type}'. "
@@ -3986,35 +4120,43 @@ class AgentLoopController:
             self._error_feedback = "No network loaded; cannot execute topology query."
             return "error", True
 
-        raw_bus = data.get("bus")
-        if raw_bus is None:
-            self._error_feedback = "Topology query requires a 'bus' field (integer bus number)."
-            return "error", True
-        try:
-            bus = int(raw_bus)
-        except (TypeError, ValueError):
-            self._error_feedback = f"'bus' must be an integer, got {raw_bus!r}."
-            return "error", True
-
-        if query_type == "nearest_neighbors":
-            raw_k = data.get("k", 3)
-            try:
-                k = int(raw_k)
-            except (TypeError, ValueError):
-                self._error_feedback = f"'k' must be a positive integer, got {raw_k!r}."
+        if query_type == "affected_elements":
+            if "mutation" not in data:
+                self._error_feedback = (
+                    'affected_elements requires "mutation", e.g. '
+                    '{"action": "add_load_at_bus", "bus": 77, "Pd": 50.0}.'
+                )
                 return "error", True
-
+            raw_depth = data.get("substation_depth", contingency.DEFAULT_SUBSTATION_DEPTH)
             try:
-                neighbors = topology.k_nearest_by_hops(net, bus, k)
-                total = topology.count_reachable(net, bus)
+                depth = int(raw_depth)
+                if depth < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                self._error_feedback = (
+                    f"'substation_depth' must be an integer >= 0, got {raw_depth!r}."
+                )
+                return "error", True
+            try:
+                mutated, changed = contingency.apply_mutation(net, data["mutation"])
+                affected = contingency.find_affected_elements(mutated, changed, depth)
             except ValueError as exc:
                 self._error_feedback = f"Topology query error: {exc}"
                 return "error", True
 
-            result_text = topology.format_nearest_neighbors_view(bus, k, neighbors, total)
-            query_desc = f"nearest_neighbors bus={bus} k={k}"
+            result_text = contingency.format_affected_elements_view(affected)
+            query_desc = f"affected_elements {changed.label()} depth={depth}"
 
         else:  # incident_branches
+            raw_bus = data.get("bus")
+            if raw_bus is None:
+                self._error_feedback = "incident_branches requires a 'bus' field (integer bus number)."
+                return "error", True
+            try:
+                bus = int(raw_bus)
+            except (TypeError, ValueError):
+                self._error_feedback = f"'bus' must be an integer, got {raw_bus!r}."
+                return "error", True
             try:
                 branches = topology.incident_branches(net, bus)
             except ValueError as exc:
@@ -4140,7 +4282,7 @@ class AgentLoopController:
             f"{old_factor} → {self._session_load_factor}"
         )
         # Rebuild system prompt to reflect the new load factor note
-        from agentigrid.prompts.system_prompt import format_benchmark_for_prompt as _fmt_bench
+        from agentigrid.prompts.exago.system_prompt import format_benchmark_for_prompt as _fmt_bench
         net_summary_text = network_summary(
             self._base_network,
             max_generators=self._config.report.network_summary_max_generators,
@@ -4526,23 +4668,11 @@ class AgentLoopController:
                     f"{', '.join(o['name'] for o in parsed)}"
                 )
             else:
-                self._journal.objective_registry.register(ObjectiveEntry(
-                    name="generation_cost",
-                    direction="minimize",
-                    priority="primary",
-                    introduced_at=0,
-                    source="initial",
-                ))
-                self._print("[Objectives] Defaulted to generation_cost (minimize)")
+                # Nothing to optimize in the goal (e.g. a test or report): track
+                # nothing rather than invent an objective the user did not ask for.
+                self._print("[Objectives] None stated in the goal; none tracked")
         except Exception as exc:
             logger.warning("Failed to extract initial objectives: %s", exc)
-            self._journal.objective_registry.register(ObjectiveEntry(
-                name="generation_cost",
-                direction="minimize",
-                priority="primary",
-                introduced_at=0,
-                source="initial",
-            ))
 
     def _extract_objectives_from_steering(self, directive: str, iteration: int) -> None:
         """Extract any new objectives from a steering directive."""
