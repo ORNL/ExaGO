@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from agentigrid.parsers.opflow_parser import parse_opflow_output
-from agentigrid.parsers.dcopflow_summary import dcopflow_results_summary
-from agentigrid.parsers import results_summary_for_app, parse_simulation_result_for_app
-from agentigrid.engine.metric_extractor import available_metrics, available_metrics_for_app
-from agentigrid.engine.commands import SetGenVoltage, SetBusVLimits, SetAllBusVLimits, ScaleAllLoads
-from agentigrid.engine.modifier import apply_modifications
-from agentigrid.parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
+from agentigrid.exago_parsers.opflow_parser import parse_opflow_output
+from agentigrid.exago_parsers.dcopflow_summary import dcopflow_results_summary
+from agentigrid.exago_parsers import results_summary_for_app, parse_simulation_result_for_app
+from agentigrid.exago_engine.metric_extractor import available_metrics, available_metrics_for_app
+from agentigrid.exago_engine.commands import SetGenVoltage, SetBusVLimits, SetAllBusVLimits, ScaleAllLoads
+from agentigrid.exago_engine.modifier import apply_modifications
+from agentigrid.exago_parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +311,7 @@ class TestDCOPFLOWModifier:
 
     def test_set_gen_voltage_skipped(self, minimal_network):
         """set_gen_voltage should be skipped with warning for dcopflow."""
-        from agentigrid.engine.commands import SetGenVoltage
+        from agentigrid.exago_engine.commands import SetGenVoltage
         cmd = SetGenVoltage(bus=1, Vg=1.05)
         _, report = apply_modifications(minimal_network, [cmd], application="dcopflow")
         assert len(report.applied) == 0
@@ -320,7 +320,7 @@ class TestDCOPFLOWModifier:
 
     def test_set_bus_vlimits_skipped(self, minimal_network):
         """set_bus_vlimits should be skipped with warning for dcopflow."""
-        from agentigrid.engine.commands import SetBusVLimits
+        from agentigrid.exago_engine.commands import SetBusVLimits
         cmd = SetBusVLimits(bus=1, Vmin=0.95, Vmax=1.05)
         _, report = apply_modifications(minimal_network, [cmd], application="dcopflow")
         assert len(report.applied) == 0
@@ -328,7 +328,7 @@ class TestDCOPFLOWModifier:
 
     def test_set_all_bus_vlimits_skipped(self, minimal_network):
         """set_all_bus_vlimits should be skipped with warning for dcopflow."""
-        from agentigrid.engine.commands import SetAllBusVLimits
+        from agentigrid.exago_engine.commands import SetAllBusVLimits
         cmd = SetAllBusVLimits(Vmin=0.95, Vmax=1.05)
         _, report = apply_modifications(minimal_network, [cmd], application="dcopflow")
         assert len(report.applied) == 0
@@ -336,7 +336,7 @@ class TestDCOPFLOWModifier:
 
     def test_load_commands_still_work(self, minimal_network):
         """Non-voltage commands should work normally for dcopflow."""
-        from agentigrid.engine.commands import ScaleAllLoads
+        from agentigrid.exago_engine.commands import ScaleAllLoads
         cmd = ScaleAllLoads(factor=1.1)
         modified, report = apply_modifications(minimal_network, [cmd], application="dcopflow")
         assert len(report.applied) == 1
@@ -346,7 +346,7 @@ class TestDCOPFLOWModifier:
 
     def test_voltage_cmds_applied_for_opflow(self, minimal_network):
         """Voltage commands should still be applied for opflow (not skipped)."""
-        from agentigrid.engine.commands import SetAllBusVLimits
+        from agentigrid.exago_engine.commands import SetAllBusVLimits
         cmd = SetAllBusVLimits(Vmin=0.95, Vmax=1.05)
         _, report = apply_modifications(minimal_network, [cmd], application="opflow")
         assert len(report.applied) == 1

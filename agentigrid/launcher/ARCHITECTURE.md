@@ -415,13 +415,13 @@ agentigrid/
 │       └── example_goals.yaml       # Preset goal prompts
 │
 ├── agentigrid/                         # Existing — NOT MODIFIED (except callback hooks)
-│   ├── engine/
+│   ├── exago_engine/
 │   │   ├── agent_loop.py            # ◄── Minor addition: callback parameters
 │   │   ├── journal.py               # Used as-is
 │   │   ├── executor.py              # Used as-is
 │   │   └── ...
 │   ├── backends/                    # Used as-is
-│   ├── parsers/                     # Used as-is
+│   ├── exago_parsers/               # Used as-is
 │   ├── config.py                    # Used as-is
 │   └── ...
 │
@@ -894,7 +894,7 @@ The implementation is structured as 9 Claude Code tasks across 3 phases, each bu
 
 OPFLOW reports `DID NOT CONVERGE` for **all** infeasible candidates regardless of the actual internal cause (voltage violation, line overload, numerical divergence, etc.). The only certified information from a non-converging solve is that **no feasible operating point was found**. The solver's last iterate — voltage magnitudes, line loadings, violation count — is uncertified diagnostic data, not a confirmed constraint cause.
 
-**Implementation rule**: the `_infeasible_reason` function in `engine/agent_loop.py` takes only `convergence_status: str` as input. It returns `"constraint violation"` only when the status starts with `"CONVERGED"` (PFLOW-style post-solve infeasibility), and `"did not converge"` for everything else. Scalar iterate metrics are never used to classify the infeasibility cause.
+**Implementation rule**: the `_infeasible_reason` function in `exago_engine/agent_loop.py` takes only `convergence_status: str` as input. It returns `"constraint violation"` only when the status starts with `"CONVERGED"` (PFLOW-style post-solve infeasibility), and `"did not converge"` for everything else. Scalar iterate metrics are never used to classify the infeasibility cause.
 
 **Rendering rule**: the `_certified_reason(v: dict)` helper (duplicated in `app.py` and `report_generator.py`) derives the displayed reason from the `status` field in the candidate dict at render time, overriding whatever string is stored in the `reason` field. This ensures historical journals with old heuristic labels (e.g., "line overload") are rendered correctly without a data migration.
 

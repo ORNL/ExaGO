@@ -16,11 +16,11 @@ import pytest
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine.agent_loop import AgentLoopController, _is_certified
-from agentigrid.engine.executor import SimulationResult
-from agentigrid.engine.journal import SearchJournal, JournalEntry
-from agentigrid.parsers.matpower_parser import parse_matpower
-from agentigrid.parsers.opflow_results import OPFLOWResult, BusResult, GenResult
+from agentigrid.exago_engine.agent_loop import AgentLoopController, _is_certified
+from agentigrid.exago_engine.executor import SimulationResult
+from agentigrid.exago_engine.journal import SearchJournal, JournalEntry
+from agentigrid.exago_parsers.matpower_parser import parse_matpower
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult, BusResult, GenResult
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 BASE_CASE = DATA_DIR / "case_ACTIVSg200.m"
@@ -79,8 +79,8 @@ def _make_config(tmp_path):
 
 def _controller(tmp_path):
     cfg = _make_config(tmp_path)
-    with patch("agentigrid.engine.agent_loop.create_backend", return_value=MagicMock()), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+    with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=MagicMock()), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
         ex = MagicMock()
         ex.run.return_value = _sim()
         ex.run_parallel.side_effect = (
@@ -124,7 +124,7 @@ class TestMetricCertifiedGate:
         base = _opflow(buses=[_busres(1, 1.00), _busres(2, 1.00), _busres(99, 1.00)])
         cand1 = _opflow(converged=True,  buses=[_busres(1, 1.01), _busres(2, 1.00), _busres(99, 1.03)])  # ΔV 0.03
         cand2 = _opflow(converged=False, buses=[_busres(1, 1.00), _busres(2, 1.00), _busres(99, 1.09)])  # ΔV 0.09 (uncertified)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=[base, cand1, cand2]):
             kind, ok = c._handle_sweep(1, {
                 "mutation": {"action": "add_load_at_bus", "Pd": 100.0},
@@ -151,7 +151,7 @@ class TestMetricCertifiedGate:
         base = _opflow(buses=[_busres(1, 1.00), _busres(2, 1.00)])
         cand1 = _opflow(converged=True, buses=[_busres(1, 1.02), _busres(2, 1.00)])  # 0.02
         cand2 = _opflow(converged=True, buses=[_busres(1, 1.00), _busres(2, 1.04)])  # 0.04
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=[base, cand1, cand2]):
             c._handle_sweep(1, {
                 "mutation": {"action": "add_load_at_bus", "Pd": 100.0},
@@ -266,7 +266,7 @@ class TestReactiveAdequacyAudit:
         c = _controller(tmp_path)
         # added unit solves at Qg == Qmax target (50) at each adequate bus
         g_at = lambda bus: _opflow(converged=True, gens=[_genres(bus, 100.0, 50.0)])
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=[g_at(1), g_at(2)]):
             kind, ok = c._handle_sweep(1, {
                 "mutation": {"action": "add_generator_at_bus", "capacity_mw": 100.0, "Qmax": 50.0},
@@ -297,7 +297,7 @@ class TestSweepDedup:
 
     def _run_sweep(self, c, pd=100.0):
         converged = _opflow(converged=True)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=converged):
             return c._handle_sweep(1, {
                 "mutation": {"action": "add_load_at_bus", "Pd": pd},

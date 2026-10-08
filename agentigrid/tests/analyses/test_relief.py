@@ -25,13 +25,13 @@ import pytest
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine import contingency as C
-from agentigrid.engine import relief
-from agentigrid.engine import topology as T
-from agentigrid.engine.agent_loop import AgentLoopController
-from agentigrid.engine.executor import SimulationResult
-from agentigrid.parsers.matpower_parser import parse_matpower
-from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_engine import contingency as C
+from agentigrid.exago_engine import relief
+from agentigrid.exago_engine import topology as T
+from agentigrid.exago_engine.agent_loop import AgentLoopController
+from agentigrid.exago_engine.executor import SimulationResult
+from agentigrid.exago_parsers.matpower_parser import parse_matpower
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 IEEE118 = DATA_DIR / "ieee_118_bus_v10.m"
@@ -298,8 +298,8 @@ class TestReliefHandler:
     def _controller(self, tmp_path):
         cfg = _make_config(tmp_path)
         backend_mock = MagicMock()
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=backend_mock), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=backend_mock), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
             mock_executor = MagicMock()
             mock_executor.run.return_value = _sim_result()
             mock_executor.run_parallel.side_effect = (
@@ -339,7 +339,7 @@ class TestReliefHandler:
             return _opflow(True)              # relief solves → resolve
 
         calls_before = len(backend_mock.mock_calls)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=fake_parse):
             kind, ok = controller._handle_contingency_sweep(1, data)
 
@@ -360,7 +360,7 @@ class TestReliefHandler:
     def test_no_relief_without_relief_measures_matches_c5(self, tmp_path, net118):
         """Without relief_measures, summaries carry no 'relief' key (C.5 behavior)."""
         controller, _ = self._controller(tmp_path)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(False)):
             kind, ok = controller._handle_contingency_sweep(1, {
                 "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
@@ -388,7 +388,7 @@ class TestReliefHandler:
             return real_solve(net, *a, **k)
 
         controller._executor.run = fake_run
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=fake_parse):
             controller._handle_contingency_sweep(1, {
                 "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
@@ -414,7 +414,7 @@ class TestReliefHandler:
     }
 
     def _sweep(self, controller, data):
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(False)):
             return controller._handle_sweep(1, dict(data))
 
@@ -478,7 +478,7 @@ class TestReliefHandler:
         # Budget 0 → every failure marked exhausted, none searched.
         new_search = dataclasses.replace(controller._config.search, relief_max_solves=0)
         controller._config = dataclasses.replace(controller._config, search=new_search)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(False)):
             kind, ok = controller._handle_contingency_sweep(1, {
                 "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},

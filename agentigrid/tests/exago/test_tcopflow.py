@@ -7,28 +7,28 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from agentigrid.parsers.tcopflow_parser import (
+from agentigrid.exago_parsers.tcopflow_parser import (
     parse_tcopflow_output,
     parse_tcopflow_simulation_result,
     parse_tcopflow_period_files,
     parse_tcopflow_metadata,
 )
-from agentigrid.parsers.tcopflow_summary import tcopflow_results_summary
-from agentigrid.parsers import (
+from agentigrid.exago_parsers.tcopflow_summary import tcopflow_results_summary
+from agentigrid.exago_parsers import (
     results_summary_for_app,
     parse_simulation_result_for_app,
     parse_tcopflow_metadata as dispatch_tcopflow_metadata,
 )
-from agentigrid.parsers.opflow_parser import parse_opflow_output
+from agentigrid.exago_parsers.opflow_parser import parse_opflow_output
 from agentigrid.config import SearchConfig
-from agentigrid.engine.metric_extractor import available_metrics, available_metrics_for_app
-from agentigrid.engine.commands import ScaleLoadProfile, parse_command
-from agentigrid.engine.modifier import apply_modifications, scale_load_profile_csv, ModificationReport
-from agentigrid.parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
-from agentigrid.engine.journal import SearchJournal, JournalEntry
+from agentigrid.exago_engine.metric_extractor import available_metrics, available_metrics_for_app
+from agentigrid.exago_engine.commands import ScaleLoadProfile, parse_command
+from agentigrid.exago_engine.modifier import apply_modifications, scale_load_profile_csv, ModificationReport
+from agentigrid.exago_parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
+from agentigrid.exago_engine.journal import SearchJournal, JournalEntry
 from agentigrid.prompts.exago.system_prompt import build_system_prompt
-from agentigrid.engine.schema_description import command_schema_text
-from agentigrid.engine.goal_classifier import build_classification_prompts
+from agentigrid.exago_engine.schema_description import command_schema_text
+from agentigrid.exago_engine.goal_classifier import build_classification_prompts
 
 
 # ---------------------------------------------------------------------------
@@ -675,7 +675,7 @@ class TestTCOPFLOWJournalEntry:
 
     def test_add_from_results_with_num_steps(self):
         journal = SearchJournal()
-        from agentigrid.parsers.opflow_results import OPFLOWResult
+        from agentigrid.exago_parsers.opflow_results import OPFLOWResult
         result = OPFLOWResult(
             converged=True, objective_value=100.0, convergence_status="CONVERGED",
             solver="IPOPT", model="POWER_BALANCE_POLAR",

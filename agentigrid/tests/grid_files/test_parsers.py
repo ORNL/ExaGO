@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agentigrid.parsers import (
+from agentigrid.exago_parsers import (
     Branch,
     Bus,
     GenCost,
@@ -208,7 +208,7 @@ class TestEdgeCases:
 # Network metadata (Task 3) — static facts injected into the system prompt
 # ===========================================================================
 
-from agentigrid.parsers import network_metadata
+from agentigrid.exago_parsers import network_metadata
 
 
 @pytest.mark.skipif(not _has_test_file, reason="case_ACTIVSg200.m not in data/exago/examples/")

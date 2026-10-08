@@ -7,31 +7,31 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from agentigrid.parsers.sopflow_parser import (
+from agentigrid.exago_parsers.sopflow_parser import (
     parse_sopflow_output,
     parse_sopflow_simulation_result,
 )
-from agentigrid.parsers.sopflow_summary import sopflow_results_summary
-from agentigrid.parsers import (
+from agentigrid.exago_parsers.sopflow_summary import sopflow_results_summary
+from agentigrid.exago_parsers import (
     results_summary_for_app,
     parse_simulation_result_for_app,
     parse_sopflow_metadata as dispatch_sopflow_metadata,
 )
-from agentigrid.parsers.opflow_parser import parse_opflow_output
+from agentigrid.exago_parsers.opflow_parser import parse_opflow_output
 from agentigrid.config import SearchConfig
-from agentigrid.engine.metric_extractor import available_metrics, available_metrics_for_app
-from agentigrid.engine.commands import ScaleWindScenario, parse_command
-from agentigrid.engine.modifier import (
+from agentigrid.exago_engine.metric_extractor import available_metrics, available_metrics_for_app
+from agentigrid.exago_engine.commands import ScaleWindScenario, parse_command
+from agentigrid.exago_engine.modifier import (
     apply_modifications,
     scale_wind_scenario_csv,
     scale_load_profile_csv,
     ModificationReport,
 )
-from agentigrid.parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
-from agentigrid.engine.journal import SearchJournal, JournalEntry
+from agentigrid.exago_parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
+from agentigrid.exago_engine.journal import SearchJournal, JournalEntry
 from agentigrid.prompts.exago.system_prompt import build_system_prompt
-from agentigrid.engine.schema_description import command_schema_text
-from agentigrid.engine.goal_classifier import build_classification_prompts
+from agentigrid.exago_engine.schema_description import command_schema_text
+from agentigrid.exago_engine.goal_classifier import build_classification_prompts
 
 
 # ---------------------------------------------------------------------------
@@ -756,7 +756,7 @@ class TestSOPFLOWModifier:
         assert float(lines[1].split(",")[1]) == pytest.approx(12.0, abs=0.1)
 
     def test_scale_load_profile_skipped_for_sopflow(self, tmp_path):
-        from agentigrid.engine.commands import ScaleLoadProfile
+        from agentigrid.exago_engine.commands import ScaleLoadProfile
         p_path = tmp_path / "load_P.csv"
         q_path = tmp_path / "load_Q.csv"
         p_path.write_text("T,B1\n0,100.0\n")
@@ -814,7 +814,7 @@ class TestSOPFLOWJournalEntry:
 
     def test_add_from_results_with_num_scenarios(self):
         journal = SearchJournal()
-        from agentigrid.parsers.opflow_results import OPFLOWResult
+        from agentigrid.exago_parsers.opflow_results import OPFLOWResult
         result = OPFLOWResult(
             converged=True, objective_value=100.0, convergence_status="CONVERGED",
             solver="IPOPT", model="POWER_BALANCE_POLAR",
@@ -942,13 +942,13 @@ class TestSOPFLOWScenarioMatching:
 
 class TestScenarioRowCount:
     def test_count_scenario_rows_single_period(self, tmp_path):
-        from agentigrid.engine.agent_loop import _count_scenario_rows
+        from agentigrid.exago_engine.agent_loop import _count_scenario_rows
         csv_path = tmp_path / "case9_10_scenarios.csv"
         csv_path.write_text("scenario_nr,3_Wind_1,weight\n1,85.0,0.1\n2,105.0,0.1\n")
         assert _count_scenario_rows(csv_path) == 2
 
     def test_count_scenario_rows_multi_period(self, tmp_path):
-        from agentigrid.engine.agent_loop import _count_scenario_rows
+        from agentigrid.exago_engine.agent_loop import _count_scenario_rows
         csv_path = tmp_path / "case9_scenarios.csv"
         csv_path.write_text(
             "sim_timestamp,scenario_nr,3_Wind_1\n"
@@ -959,7 +959,7 @@ class TestScenarioRowCount:
         assert _count_scenario_rows(csv_path) == 3
 
     def test_count_scenario_rows_missing_file(self, tmp_path):
-        from agentigrid.engine.agent_loop import _count_scenario_rows
+        from agentigrid.exago_engine.agent_loop import _count_scenario_rows
         csv_path = tmp_path / "nonexistent.csv"
         assert _count_scenario_rows(csv_path) == 1
 
@@ -970,7 +970,7 @@ class TestSOPFLOWAnalyzeHandler:
 
     @pytest.fixture
     def sopflow_loop(self):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         result, _ = parse_sopflow_output(SAMPLE_SOPFLOW_OUTPUT)
         loop = MagicMock(spec=AgentLoopController)
         loop._latest_opflow = result

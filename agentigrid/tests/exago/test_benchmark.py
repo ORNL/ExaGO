@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from dataclasses import dataclass
 
-from agentigrid.engine.benchmark import (
+from agentigrid.exago_engine.benchmark import (
     BenchmarkResult,
     DispatchComparison,
     LoadabilityResult,
@@ -15,8 +15,8 @@ from agentigrid.engine.benchmark import (
     _format_benchmark_summary,
     _extract_pflow_max_factor,
 )
-from agentigrid.engine.journal import SearchJournal, JournalEntry
-from agentigrid.parsers.opflow_results import OPFLOWResult, GenResult
+from agentigrid.exago_engine.journal import SearchJournal, JournalEntry
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult, GenResult
 
 
 # ---------------------------------------------------------------------------
@@ -332,16 +332,16 @@ class TestBenchmarkSummary:
 # ---------------------------------------------------------------------------
 
 class TestBenchmarkIntegration:
-    @patch("agentigrid.engine.benchmark.SimulationExecutor")
+    @patch("agentigrid.exago_engine.benchmark.SimulationExecutor")
     def test_successful_benchmark(self, MockExecutor, opflow_result_converged, pflow_result_feasible):
         mock_instance = MagicMock()
         MockExecutor.return_value = mock_instance
         mock_instance.run.return_value = MagicMock(success=True, error_message=None)
 
-        with patch("agentigrid.engine.benchmark.parse_simulation_result_for_app") as mock_parse:
+        with patch("agentigrid.exago_engine.benchmark.parse_simulation_result_for_app") as mock_parse:
             mock_parse.return_value = opflow_result_converged
 
-            with patch("agentigrid.engine.benchmark.parse_matpower") as mock_net:
+            with patch("agentigrid.exago_engine.benchmark.parse_matpower") as mock_net:
                 mock_net.return_value = MagicMock(gencost=[])
 
                 result = run_pflow_vs_opflow_benchmark(
@@ -357,13 +357,13 @@ class TestBenchmarkIntegration:
         assert result.opflow_converged is True
         assert result.opflow_objective == 27557.57
 
-    @patch("agentigrid.engine.benchmark.SimulationExecutor")
+    @patch("agentigrid.exago_engine.benchmark.SimulationExecutor")
     def test_opflow_failure(self, MockExecutor):
         mock_instance = MagicMock()
         MockExecutor.return_value = mock_instance
         mock_instance.run.return_value = MagicMock(success=False, error_message="OPFLOW failed")
 
-        with patch("agentigrid.engine.benchmark.parse_matpower") as mock_net:
+        with patch("agentigrid.exago_engine.benchmark.parse_matpower") as mock_net:
             mock_net.return_value = MagicMock(gencost=[])
 
             result = run_pflow_vs_opflow_benchmark(
@@ -378,13 +378,13 @@ class TestBenchmarkIntegration:
         assert result.error is not None
         assert "failed" in result.error.lower()
 
-    @patch("agentigrid.engine.benchmark.SimulationExecutor")
+    @patch("agentigrid.exago_engine.benchmark.SimulationExecutor")
     def test_with_pflow_best_result(self, MockExecutor, opflow_result_converged, pflow_result_feasible):
         mock_instance = MagicMock()
         MockExecutor.return_value = mock_instance
         mock_instance.run.return_value = MagicMock(success=True, error_message=None)
 
-        with patch("agentigrid.engine.benchmark.parse_simulation_result_for_app") as mock_parse:
+        with patch("agentigrid.exago_engine.benchmark.parse_simulation_result_for_app") as mock_parse:
             mock_parse.return_value = opflow_result_converged
 
             mock_gencost = MagicMock()
@@ -395,7 +395,7 @@ class TestBenchmarkIntegration:
             mock_net = MagicMock()
             mock_net.gencost = mock_gencost
 
-            with patch("agentigrid.engine.benchmark.parse_matpower") as mock_parse_net:
+            with patch("agentigrid.exago_engine.benchmark.parse_matpower") as mock_parse_net:
                 mock_parse_net.return_value = mock_net
 
                 result = run_pflow_vs_opflow_benchmark(

@@ -65,3 +65,28 @@ output:
   journal_format: "json"        # json | csv
   save_modified_files: true     # keep modified .m files from each iteration
   verbose: false                # print detailed output during search
+
+# GridKit settings (used with --tool gridkit). LLM, iteration limit, worker
+# count and output folders come from the sections above; GridKit output goes
+# to {output.workdir}/gridkit/ and {output.logs_dir}/gridkit/.
+# PJM pass/fail limits are not set here: they are fixed in
+# agentigrid/gridkit_engine/criteria.py with their sources.
+gridkit:
+  binary_dir: "./applications/gridkit"  # links to GridKit/build/bin
+  dynamicsimulation_binary: null        # defaults to {binary_dir}/DynamicSimulation
+  timeout: 600                          # seconds per GridKit run
+
+  # Written into each run's solver .json; keys are GridKit's own
+  # (GridKit/application/PhasorDynamics/README.md)
+  study:
+    tmax: 15.0                          # simulation length, s (PJM: 10-15 s; damping needs >= 10)
+    dt_monitor: 0.01                    # recording interval, s
+    rel_tol: 1.0e-7
+    abs_tol: 1.0e-9
+    dt_fixed: 0.0                       # 0 = adaptive time step
+    max_steps: 0                        # 0 = IDA default, negative = unlimited
+    max_order: 5                        # IDA method order, 1-5
+
+  fault:                                # used when the goal gives no time
+    start: 1.0                          # fault_on time, s; the clearing time follows
+                                        #   PJM clearing cycles + margin (criteria.py)

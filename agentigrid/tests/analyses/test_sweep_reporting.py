@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from agentigrid.engine.agent_loop import _infeasible_reason
+from agentigrid.exago_engine.agent_loop import _infeasible_reason
 
 
 # ---------------------------------------------------------------------------

@@ -56,7 +56,7 @@ Adding a generator supports two modes, chosen from the goal's wording (and named
 
 ### Custom Sweep Metric / Predicate (named registry)
 
-Beyond the default cost metric and standard V-band/loading feasibility, a sweep can select a **named, verified primitive** (`agentigrid/engine/sweep_metrics.py`) — not free-form code. Selection is by name; the registry is extensible (`register_metric` / `register_predicate`) for later capabilities.
+Beyond the default cost metric and standard V-band/loading feasibility, a sweep can select a **named, verified primitive** (`agentigrid/exago_engine/sweep_metrics.py`) — not free-form code. Selection is by name; the registry is extensible (`register_metric` / `register_predicate`) for later capabilities.
 
 - **`metric: "max_delta_v"`** — ranks buses by the worst *system-wide* voltage step `max_b |V_candidate[b] − V_base[b]|` caused by switching in a load block (`search.switched_load_mw`) at the candidate bus. A power-quality flag; the largest step need not be at the switched bus. Requires (and triggers) a one-time base-case solve for the reference voltages.
 - **`feasibility_predicate: "reactive_adequacy"`** — replaces standard feasibility with a reactive-headroom test: a feasible OPF must exist with the added unit forced to `(P = Pmax, Q = Qmax)` (the sweep pins `Qmin = Qmax`). Returns the limiting quantity when it fails.
@@ -77,6 +77,28 @@ agentigrid --tool gridkit --config configs/local_config.yaml \
   data/gridkit/examples/IEEE39.case.json \
   "Assume a short circuit fault at each bus of the system, tell me if the system can survive without blackout."
 ```
+
+**Starting from the latest ExaGO steady state.** A fault screen with
+`"start_from": "latest_steady_state"` (the LLM sets it when the goal asks for "the most
+recent steady state"; `--from-exago` forces it for the whole session) uses the GridKit
+case only for the dynamic models; the operating point and network come from the last
+simulation of the newest ExaGO journal in `workdir/exago/` (OPFLOW/PFLOW save their
+solved case, `opflowout.m` / `pflowout.m`, in the iteration folder). Bus voltages,
+machine `p0`/`q0`, loads, shunts and branches are taken from ExaGO; machines of
+generators that are off in ExaGO are removed with their controls. That start gets its
+own no-fault run before any fault. The screen is not run if that simulation did not
+converge, was a sweep, or has an online generator without a dynamic model in the
+GridKit case. The converted case is saved as `from_exago.case.json` in the session
+folder.
+
+**ContingencyAnalysis.** With `"application": "ContingencyAnalysis"` (the LLM sets it
+when the goal asks for contingency analysis), one GridKit `ContingencyAnalysis` process
+runs all bus faults of the screen, writing `output_<fault index>.csv` per fault in the
+screen's `contingency/` folder; the checks and verdict are the same as with
+`DynamicSimulation`. `ContingencyAnalysis` runs every fault device in the case file, so
+its case copy holds only the requested faults (fault devices shipped with the case,
+such as a demo fault, are left out of the copy). With `DynamicSimulation` they stay in
+the copy but are never switched on.
 
 Link the GridKit binaries and cases first (see [applications/gridkit/README.md](applications/gridkit/README.md)
 and [data/gridkit/README.md](data/gridkit/README.md)). Sessions are written to
@@ -437,6 +459,13 @@ For transient studies, link GridKit's binaries into `applications/gridkit/` and 
 ## Configuration
 
 Edit `configs/default_config.yaml` or pass `--config path/to/config.yaml`. CLI arguments override config file values.
+
+One config file holds the settings for both tools: the `exago:` and `data:` sections
+for ExaGO, and the `gridkit:` section for GridKit (binary, timeout per run, the
+solver values written into each run's solver `.json`, and the default fault start).
+The LLM, iteration limit, worker count and output folders are shared. PJM pass/fail
+limits are not configurable; they live in `agentigrid/gridkit_engine/criteria.py`
+with their sources.
 
 Set your API key as an environment variable:
 ```bash

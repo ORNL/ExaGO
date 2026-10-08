@@ -98,6 +98,23 @@ DEFAULTS: dict[str, Any] = {
         "near_optimal_abs_tol": 5.0,
         "network_summary_max_generators": 40,
     },
+    "gridkit": {
+        "binary_dir": "./applications/gridkit",
+        "dynamicsimulation_binary": None,
+        "timeout": 600,
+        "study": {
+            "tmax": 15.0,
+            "dt_monitor": 0.01,
+            "rel_tol": 1.0e-7,
+            "abs_tol": 1.0e-9,
+            "dt_fixed": 0.0,
+            "max_steps": 0,
+            "max_order": 5,
+        },
+        "fault": {
+            "start": 1.0,
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -211,6 +228,39 @@ class ReportConfig:
 
 
 @dataclass(frozen=True)
+class GridkitStudyConfig:
+    """Keys written one-to-one into GridKit's solver .json
+    (GridKit/application/PhasorDynamics/README.md)."""
+
+    tmax: float = 15.0          # simulation length, s (PJM M-14B G.2.2: 10-15 s)
+    dt_monitor: float = 0.01    # recording interval, s
+    rel_tol: float = 1.0e-7
+    abs_tol: float = 1.0e-9
+    dt_fixed: float = 0.0       # 0 = adaptive time step
+    max_steps: int = 0          # 0 = IDA default, negative = unlimited
+    max_order: int = 5          # IDA method order, 1-5
+
+    def solver_options(self) -> dict[str, Any]:
+        """Solver keys other than tmax/dt_monitor (those are set per run)."""
+        return {f.name: getattr(self, f.name) for f in fields(self)
+                if f.name not in ("tmax", "dt_monitor")}
+
+
+@dataclass(frozen=True)
+class GridkitFaultConfig:
+    start: float = 1.0          # fault_on time, s, when the goal gives none
+
+
+@dataclass(frozen=True)
+class GridkitConfig:
+    binary_dir: Path = Path("./applications/gridkit")
+    dynamicsimulation_binary: Optional[Path] = None   # defaults to {binary_dir}/DynamicSimulation
+    timeout: float = 600        # seconds per GridKit run
+    study: GridkitStudyConfig = field(default_factory=GridkitStudyConfig)
+    fault: GridkitFaultConfig = field(default_factory=GridkitFaultConfig)
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Top-level immutable configuration for AgentiGrid."""
 
@@ -220,6 +270,7 @@ class AppConfig:
     search: SearchConfig
     output: OutputConfig
     report: ReportConfig = field(default_factory=ReportConfig)
+    gridkit: GridkitConfig = field(default_factory=GridkitConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -333,10 +384,36 @@ def load_config(
 
     report = _build_section(ReportConfig, merged.get("report", {}), config_root, set())
 
-    cfg = AppConfig(exago=exago, data=data, llm=llm, search=search, output=output, report=report)
+    gridkit = _build_gridkit(merged["gridkit"], config_root)
+
+    cfg = AppConfig(exago=exago, data=data, llm=llm, search=search, output=output, report=report,
+                    gridkit=gridkit)
 
     _validate(cfg)
     return cfg
+
+
+def _build_gridkit(raw: dict, root: Path) -> GridkitConfig:
+    """Build the ``gridkit:`` section. GridKit ignores unknown solver keys
+    without a word, so unknown keys here are warned about, not dropped silently."""
+    nested = {"study": GridkitStudyConfig, "fault": GridkitFaultConfig}
+    for name, cls in [("gridkit", GridkitConfig), *nested.items()]:
+        section = raw if name == "gridkit" else raw.get(name) or {}
+        unknown = set(section) - {f.name for f in fields(cls)}
+        if unknown:
+            logger.warning("Unknown key(s) in gridkit config %s: %s (ignored)",
+                           "" if name == "gridkit" else f"section '{name}'", sorted(unknown))
+    flat = {k: v for k, v in raw.items() if k not in nested}
+    base = _build_section(
+        GridkitConfig, flat, root, {"binary_dir", "dynamicsimulation_binary"},
+    )
+    # An empty "study:" line in YAML is null, which would replace the defaults.
+    parts = {name: _build_section(cls, {**DEFAULTS["gridkit"][name], **(raw.get(name) or {})},
+                                  root, set())
+             for name, cls in nested.items()}
+    return GridkitConfig(binary_dir=base.binary_dir,
+                         dynamicsimulation_binary=base.dynamicsimulation_binary,
+                         timeout=base.timeout, **parts)
 
 
 def _validate(cfg: AppConfig) -> None:
@@ -452,3 +529,13 @@ def _validate(cfg: AppConfig) -> None:
             "sweep_max_workers=%d is negative; treating as auto (min(cpu_count, 16)).",
             cfg.search.sweep_max_workers,
         )
+
+    study, fault = cfg.gridkit.study, cfg.gridkit.fault
+    if not 1 <= study.max_order <= 5:
+        logger.warning("gridkit.study.max_order=%s is outside 1-5; GridKit will refuse to run.",
+                       study.max_order)
+    if study.dt_monitor <= 0:
+        logger.warning("gridkit.study.dt_monitor=%s must be positive.", study.dt_monitor)
+    if fault.start >= study.tmax:
+        logger.warning("gridkit.fault.start=%s s is not before gridkit.study.tmax=%s s.",
+                       fault.start, study.tmax)

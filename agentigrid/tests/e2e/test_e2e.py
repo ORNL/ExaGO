@@ -15,7 +15,7 @@ from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine.agent_loop import AgentLoopController, SearchSession
+from agentigrid.exago_engine.agent_loop import AgentLoopController, SearchSession
 
 # ---------------------------------------------------------------------------
 # Paths and availability checks
@@ -169,7 +169,7 @@ class TestE2EMockLLMRealOpflow:
 
         mock_backend = MockBackend(responses)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend):
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend):
             controller = AgentLoopController(cfg, quiet=True)
             session = controller.run(BASE_CASE, "Report the base case results")
 
@@ -207,7 +207,7 @@ class TestE2EMockLLMRealOpflow:
 
         mock_backend = MockBackend(responses)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend):
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend):
             controller = AgentLoopController(cfg, quiet=True)
             session = controller.run(BASE_CASE, "Test 5% load increase")
 

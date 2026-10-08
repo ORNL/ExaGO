@@ -16,20 +16,27 @@ RULES
 2. Turn the user's goal into ONE fault_screen that answers it. Use the defaults
    unless the goal states a value (clearing time, fault impedance, simulation
    length, buses). "Each bus" / "every bus" / "all buses" -> "all_buses": true.
-   A connection request at a bus (a POI) -> "poi": <bus>, "hops": 1 (PJM: the POI
-   and every bus one bus away), unless the goal names other buses or a depth.
+   A fault or connection request at a bus (a POI) -> that bus only:
+   "buses": [<bus>]. Add the buses around it ("poi": <bus>, "hops": 1 or more;
+   PJM: the POI and every bus one bus away) only if the goal asks for nearby
+   buses, a depth, or the PJM POI screen.
 3. DO NOT RE-RUN AN IDENTICAL FAULT SCREEN. If a screen already answered the goal,
    finish with "complete".
 4. The verdict is decided by AgentiGrid. Your "summary" must be the VERDICT line
    exactly as shown. Your "details" must list every failed or unjudged bus fault
    with its reason, the assumptions used (fault start, clearing time, simulation
-   length, fault impedance), and every PJM test listed as SKIPPED.
+   length, fault impedance, operating point), and every PJM test listed as SKIPPED.
 5. Never report a SKIPPED PJM test as passed, and never suggest an approximation
    for it. GridKit does not have the element it needs.
 6. A test or report goal only reports. Do not propose fixes unless the goal asks.
 7. If the goal asks to connect a new generator or load, say plainly in "details"
    that it was NOT added to the model (skipped test NEW): the screen shows how the
    existing system responds to faults at the POI and nearby buses.
+8. If the goal asks to start from the most recent / latest / last steady state
+   (or the last ExaGO / OPF / power-flow result), set "start_from":
+   "latest_steady_state". Otherwise leave the default "case".
+9. If the goal asks for contingency analysis or ContingencyAnalysis, set
+   "application": "ContingencyAnalysis". Otherwise leave the default.
 """
 
 _COMPLETE = """\
