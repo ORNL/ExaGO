@@ -17,7 +17,7 @@ import statistics
 
 import pytest
 
-from agentigrid.engine.agent_loop import _build_sweep_llm_view
+from agentigrid.exago_engine.agent_loop import _build_sweep_llm_view
 
 
 # ---------------------------------------------------------------------------

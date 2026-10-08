@@ -59,7 +59,7 @@ _WA = {
 
 def test_absorption_rows_from_argv():
     session = _session([_entry(1), _entry(2)])
-    with patch("agentigrid.parsers.compute_wind_absorption", return_value=_WA) as m:
+    with patch("agentigrid.exago_parsers.compute_wind_absorption", return_value=_WA) as m:
         rows = ReportGenerator()._sopflow_absorption_rows(session)
     assert len(rows) == 2
     assert [e.iteration for e, _ in rows] == [1, 2]
@@ -73,7 +73,7 @@ def test_absorption_rows_fallback_to_command_string():
     # argv lacks -scenfile; the flat command string carries it instead.
     e = _entry(1, argv_has_scenfile=False,
                command="exago -netfile x.m -scenfile /wd/from_cmd.csv")
-    with patch("agentigrid.parsers.compute_wind_absorption", return_value=_WA) as m:
+    with patch("agentigrid.exago_parsers.compute_wind_absorption", return_value=_WA) as m:
         rows = ReportGenerator()._sopflow_absorption_rows(_session([e]))
     assert len(rows) == 1
     assert str(m.call_args[0][1]).endswith("from_cmd.csv")
@@ -81,28 +81,28 @@ def test_absorption_rows_fallback_to_command_string():
 
 def test_absorption_rows_skip_non_simulation_modes():
     session = _session([_entry(1, mode="sweep"), _entry(2, mode="explore")])
-    with patch("agentigrid.parsers.compute_wind_absorption", return_value=_WA):
+    with patch("agentigrid.exago_parsers.compute_wind_absorption", return_value=_WA):
         rows = ReportGenerator()._sopflow_absorption_rows(session)
     assert rows == []
 
 
 def test_absorption_rows_skip_missing_command():
     e = SimpleNamespace(iteration=1, mode="fresh", exago_command=None)
-    with patch("agentigrid.parsers.compute_wind_absorption", return_value=_WA):
+    with patch("agentigrid.exago_parsers.compute_wind_absorption", return_value=_WA):
         rows = ReportGenerator()._sopflow_absorption_rows(_session([e]))
     assert rows == []
 
 
 def test_absorption_rows_none_result_skipped():
     # workdir gone / files missing → compute returns None → no row.
-    with patch("agentigrid.parsers.compute_wind_absorption", return_value=None):
+    with patch("agentigrid.exago_parsers.compute_wind_absorption", return_value=None):
         rows = ReportGenerator()._sopflow_absorption_rows(_session([_entry(1)]))
     assert rows == []
 
 
 def test_absorption_rows_exception_guarded():
     # A bad workdir must never propagate out of report rendering.
-    with patch("agentigrid.parsers.compute_wind_absorption",
+    with patch("agentigrid.exago_parsers.compute_wind_absorption",
                side_effect=RuntimeError("bad workdir")):
         rows = ReportGenerator()._sopflow_absorption_rows(_session([_entry(1)]))
     assert rows == []
@@ -118,7 +118,7 @@ def _para_texts(elements):
 
 def test_section_renders_absorption_table():
     session = _session([_entry(1), _entry(2)])
-    with patch("agentigrid.parsers.compute_wind_absorption", return_value=_WA):
+    with patch("agentigrid.exago_parsers.compute_wind_absorption", return_value=_WA):
         elements = ReportGenerator()._build_sopflow_stochastic_section(session, 5)
 
     tables = [el for el in elements if isinstance(el, Table)]
@@ -140,7 +140,7 @@ def test_section_renders_absorption_table():
 
 def test_section_graceful_when_no_rows():
     session = _session([_entry(1)])
-    with patch("agentigrid.parsers.compute_wind_absorption", return_value=None):
+    with patch("agentigrid.exago_parsers.compute_wind_absorption", return_value=None):
         elements = ReportGenerator()._build_sopflow_stochastic_section(session, 5)
 
     tables = [el for el in elements if isinstance(el, Table)]
@@ -152,7 +152,7 @@ def test_section_graceful_when_no_rows():
 
 def test_section_never_raises_on_bad_workdir():
     session = _session([_entry(1, cwd="/definitely/not/here")])
-    with patch("agentigrid.parsers.compute_wind_absorption",
+    with patch("agentigrid.exago_parsers.compute_wind_absorption",
                side_effect=OSError("gone")):
         elements = ReportGenerator()._build_sopflow_stochastic_section(session, 5)
     # Falls back to the "not available" caption, no exception.

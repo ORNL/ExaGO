@@ -1,10 +1,12 @@
-"""Run GridKit DynamicSimulation: one run folder per fault, several at once."""
+"""Run GridKit: DynamicSimulation (one run folder per fault, several at once)
+or ContingencyAnalysis (one process and folder for all faults of a screen)."""
 
 from __future__ import annotations
 
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +22,10 @@ logger = logging.getLogger("agentigrid.gridkit_engine.executor")
 SOLVER_FILE = "study.solver.json"
 OUTPUT_FILE = "output.csv"
 
+# ContingencyAnalysis console lines that name one fault
+_CA_FAILED_RE = re.compile(r"Study failed for fault:\s*(\S+)")
+_CA_EXCEPTION_RE = re.compile(r"exception caught at fault id:\s*(\d+)")
+
 
 @dataclass
 class RunJob:
@@ -33,6 +39,7 @@ class RunJob:
     start_s: float = 0.0
     clear_s: float = 0.0
     bus: Optional[int] = None
+    fault_id: Optional[str] = None    # fault device id (ContingencyAnalysis names failures by it)
 
 
 @dataclass
@@ -43,8 +50,9 @@ class RunResult:
     elapsed_s: float
 
 
-def solver_file_content(job: RunJob) -> dict:
-    """The solver .json for a job (paths relative to the run folder)."""
+def solver_file_content(job: RunJob, solver_options: Optional[dict] = None) -> dict:
+    """The solver .json for a job (paths relative to the run folder).
+    *solver_options* are the config's gridkit.study solver keys (rel_tol, ...)."""
     events = []
     if job.element_id is not None:
         events = [
@@ -56,6 +64,7 @@ def solver_file_content(job: RunJob) -> dict:
         "dt_monitor": job.dt_monitor_s,
         "tmax": job.tmax_s,
         "output_file": OUTPUT_FILE,
+        **(solver_options or {}),
         "events": events,
     }
 
@@ -64,7 +73,8 @@ def run_one(job: RunJob, settings: GridkitSettings) -> RunResult:
     """Write the solver file, run DynamicSimulation in the run folder, keep
     stdout/stderr, and read the run status."""
     job.run_dir.mkdir(parents=True, exist_ok=True)
-    (job.run_dir / SOLVER_FILE).write_text(json.dumps(solver_file_content(job), indent=1))
+    content = solver_file_content(job, settings.solver_options)
+    (job.run_dir / SOLVER_FILE).write_text(json.dumps(content, indent=1))
     binary = settings.dynamic_simulation.resolve()
     start = time.monotonic()
     try:
@@ -95,3 +105,68 @@ def run_many(jobs: list[RunJob], settings: GridkitSettings) -> list[RunResult]:
     workers = settings.resolved_workers(len(jobs))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         return list(pool.map(lambda j: run_one(j, settings), jobs))
+
+
+def _names_job(line: str, job: RunJob) -> bool:
+    """True if a ContingencyAnalysis console line reports a failure of *job*'s fault."""
+    m = _CA_FAILED_RE.search(line)
+    if m:
+        return m.group(1) == job.fault_id
+    m = _CA_EXCEPTION_RE.search(line)
+    return bool(m) and int(m.group(1)) == job.element_id
+
+
+def run_contingency(jobs: list[RunJob], settings: GridkitSettings) -> list[RunResult]:
+    """Run all *jobs* of one screen with a single ContingencyAnalysis call.
+
+    The jobs share one run folder and one case copy, which must hold exactly
+    their fault devices: ContingencyAnalysis runs one study per fault device in
+    the case, applying the solver file's events to each fault in turn, and
+    writes ``output_<element_id>.csv`` for each. Results are in job order.
+    """
+    if not jobs:
+        return []
+    run_dir = jobs[0].run_dir
+    run_dir.mkdir(parents=True, exist_ok=True)
+    content = solver_file_content(jobs[0], settings.solver_options)
+    (run_dir / SOLVER_FILE).write_text(json.dumps(content, indent=1))
+    binary = settings.contingency_analysis.resolve()
+    start = time.monotonic()
+    try:
+        proc = subprocess.run(
+            [str(binary), SOLVER_FILE], cwd=run_dir,
+            capture_output=True, text=True, timeout=settings.timeout_s * len(jobs),
+        )
+        exit_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
+    except subprocess.TimeoutExpired as exc:
+        exit_code = None
+        stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+    except OSError as exc:
+        exit_code, stdout, stderr = None, "", f"[ERROR] cannot run {binary}: {exc}"
+    elapsed = time.monotonic() - start
+    (run_dir / "stdout.txt").write_text(stdout)
+    (run_dir / "stderr.txt").write_text(stderr)
+
+    # Split the shared console into what concerns each fault.
+    lines = stdout.splitlines()
+    named = {i: line for i, line in enumerate(lines)
+             if _CA_FAILED_RE.search(line) or _CA_EXCEPTION_RE.search(line)}
+    common = "\n".join(line for i, line in enumerate(lines) if i not in named)
+    results = []
+    for job in jobs:
+        own = [line for line in named.values() if _names_job(line, job)]
+        if exit_code is None:
+            code = None
+        elif own:
+            code = 1
+        elif exit_code != 0 and not named:
+            code = exit_code        # failed, but not for a named fault: all count as failed
+        else:
+            code = 0
+        csv_path = run_dir / f"output_{job.element_id}.csv"
+        status = parse_run_status(code, "\n".join([common, *own]),
+                                  stderr if code else "", csv_path, job.tmax_s)
+        logger.debug("GridKit ContingencyAnalysis bus %s: %s", job.bus, status.reason)
+        results.append(RunResult(job, status, csv_path, elapsed))
+    return results

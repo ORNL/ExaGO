@@ -15,15 +15,15 @@ import pytest
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine import sweep_metrics
-from agentigrid.engine.agent_loop import AgentLoopController
-from agentigrid.engine.commands import AddGeneratorAtBus, parse_command
-from agentigrid.engine.executor import SimulationResult
-from agentigrid.engine.modifier import (
+from agentigrid.exago_engine import sweep_metrics
+from agentigrid.exago_engine.agent_loop import AgentLoopController
+from agentigrid.exago_engine.commands import AddGeneratorAtBus, parse_command
+from agentigrid.exago_engine.executor import SimulationResult
+from agentigrid.exago_engine.modifier import (
     apply_modifications, _median_existing_cost_coeffs,
 )
-from agentigrid.parsers.matpower_parser import parse_matpower
-from agentigrid.parsers.opflow_results import OPFLOWResult, BusResult, GenResult
+from agentigrid.exago_parsers.matpower_parser import parse_matpower
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult, BusResult, GenResult
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 BASE_CASE = DATA_DIR / "case_ACTIVSg200.m"
@@ -105,7 +105,7 @@ class TestC2GeneratorPrimitive:
 class TestMedianCostFallback:
 
     def test_fallback_when_no_polynomial_curves(self):
-        from agentigrid.parsers.matpower_model import MATNetwork, GenCost
+        from agentigrid.exago_parsers.matpower_model import MATNetwork, GenCost
         net = MATNetwork(
             casename="x", version="2", baseMVA=100.0, buses=[], generators=[],
             branches=[], gencost=[GenCost(model=1, startup=0, shutdown=0, ncost=2, coeffs=[0, 0, 1, 1])],
@@ -247,8 +247,8 @@ def _make_config(tmp_path, **search_over):
 
 def _controller(tmp_path, **search_over):
     cfg = _make_config(tmp_path, **search_over)
-    with patch("agentigrid.engine.agent_loop.create_backend", return_value=MagicMock()), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+    with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=MagicMock()), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
         mock_exec_cls.return_value = MagicMock()
         c = AgentLoopController(cfg)
     return c
@@ -312,8 +312,8 @@ class TestSweepHandlerIntegration:
 
     def _controller_with_exec(self, tmp_path):
         cfg = _make_config(tmp_path)
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=MagicMock()), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=MagicMock()), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
             mock_executor = MagicMock()
             mock_executor.run.return_value = _sim()
             mock_executor.run_parallel.side_effect = (
@@ -349,7 +349,7 @@ class TestSweepHandlerIntegration:
         c = self._controller_with_exec(tmp_path)
         base = _opflow(buses=[_busres(1, 1.0), _busres(2, 1.0)])
         cand = _opflow(buses=[_busres(1, 1.02), _busres(2, 0.97)])  # max ΔV = 0.03
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=[base, cand, cand]):  # base solve, then 2 candidates
             kind, ok = c._handle_sweep(1, {
                 "mutation": {"action": "add_load_at_bus", "Pd": 100.0},
@@ -367,7 +367,7 @@ class TestSweepHandlerIntegration:
         """Regression: a sweep with no metric/predicate journals an unchanged payload."""
         c = self._controller_with_exec(tmp_path)
         cand = _opflow(converged=True, violations=0)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=cand):
             c._handle_sweep(1, {
                 "mutation": {"action": "add_load_at_bus", "Pd": 100.0},
@@ -385,7 +385,7 @@ class TestSweepHandlerIntegration:
         # candidate result includes the added unit (last gen at the bus) dispatching 120 MW
         def _cand_for(bus):
             return _opflow(converged=True, violations=0, gens=[_genres(bus, 120.0)])
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=[_cand_for(1), _cand_for(2)]):
             kind, ok = c._handle_sweep(1, {
                 "mutation": {"action": "add_generator_at_bus", "capacity_mw": 200.0},

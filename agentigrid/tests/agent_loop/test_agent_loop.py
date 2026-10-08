@@ -12,9 +12,9 @@ from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine.agent_loop import AgentLoopController, SearchSession
-from agentigrid.engine.executor import SimulationResult
-from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_engine.agent_loop import AgentLoopController, SearchSession
+from agentigrid.exago_engine.executor import SimulationResult
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 
 # ---------------------------------------------------------------------------
@@ -192,11 +192,11 @@ class TestAgentLoopModifyComplete:
         mock_backend = MockBackend(responses)
         sim_result = _make_sim_result(stdout=stdout, success=True)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
              patch.object(
                  AgentLoopController, "_AgentLoopController__class__", create=True
              ) if False else \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.return_value = sim_result
@@ -240,8 +240,8 @@ class TestErrorRecovery:
         mock_backend = MockBackend(responses)
         sim_result = _make_sim_result(stdout=stdout, success=True)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.return_value = sim_result
@@ -271,8 +271,8 @@ class TestErrorRecovery:
         mock_backend = MockBackend(responses)
         sim_result = _make_sim_result(stdout=stdout, success=True)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.return_value = sim_result
@@ -309,8 +309,8 @@ class TestErrorRecovery:
         success_result = _make_sim_result(stdout=stdout, success=True)
         fail_result = _make_sim_result(stdout="", success=False)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.side_effect = [success_result, fail_result]
@@ -343,8 +343,8 @@ class TestMaxIterations:
         mock_backend = MockBackend([modify_response])
         sim_result = _make_sim_result(stdout=stdout, success=True)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.return_value = sim_result
@@ -374,8 +374,8 @@ class TestPromptAssembly:
         ])
         sim_result = _make_sim_result(stdout=stdout, success=bool(stdout))
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.return_value = sim_result
@@ -426,8 +426,8 @@ class TestPromptAssembly:
         mock_backend = MockBackend(responses)
         sim_result = _make_sim_result(stdout=stdout, success=bool(stdout))
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.return_value = sim_result
@@ -467,8 +467,8 @@ class TestAnalyzeAction:
         mock_backend = MockBackend(responses)
         sim_result = _make_sim_result(stdout=stdout, success=True)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.return_value = sim_result
@@ -502,8 +502,8 @@ class TestJournalExport:
         mock_backend = MockBackend(responses)
         sim_result = _make_sim_result(stdout=stdout, success=True)
 
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
 
             mock_executor = MagicMock()
             mock_executor.run.return_value = sim_result

@@ -22,9 +22,9 @@ from reportlab.platypus import (
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-from agentigrid.engine.agent_loop import SearchSession
-from agentigrid.engine.journal import describe_contingency_scope, is_solve_iteration
-from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_engine.agent_loop import SearchSession
+from agentigrid.exago_engine.journal import describe_contingency_scope, is_solve_iteration
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 try:
     from charts import (
@@ -2160,7 +2160,7 @@ class ReportGenerator:
         # Lazy import to match the codebase's defensive import style and avoid
         # any top-level import cost/cycle.
         from pathlib import Path
-        from agentigrid.parsers import compute_wind_absorption
+        from agentigrid.exago_parsers import compute_wind_absorption
 
         rows = []
         for e in session.journal.entries:
@@ -2203,7 +2203,7 @@ class ReportGenerator:
         save a flat 1.0 profile that has zero spread and is uninformative). Falls
         back to any iteration with a computable spread. Fully guarded."""
         from pathlib import Path
-        from agentigrid.parsers import compute_scenario_voltage_spread
+        from agentigrid.exago_parsers import compute_scenario_voltage_spread
 
         sim_entries = [
             e for e in session.journal.entries
