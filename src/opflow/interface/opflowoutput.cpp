@@ -30,11 +30,11 @@ PetscErrorCode OPFLOWPrintSolution(OPFLOW opflow) {
       opflow->comm->type,
       "=============================================================\n");
   CHKERRQ(ierr);
-  ierr = PetscPrintf(opflow->comm->type, "%-35s %s\n", "Model",
-                     opflow->modelname.c_str());
+  ierr =
+      PetscPrintf(opflow->comm->type, "%-35s %s\n", "Model", opflow->modelname);
   CHKERRQ(ierr);
   ierr = PetscPrintf(opflow->comm->type, "%-35s %s\n", "Solver",
-                     opflow->solvername.c_str());
+                     opflow->solvername);
   CHKERRQ(ierr);
   ierr = PetscPrintf(opflow->comm->type, "%-35s %s\n", "Objective",
                      OPFLOWObjectiveTypes[opflow->objectivetype]);

@@ -1,0 +1,82 @@
+#!@VENV_PYTHON@
+
+from flask import Flask, jsonify, send_from_directory
+from flask_cors import CORS
+from flask.globals import request
+import duckdb
+import os
+
+# TODO: there are probably better ways of doing this, but this works to set a
+#       default for now
+install_root = os.environ.get("EXAGO_VIZ_ROOT", default="@INSTALL_ROOT@")
+data_path = os.environ.get("EXAGO_VIZ_DATA", default=f"{install_root}/data")
+assets_path = os.environ.get("EXAGO_VIZ_ASSETS", default=f"{install_root}/assets")
+viz_host = os.environ.get("EXAGO_VIZ_HOST", default="localhost")
+viz_port = os.environ.get("EXAGO_VIZ_PORT", default="8080")
+
+app = Flask(__name__)
+CORS(app)
+
+try:
+    from backend.sqlchain import sqlchain
+
+    # TODO: externalize the db setup into a module or something like that,
+    #       and generate the data loaded on the fly at setup. possibly also
+    #       generate it from uploaded csv files using a new endpoint? needs
+    #       further research
+
+    _ = duckdb.sql("INSTALL spatial")
+    _ = duckdb.sql("LOAD spatial")
+    _ = duckdb.sql(
+        f"CREATE TABLE transmission_lines AS SELECT * FROM read_csv('{data_path}/transmission_line.csv')"
+    )
+    _ = duckdb.sql(
+        f"CREATE TABLE buses AS SELECT * FROM read_csv('{data_path}/bus.csv')"
+    )
+    _ = duckdb.sql(
+        f"CREATE TABLE generators AS SELECT * FROM read_csv('{data_path}/generation.csv')"
+    )
+    _ = duckdb.sql(
+        f"CREATE TABLE states AS SELECT * FROM read_csv('{data_path}/us_states.csv')"
+    )
+    _ = duckdb.sql(
+        f"CREATE TABLE counties AS SELECT * FROM read_csv('{data_path}/counties.csv')"
+    )
+
+    @app.route("/query", methods=["POST"])
+    def post_data():
+        """Perform a query against the database using natural language."""
+
+        input_text = request.get_json(force=True)["inputText"]
+        output = sqlchain(input_text)
+
+        return jsonify(output)
+
+except:
+    print("ChatGrid not configured or set up. Disabling support.")
+
+
+@app.route("/")
+def index():
+    """Returns the index page"""
+
+    return send_from_directory(assets_path, "index.html")
+
+
+@app.route("/data/opflowout.json")
+def serve_opflowout():
+    """Serves the default data file (if provided)"""
+
+    return send_from_directory(data_path, "opflowout.json")
+
+
+@app.route("/assets/<path:filename>")
+def serve_static(filename):
+    """Returns a static asset"""
+
+    return send_from_directory(assets_path, filename)
+
+
+if __name__ == "__main__":
+    # TODO: make this configurable
+    app.run(host=viz_host, port=viz_port)

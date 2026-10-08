@@ -219,11 +219,11 @@ struct _p_SOPFLOW {
   PetscBool issolver_hiop;
 
   // Only used for HIOP solver
-  std::string subproblem_model;
-  std::string subproblem_solver;
-  std::string compute_mode;
+  char subproblem_model[32];
+  char subproblem_solver[32];
+  char compute_mode[32];
   int verbosity_level;
-  std::string mem_space; /* Memory space used with HIOP */
+  char mem_space[32]; /* Memory space used with HIOP */
 
   /** @brief Logging events that apply to interface */
   PetscLogEvent outputlogger;

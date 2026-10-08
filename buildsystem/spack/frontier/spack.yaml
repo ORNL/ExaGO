@@ -27,7 +27,6 @@ spack:
       require: ~python+raja+hiop+rocm+ipopt amdgpu_target=gfx90a
     hiop:
       require: +sparse+mpi+raja+rocm~ginkgo+kron
-      version: [1.1.1]
     ipopt:
       require: '~metis+coinhsl~mumps'
     # Pin OpenBlas version for consistent test results.
@@ -51,91 +50,91 @@ spack:
         modules:
         - PrgEnv-gnu
         - cray-mpich/8.1.31
-        - rocm/6.3.1
+        - gcc-native/14.2
+        - rocm/6.4.1
         - craype-accel-amd-gfx90a
         - craype-x86-trento
         - libfabric
     cmake:
       buildable: false
       externals:
-      - spec: cmake@3.30.5
+      - spec: cmake@3.31.11
         modules:
-        - cmake/3.30.5
+        - cmake/3.31.11
     libfabric:
       buildable: false
       externals:
-      - spec: libfabric@1.22.0
+      - spec: libfabric@2.3.1
         modules:
-        - libfabric/1.22.0
+        - libfabric/2.3.1
     python:
       externals:
       - spec: python@3.11.7
-        modules:
-        - cray-python/3.11.7
+        prefix: /opt/cray/pe/python/3.11.7
       buildable: false
     hip:
       buildable: false
       externals:
-      - spec: hip@6.3.1
-        prefix: /opt/rocm-6.3.1
+      - spec: hip@6.4.1
+        prefix: /opt/rocm-6.4.1
     hipblas:
       buildable: false
       externals:
-      - spec: hipblas@6.3.1
-        prefix: /opt/rocm-6.3.1/
+      - spec: hipblas@6.4.1
+        prefix: /opt/rocm-6.4.1/
     hipcub:
       buildable: false
       externals:
-      - spec: hipcub@6.3.1
-        prefix: /opt/rocm-6.3.1/
+      - spec: hipcub@6.4.1
+        prefix: /opt/rocm-6.4.1/
     hipfft:
       buildable: false
       externals:
-      - spec: hipfft@6.3.1
-        prefix: /opt/rocm-6.3.1/
+      - spec: hipfft@6.4.1
+        prefix: /opt/rocm-6.4.1/
     hiprand:
       buildable: false
       externals:
-      - spec: hiprand@6.3.1
-        prefix: /opt/rocm-6.3.1
+      - spec: hiprand@6.4.1
+        prefix: /opt/rocm-6.4.1
     hipsolver:
       buildable: false
       externals:
-      - spec: hipsolver@6.3.1
-        prefix: /opt/rocm-6.3.1
+      - spec: hipsolver@6.4.1
+        prefix: /opt/rocm-6.4.1
     hipsparse:
       buildable: false
       externals:
-      - spec: hipsparse@6.3.1
-        prefix: /opt/rocm-6.3.1/
+      - spec: hipsparse@6.4.1
+        prefix: /opt/rocm-6.4.1/
     hsa-rocr-dev:
       buildable: false
       externals:
-      - spec: hsa-rocr-dev@6.3.1
-        prefix: /opt/rocm-6.3.1/
+      - spec: hsa-rocr-dev@6.4.1
+        prefix: /opt/rocm-6.4.1/
     llvm-amdgpu:
       buildable: false
       externals:
-      - spec: llvm-amdgpu@6.3.1 languages:='c,c++'
-        prefix: /opt/rocm-6.3.1/
+      - spec: llvm-amdgpu@6.4.1 languages:='c,c++'
+        prefix: /opt/rocm-6.4.1/
         extra_attributes:
           compilers:
-            cc: /opt/rocm-6.3.1/llvm/bin/amdclang
-            cxx: /opt/rocm-6.3.1/llvm/bin/amdclang++
-            fortran: /opt/rocm-6.3.1/llvm/bin/amdflang
+            cc: /opt/rocm-6.4.1/llvm/bin/amdclang
+            cxx: /opt/rocm-6.4.1/llvm/bin/amdclang++
+            fortran: /opt/rocm-6.4.1/llvm/bin/amdflang
           flags: {}
           environment: {}
           extra_rpaths: []
     rocprim:
       buildable: false
       externals:
-      - spec: rocprim@6.3.1
-        prefix: /opt/rocm-6.3.1
+      - spec: rocprim@6.4.1
+        prefix: /opt/rocm-6.4.1
     rocm-core:
       buildable: false
       externals:
-      - spec: rocm-core@6.3.1
-        prefix: /opt/rocm-6.3.1/
+      - spec: rocm-core@6.4.1
+        prefix: /opt/rocm-6.4.1/
   config:
     install_tree:
       root: $SPACK_INSTALL

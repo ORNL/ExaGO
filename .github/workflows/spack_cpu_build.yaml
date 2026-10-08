@@ -7,7 +7,7 @@ env:
   # Our repo name contains upper case characters, so we can't use ${{ github.repository }}
   IMAGE_NAME: exago
   USERNAME: exago-bot
-  BASE_VERSION: ubuntu-24.04-fortran-v0.1.0
+  BASE_VERSION: ubuntu-24.04-fortran-v0.3.0
 
 # Until we remove the need to clone submodules to build, this should on be in PRs
 on: [pull_request]
@@ -145,15 +145,13 @@ jobs:
                 require: +mpi~openmp
               petsc:
                 require: ~hypre~superlu-dist~hdf5+metis
-              all:
-                require: "%gcc"
           EOF
 
       - name: Configure GHCR mirror
         run: spack -e . mirror set local-buildcache 
 
       - name: Trust keys
-        run: spack -e . buildcache keys --install --trust
+        run: spack -e . buildcache keys --install --trust --yes-to-all --force
 
       - name: Find external packages
         run: spack -e . external find --all
@@ -170,8 +168,11 @@ jobs:
       - name: Install dependencies
         run: spack -e . install --no-check-signature --only dependencies
 
+      - name: List installed specs
+        run: spack -e . find -p -l
+
       - name: Install package
-        run: spack -e . install --no-check-signature --fail-fast --keep-stage --no-cache --fresh
+        run: spack -e . install --no-check-signature --fail-fast --keep-stage --no-cache
 
       - name: Test Build
         run: cd $(spack -e . location --build-dir exago@develop) && ctest -VV
@@ -183,5 +184,5 @@ jobs:
           MIRROR_USERNAME: ${{ env.USERNAME }}
           MIRROR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          spack -e . buildcache push --force --base-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BASE_VERSION }} --unsigned --update-index local-buildcache
+          spack -e . buildcache push --allow-missing --force --base-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BASE_VERSION }} --unsigned --update-index local-buildcache
         if: ${{ !cancelled() }}

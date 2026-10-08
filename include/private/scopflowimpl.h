@@ -172,7 +172,7 @@ struct _p_SCOPFLOW {
 
   void *model; /* Model object */
   struct _p_SCOPFLOWModelOps modelops;
-  std::string modelname;
+  char modelname[32];
 
   struct _p_SCOPFLOWModelList SCOPFLOWModelList[SCOPFLOWMODELSMAX];
   PetscInt nmodelsregistered;
@@ -180,7 +180,7 @@ struct _p_SCOPFLOW {
 
   void *solver; /* Solver object */
   struct _p_SCOPFLOWSolverOps solverops;
-  std::string solvername;
+  char solvername[32];
 
   /* List of solvers registered */
   struct _p_SCOPFLOWSolverList SCOPFLOWSolverList[SCOPFLOWSOLVERSMAX];
@@ -209,11 +209,11 @@ struct _p_SCOPFLOW {
   PetscBool ignore_lineflow_constraints; /* Ignore lineflow constraints */
 
   /* Used by HIOP solver */
-  std::string subproblem_model;  /* subproblem model */
-  std::string subproblem_solver; /* subproblem solver */
-  std::string compute_mode;
+  char subproblem_model[32];  /* subproblem model */
+  char subproblem_solver[32]; /* subproblem solver */
+  char compute_mode[32];
   int verbosity_level;
-  std::string mem_space; /* Memory space used in HIOP */
+  char mem_space[32]; /* Memory space used in HIOP */
 
   /** @brief Logging events that apply to interface */
   PetscLogEvent outputlogger;

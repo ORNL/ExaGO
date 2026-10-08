@@ -666,7 +666,8 @@ PetscErrorCode OPFLOWSolverSetUp_HIOPSPARSE(OPFLOW opflow) {
   hiop->solver = new hiop::hiopAlgFilterIPMNewton(hiop->sp);
 
   /* Error if model is not power balance hiop */
-  flg1 = static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_PBPOL);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOL, &flg1);
+  CHKERRQ(ierr);
   if (!flg1) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
             "Only power balance polar model allowed\n Run with -opflow_model "

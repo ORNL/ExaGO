@@ -1,11 +1,11 @@
-# <b>Exa</b>scale <b>G</b>rid <b>O</b>ptimization toolkit (ExaGO<sup>TM</sup>) 
+# <b>Exa</b>scale <b>G</b>rid <b>O</b>ptimization toolkit (ExaGO<sup>TM</sup>)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) ![pre-commit GitHub Action](https://github.com/ornl/ExaGO/actions/workflows/pre_commit.yaml/badge.svg?event=pull_request) ![Spack CPU Build](https://github.com/ornl/ExaGO/actions/workflows/spack_cpu_build.yaml/badge.svg?event=pull_request)
 
-<img src="viz/images/network_gen_load_us.png">
-<img src="viz/images/launcher.png">
+<img src="docs/assets/network_gen_load_us.png">
+<img src="docs/assets/launcher.png">
 
 
-ExaGO<sup>TM</sup> is a package for solving large-scale power grid optimization problems on parallel and distributed architectures, particularly targeted for exascale machines with heterogeneous architectures (GPU). Combinations of stochastic, contingency-constrained, multiperiod ACOPF problems can be solved with ExaGO. The package is written in C/C++ with python bindings available for python-based applications. An overview of the package is given on this page. For extended information, including the modeling details and formulations, see the [ExaGO manual](docs/manual/manual.pdf). 
+ExaGO<sup>TM</sup> is a package for solving large-scale power grid optimization problems on parallel and distributed architectures, particularly targeted for exascale machines with heterogeneous architectures (GPU). Combinations of stochastic, contingency-constrained, multiperiod ACOPF problems can be solved with ExaGO. The package is written in C/C++ with python bindings available for python-based applications. An overview of the package is given on this page. For extended information, including the modeling details and formulations, see the [ExaGO manual](docs/manual/manual.pdf).
 
 ExaGO<sup>TM</sup> includes the following applications for solving different power grid optimization problems:
 
@@ -23,7 +23,7 @@ Note that not all applications can utilize all solvers yet. The following table 
 
 |  Solver   | OPFLOW  | TCOPFLOW | SCOPFLOW | SOPFLOW |
 |:------:|:---------:|:-----:|:-------:|:-------:|
-| Ipopt      | Y         |  Y     | Y       | Y       | 
+| Ipopt      | Y         |  Y     | Y       | Y       |
 | HiOp       | Y          |       |   Y      |  Y       |
 
 Additionally, note that SCOPFLOW and SOPFLOW with HiOp solver use Ipopt to solve a portion of the problem (base problem). So one must also configure with Ipopt when using HiOp solver for these applications.
@@ -32,11 +32,8 @@ Additionally, note that SCOPFLOW and SOPFLOW with HiOp solver use Ipopt to solve
 
 Detailed installation instructions are given at [INSTALL.md](./INSTALL.md) for information on acquiring, building and installing ExaGO.
 
-If you are a developer with access to the project, we also provide public binaries that are generated through our GitHub actions workflows documented in [README.md](.github/workflows/README.md), and with documentation about usage in the packages section of our repository. Check out a short (< 60s) demo of pulling down a version of ExaGO:
+If you are a developer with access to the project, we also provide public binaries that are generated through our GitHub actions workflows documented in [README.md](.github/workflows/README.md), and with documentation about usage in the packages section of our repository.
 
-[![asciicast](
-https://asciinema.org/a/KCi5TmUXc6zWDj7JYHzfSFxmw.png)](
-https://asciinema.org/a/KCi5TmUXc6zWDj7JYHzfSFxmw)
 
 ## Developer Guide
 
@@ -111,8 +108,8 @@ the guidelines are ambiguous or you have a particular question.
 ## Authors
 ExaGO<sup>TM</sup> was designed and implemented by Shrirang Abhyankar and has
 received significant contributions from Slaven Peles, Nicholson Koukpaizan,
-Maksudul Alam, Asher Mancinelli, Cameron Rutherford, Joshua Hambrick, Philip
-Fackler, Eve Tsybina, Bruce Palmer, Jaelyn Litzinger, William Perkins, Sayef
+Samim Konjicija, Maksudul Alam, Asher Mancinelli, Cameron Rutherford, Joshua Hambrick, Philip
+Fackler, Eve Tsybina, Shaked Regev, Bruce Palmer, Jaelyn Litzinger, William Perkins, Sayef
 Azad Sakin, Joseph Macam, and Ryan Danehy.
 
 ## Acknowledgement

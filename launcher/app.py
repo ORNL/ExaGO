@@ -10,6 +10,7 @@ import time
 import zipfile
 from pathlib import Path
 import shutil
+from urllib.parse import urlparse
 
 import streamlit as st
 import yaml
@@ -547,6 +548,8 @@ with tab_viz:
                     st.error(f"Binary not found: `{opflow_bin}`")
                     st.session_state.viz_opflow_output = None
 
+            # TODO: below could be replaced by configuring the data path via
+            #       environment variables
             if st.session_state.get("viz_opflow_output"):
                 # Find the JSON output file
                 output_dir = cfg.get("output_dir", "")
@@ -572,21 +575,27 @@ with tab_viz:
     st.divider()
     st.subheader("Visualization Server")
 
+    used_hostname = urlparse(st.context.url).hostname
     col_launch, col_status = st.columns(2)
     with col_launch:
         if st.button("🚀 Launch Viz Server", key="viz_launch_btn"):
             try:
+                env = os.environ.copy()
+                env["EXAGO_VIZ_HOST"] = used_hostname
+                env["EXAGO_VIZ_PORT"] = "8085"
+
+                # NOTE: this may not be the best way of doing this but 0.0.0.0
+                #       is probably a bad idea for this specifically
                 proc = subprocess.Popen(
-                    ["yarn", "start"],
+                    f"{viz_dir}/server.py",
                     cwd=viz_dir,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    env=env,
                     start_new_session=True,
                 )
                 st.session_state.viz_pid = proc.pid
                 st.success(f"Viz server started (PID: {proc.pid})")
             except FileNotFoundError:
-                st.error("yarn not found. Install Node.js to use the visualization server.")
+                st.error("The visualization server.py was not found. Double check that `viz_dir` is set correctly and that no other services are occupying port 8085.")
 
     with col_status:
         if st.session_state.get("viz_pid"):
@@ -600,7 +609,7 @@ with tab_viz:
                     st.info("Server already stopped")
                     del st.session_state.viz_pid
 
-    st.markdown("**Open visualization:** [http://localhost:5173](http://localhost:5173)")
+    st.markdown(f"**Open visualization:** <http://{used_hostname}:8085>")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3: Python API

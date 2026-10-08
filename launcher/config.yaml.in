@@ -17,7 +17,7 @@ viz_dir: @LAUNCH_EXAGO_DIR@/viz
 gic_data_dir: @LAUNCH_EXAGO_DIR@/viz/data
 
 # Directory for simulation output files
-output_dir: @LAUNCH_EXAGO_DIR@/../LLMSim/launcher/output
+output_dir: @LAUNCH_EXAGO_DIR@/launcher/output
 
 # Environment variables needed at runtime
 environment:

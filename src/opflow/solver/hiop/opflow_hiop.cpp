@@ -357,7 +357,7 @@ PetscErrorCode OPFLOWSolverSetUp_HIOP(OPFLOW opflow) {
 
   if (mode_set == PETSC_FALSE) {
     hiop->mds->options->SetStringValue("compute_mode",
-                                       opflow->_p_hiop_compute_mode.c_str());
+                                       opflow->_p_hiop_compute_mode);
   } else {
     hiop->mds->options->SetStringValue("compute_mode",
                                        HIOPComputeModeChoices[compute_mode]);
@@ -428,16 +428,17 @@ PetscErrorCode OPFLOWSolverSetUp_HIOP(OPFLOW opflow) {
   hiop->mds->options->SetStringValue("scaling_type", "none");
 
   /* Error if model is not power balance hiop or power balance raja hiop */
-  ismodelpbpolhiop =
-      static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_PBPOLHIOP);
+  ierr =
+      PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOLHIOP, &ismodelpbpolhiop);
+  CHKERRQ(ierr);
 #if defined(EXAGO_ENABLE_RAJA)
-  ismodelpbpolrajahiop =
-      static_cast<PetscBool>(opflow->modelname == OPFLOWMODEL_PBPOLRAJAHIOP);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOLRAJAHIOP,
+                     &ismodelpbpolrajahiop);
+  CHKERRQ(ierr);
 #endif
   if (!ismodelpbpolhiop && !ismodelpbpolrajahiop) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
-            "%s opflow model not supported with HIOP\n",
-            opflow->modelname.c_str());
+            "%s opflow model not supported with HIOP\n", opflow->modelname);
     PetscFunctionReturn(1);
     exit(0);
   }

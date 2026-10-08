@@ -397,8 +397,7 @@ PetscErrorCode OPFLOWSolverSetUp_HIOPSPARSEGPU(OPFLOW opflow) {
   hiop->solver = new hiop::hiopAlgFilterIPMNewton(hiop->sp);
 
   /* Error if model is not power balance hiop */
-  ierr = PetscStrcmp(opflow->modelname.c_str(), OPFLOWMODEL_PBPOLRAJAHIOPSPARSE,
-                     &flg1);
+  ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOLRAJAHIOPSPARSE, &flg1);
   CHKERRQ(ierr);
   if (!flg1) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
