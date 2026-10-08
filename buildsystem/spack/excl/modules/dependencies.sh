@@ -44,8 +44,8 @@ module load cmake/3.31.9-gcc-12.2.0-noem6ml
 module load blt/0.7.1-gcc-12.2.0-ri4fyet
 # cuda@=12.0.140~allow-unsupported-compilers~dev build_system=generic platform=linux os=ubuntu24.04 target=x86_64
 module load cuda/12.0.140-none-none-6a7oxtn
-# camp@=2025.03.0+cuda~ipo~omptarget~openmp~rocm~sycl~tests build_system=cmake build_type=Release commit=ee0a3069a7ae72da8bcea63c06260fad34901d43 cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
-module load camp/2025.03.0-gcc-12.2.0-xvvgidn
+# camp@=2025.03.0+cuda~ipo~omptarget~openmp~rocm~sycl~tests build_system=cmake build_type=RelWithDebInfo commit=ee0a3069a7ae72da8bcea63c06260fad34901d43 cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
+module load camp/2025.03.0-gcc-12.2.0-khypxpp
 # fmt@=11.0.2~ipo+pic~shared build_system=cmake build_type=Release cxxstd=11 generator=make platform=linux os=ubuntu24.04 target=zen3
 module load fmt/11.0.2-gcc-12.2.0-ejblufa
 # libmd@=1.1.0 build_system=autotools platform=linux os=ubuntu24.04 target=zen3
@@ -93,13 +93,13 @@ module load metis/5.1.0-gcc-12.2.0-76fymax
 # openblas@=0.3.20~bignuma~consistent_fpcsr+dynamic_dispatch~ilp64+locking+pic+shared build_system=makefile patches:=9f12903 symbol_suffix=none threads=none platform=linux os=ubuntu24.04 target=zen3
 module load openblas/0.3.20-gcc-12.2.0-jobeokz
 # coinhsl@=2024.05.15+metis~strip build_system=meson buildtype=release default_library:=shared platform=linux os=ubuntu24.04 target=zen3
-module load coinhsl/2024.05.15-gcc-12.2.0-m6czeqr
-# magma@=2.8.0+cuda+fortran~ipo~rocm+shared build_system=cmake build_type=Release cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
-module load magma/2.8.0-gcc-12.2.0-yfxvyqe
+module load coinhsl/2024.05.15-none-none-ze34oly
+# magma@=2.8.0+cuda+fortran~ipo~rocm+shared build_system=cmake build_type=RelWithDebInfo cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
+module load magma/2.8.0-gcc-12.2.0-kbexxa7
 # openmpi@=5.10.0+atomics~cuda~debug+fortran~gpfs~internal-hwloc~internal-libevent~internal-pmix~ipv6~java~lustre~memchecker~openshmem~rocm+romio+rsh~static~two_level_namespace+vt+wrapper-rpath build_system=autotools fabrics:=none romio-filesystem:=none schedulers:=none platform=linux os=ubuntu24.04 target=x86_64
 module load openmpi/5.10.0-none-none-ake64zr
-# raja@=2025.03.0+cuda~desul~examples~exercises~gpu-profiling~ipo~lowopttest~omptarget~omptask~openmp~plugins~rocm~run-all-tests~shared~sycl~tests~vectorization build_system=cmake build_type=Release commit=1d70abf171474d331f1409908bdf1b1c3fe19222 cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
-module load raja/2025.03.0-gcc-12.2.0-vrdqtyc
+# raja@=2025.03.0+cuda~desul~examples~exercises~gpu-profiling~ipo~lowopttest~omptarget~omptask~openmp~plugins~rocm~run-all-tests~shared~sycl~tests~vectorization build_system=cmake build_type=RelWithDebInfo commit=1d70abf171474d331f1409908bdf1b1c3fe19222 cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
+module load raja/2025.03.0-gcc-12.2.0-bhy3dps
 # libsigsegv@=2.14 build_system=autotools platform=linux os=ubuntu24.04 target=zen3
 module load libsigsegv/2.14-gcc-12.2.0-pmy2anp
 # m4@=1.4.20+sigsegv build_system=autotools platform=linux os=ubuntu24.04 target=zen3
@@ -122,17 +122,17 @@ module load texinfo/7.2-gcc-12.2.0-5yxfsxr
 module load mpfr/4.2.1-gcc-12.2.0-bcpoluj
 # suite-sparse@=7.8.3~cuda~graphblas~openmp+pic build_system=generic platform=linux os=ubuntu24.04 target=zen3
 module load suite-sparse/7.8.3-gcc-12.2.0-lsxp7ug
-# umpire@=2025.03.0~asan~backtrace+c+cuda~dev_benchmarks~device_alloc~deviceconst~examples+fmt_header_only~fortran~ipc_shmem~ipo~mpi~mpi3_shmem~numa~omptarget~openmp~rocm~sanitizer_tests~shared~sqlite_experimental~tools~werror build_system=cmake build_type=Release commit=1ed0669c57f041baa1f1070693991c3a7a43e7ee cuda_arch:=70 generator=make tests=none platform=linux os=ubuntu24.04 target=zen3
-module load umpire/2025.03.0-gcc-12.2.0-3wfinzm
-# hiop@=1.1.1~axom+cuda+cusolver_lu~deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja~rocm~shared+sparse build_system=cmake build_type=RelWithDebInfo commit=d8762e05150b2040a27f69d8bf6603f22190a869 cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
-module load hiop/1.1.1-gcc-12.2.0-gmnl7q5
+# umpire@=2025.03.0~asan~backtrace+c+cuda~dev_benchmarks~device_alloc~deviceconst~examples+fmt_header_only~fortran~ipc_shmem~ipo~mpi~mpi3_shmem~numa~omptarget~openmp~rocm~sanitizer_tests~shared~sqlite_experimental~tools~werror build_system=cmake build_type=RelWithDebInfo commit=1ed0669c57f041baa1f1070693991c3a7a43e7ee cuda_arch:=70 generator=make tests=none platform=linux os=ubuntu24.04 target=zen3
+module load umpire/2025.03.0-gcc-12.2.0-zb6jpep
+# hiop@=1.1.1~axom+cuda+cusolver_lu+deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja~rocm~shared+sparse build_system=cmake build_type=RelWithDebInfo commit=d8762e05150b2040a27f69d8bf6603f22190a869 cuda_arch:=70 generator=make platform=linux os=ubuntu24.04 target=zen3
+module load hiop/1.1.1-gcc-12.2.0-v3micx4
 # ipopt@=3.14.14+coinhsl~debug~java~metis~mumps build_system=autotools platform=linux os=ubuntu24.04 target=zen3
-module load ipopt/3.14.14-gcc-12.2.0-kfbdyph
+module load ipopt/3.14.14-gcc-12.2.0-upfu6nk
 # parmetis@=4.0.3~gdb~int64~ipo+shared build_system=cmake build_type=Release generator=make patches:=4f89253,50ed208,704b84f platform=linux os=ubuntu24.04 target=zen3
 module load parmetis/4.0.3-gcc-12.2.0-pmowy4l
-# petsc@=3.24.1~X~batch~cgns~complex~cuda~debug+double+examples~exodusii~fftw+fortran+fortran-bindings~giflib~hdf5~hpddm~hwloc~hypre~int64~jpeg~knl~kokkos~libpng~libyaml~memkind+metis~mkl-pardiso~mmg~moab~mpfr+mpi~mumps~openmp~p4est~parmmg~ptscotch~random123~rocm~saws~scalapack+shared~strumpack~suite-sparse~superlu-dist~sycl~tetgen~trilinos~valgrind~zoltan build_system=generic clanguage=C memalign=none patches:=fa5ef56 platform=linux os=ubuntu24.04 target=zen3
-module load petsc/3.24.1-gcc-12.2.0-apq7cwf
+# petsc@=main~X~batch~cgns~complex~cuda~debug+double+examples~exodusii~fftw+fortran+fortran-bindings~giflib~hdf5~hpddm~hwloc~hypre~int64~jpeg~knl~kokkos~libpng~libyaml~memkind+metis~mkl-pardiso~mmg~moab~mpfr+mpi~mumps~openmp~p4est~parmmg~ptscotch~random123~rocm~saws~scalapack+shared~strumpack~suite-sparse~superlu-dist~sycl~tetgen~trilinos~valgrind~zoltan build_system=generic clanguage=C commit=669b419381c54cce71a7d3c8fbf6f389f09686c2 memalign=none platform=linux os=ubuntu24.04 target=zen3
+module load petsc/main-gcc-12.2.0-aamy7al
 # spdlog@=1.15.0~ipo+shared build_system=cmake build_type=Release generator=make patches:=5ed92f4,fd4cbb1,fdc325d platform=linux os=ubuntu24.04 target=zen3
 module load spdlog/1.15.0-gcc-12.2.0-tymrfqp
-# exago@=develop+cuda+hiop~ipo+ipopt+logging+mpi~python+raja~rocm+testing build_system=cmake build_type=MinSizeRel cuda_arch:=70 dev_path=/home/97k/Codes/ExaGO generator=make platform=linux os=ubuntu24.04 target=zen3
-## module load exago/develop-gcc-12.2.0-zhp5xk2
+# exago@=develop+cuda+hiop~ipo+ipopt+logging+mpi~python+raja~rocm+testing build_system=cmake build_type=RelWithDebInfo cuda_arch:=70 dev_path=/home/97k/Codes/ExaGO generator=make platform=linux os=ubuntu24.04 target=zen3
+## module load exago/develop-gcc-12.2.0-usmsgjt

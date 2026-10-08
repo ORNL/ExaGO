@@ -1,6 +1,6 @@
 spack:
   specs:
-  - exago@develop
+  - exago@develop build_type=RelWithDebInfo
   - hiop@1.1.1
   view: false
   concretizer:
