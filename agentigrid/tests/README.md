@@ -16,6 +16,12 @@ Tests are grouped by the part of AgentiGrid they cover:
 | `e2e/` | End-to-end runs through the agent loop |
 | `fixtures/` | Shared sample files (e.g. `sample_opflow_output.txt`) |
 
+`fixtures/sample_opflow_output.txt` is OPFLOW output for `case_ACTIVSg200.m` as
+rewritten by AgentiGrid; `results/test_opflow_parser.py` checks values from it.
+To regenerate it (needs the `opflow` binary), run the live executor test with
+`AGENTIGRID_REGENERATE_FIXTURES=1 python -m pytest tests/runner/test_executor.py -k test_opflow_run`
+and update the expected values in `results/test_opflow_parser.py`.
+
 Run the fast tests from the AgentiGrid root:
 
 ```bash

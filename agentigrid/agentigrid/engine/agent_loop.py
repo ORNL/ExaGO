@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-from agentigrid.backends import create_backend
+from agentigrid.backends import UsageMeter, create_backend
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.config import AppConfig
 from agentigrid.engine.commands import parse_command
@@ -30,7 +30,7 @@ from agentigrid.engine.explore import (
     compute_pareto_labels,
     format_variant_results,
 )
-from agentigrid.engine.journal import JournalEntry, ObjectiveEntry, SearchJournal
+from agentigrid.engine.journal import JournalEntry, ObjectiveEntry, SearchJournal, format_iteration_count
 from agentigrid.engine.metric_extractor import available_metrics, available_metrics_for_app, extract_all_metrics
 from agentigrid.engine.modifier import apply_modifications, build_index_maps
 from agentigrid.engine import sweep_metrics
@@ -65,6 +65,9 @@ from agentigrid.prompts import build_system_prompt, build_user_prompt
 from agentigrid.engine.goal_classifier import build_classification_prompts, parse_goal_classification
 
 logger = logging.getLogger("agentigrid.engine.agent_loop")
+
+# Cap on the raw model response kept for a discarded iteration (journal telemetry).
+DISCARDED_RESPONSE_MAX = 4000
 
 _MAX_CONSECUTIVE_PARSE_FAILURES = 3
 
@@ -765,7 +768,9 @@ class AgentLoopController:
         on_explore: Callable[[int, list[dict]], None] | None = None,
     ) -> None:
         self._config = config
-        self._backend: LLMBackend = create_backend(config.llm)
+        # Metered so per-run token totals (incl. prompt-cache reads/writes)
+        # cover every LLM call, not only the main per-iteration call.
+        self._backend: LLMBackend = UsageMeter(create_backend(config.llm))
         self._executor = SimulationExecutor(config.exago, config.output)
         self._journal = SearchJournal()
         self._quiet = quiet
@@ -1217,17 +1222,67 @@ class AgentLoopController:
 
         # 3. Agent loop
         max_iter = self._config.search.max_iterations
+        # Optional stall breaker: stop after N consecutive no-progress iterations
+        # (iterations that record no new journal entry — e.g. the model repeating
+        # an invalid action). 0/unset disables it (the default), so batch runs always
+        # reach max_iter and stay comparable; the UI can set it.
+        try:
+            stall_limit = int(os.environ.get("AGENTIGRID_STALL_LIMIT", "0") or "0")
+        except ValueError:
+            stall_limit = 0
+        stall = 0
         for iteration in range(1, max_iter + 1):
             if self._stop_requested:
                 session.termination_reason = "user_stopped"
                 self._print("\nSearch stopped by user.")
                 break
-            action_type, should_continue = self._iteration(iteration, goal)
-            # Notify callback after each iteration
+            self._iteration_api_error = False
+            self._iteration_response_text = None
+            self._iteration_stop_reason = None
+            self._iteration_content_types = None
+            try:
+                action_type, should_continue = self._iteration(iteration, goal)
+            except Exception as e:
+                import traceback
+                self._print(
+                    f"\n[Iter {iteration}] Action failed with an internal error "
+                    f"({type(e).__name__}: {e}); discarding and continuing."
+                )
+                traceback.print_exc()
+                self._error_feedback = (
+                    f"The previous action raised an internal error and was discarded: "
+                    f"{type(e).__name__}: {e}. Respond with a well-formed action that "
+                    f"strictly follows the schema."
+                )
+                action_type, should_continue = "error", True
+                internal_error = True
+            else:
+                internal_error = False
+            # Did THIS iteration record a journal entry? A discarded/invalid action
+            # (common with weak local models) appends nothing.
+            latest_entry = self._journal.latest
+            recorded = latest_entry is not None and latest_entry.iteration == iteration
+            if action_type == "error" and not recorded:
+                self._record_discarded(iteration, internal_error)
+            # Notify the UI only on a real new entry; otherwise show a transient
+            # discarded card (avoids re-emitting the previous entry as a phantom).
             if self._on_iteration:
-                latest_entry = self._journal.latest
-                if latest_entry:
+                if recorded:
                     self._on_iteration(iteration, latest_entry, action_type, self._latest_opflow)
+                elif action_type == "error":
+                    self._emit_discarded(iteration)
+            # Stall breaker: count consecutive no-progress iterations.
+            if recorded:
+                stall = 0
+            elif stall_limit:
+                stall += 1
+                if stall >= stall_limit:
+                    session.termination_reason = "stalled_no_progress"
+                    self._print(
+                        f"\nStopping early: {stall} consecutive no-progress "
+                        f"iterations (stall limit {stall_limit})."
+                    )
+                    break
             if not should_continue:
                 if not session.termination_reason:
                     session.termination_reason = "completed"
@@ -1239,16 +1294,12 @@ class AgentLoopController:
         if not session.termination_reason:
             session.termination_reason = "completed"
 
-        # Final notification with termination reason
-        if self._on_iteration:
-            latest_entry = self._journal.latest
-            if latest_entry:
-                self._on_iteration(
-                    latest_entry.iteration,
-                    latest_entry,
-                    session.termination_reason,
-                    self._latest_opflow,
-                )
+        # No final on_iteration re-emit: the last real entry was already sent by
+        # the per-iteration callback above. Re-emitting it duplicated the last
+        # timeline card, and when the final iterations were discarded it made a
+        # stale, lower-numbered entry appear AFTER the final iteration (e.g. a
+        # phantom "Iteration 6" after 20). The UI reads session.termination_reason
+        # when the search finishes.
 
         session.end_time = datetime.now().isoformat()
         session.total_prompt_tokens = self._total_prompt_tokens
@@ -1265,6 +1316,88 @@ class AgentLoopController:
         elapsed = time.monotonic() - session_start
         self._finalize(session, elapsed)
         return session
+
+    # ------------------------------------------------------------------
+    # Discarded-iteration diagnostic
+    # ------------------------------------------------------------------
+
+    def _record_discarded(self, iteration: int, internal: bool = False) -> None:
+        """Journal telemetry for an iteration whose action produced no entry.
+
+        Persisted: iteration, kind (rejected / internal / api_error /
+        truncated), stop_reason and content block types when known, the
+        truncated feedback sent back to the model and, when the model answered,
+        its raw response (the rejected proposal itself, capped at
+        DISCARDED_RESPONSE_MAX characters). The entry list and all summary
+        statistics are unaffected."""
+        stop = getattr(self, "_iteration_stop_reason", None)
+        if internal:
+            kind = "internal"
+        elif getattr(self, "_iteration_api_error", False):
+            kind = "api_error"
+        elif stop == "max_tokens":
+            kind = "truncated"      # output cap hit: a harness limit, not a rejected proposal
+        else:
+            kind = "rejected"
+        record = {
+            "iteration": iteration,
+            "kind": kind,
+            "feedback": (self._error_feedback or "")[:300],
+        }
+        if stop is not None:
+            record["stop_reason"] = stop
+        ctypes = getattr(self, "_iteration_content_types", None)
+        if ctypes is not None:
+            record["content_types"] = list(ctypes)
+        text = getattr(self, "_iteration_response_text", None)
+        if text is not None and kind != "api_error":   # an API error has no model response
+            record["response"] = text[:DISCARDED_RESPONSE_MAX]
+            record["response_truncated"] = len(text) > DISCARDED_RESPONSE_MAX
+        self._journal.discarded_actions.append(record)
+
+    def _emit_discarded(self, iteration: int) -> None:
+        """Emit a UI-only 'discarded' timeline card for an iteration whose action
+        was rejected (invalid/malformed proposal, unknown action, parse error)
+        and therefore recorded no journal entry.
+
+        The synthetic entry is deliberately NOT added to ``self._journal``: it
+        never affects summary stats, best-iteration selection, or the persisted
+        record. ``mode="discarded"`` keeps ``is_solve_iteration``
+        False, and ``feasible=False`` / ``objective_value=None`` keep it out of
+        the session_manager's best-cost tracking. It exists purely to tell the
+        user *why* the iteration produced nothing, instead of showing a phantom
+        duplicate or a blank card.
+        """
+        if not self._on_iteration:
+            return
+        reason = (self._error_feedback or "The model returned an invalid proposal.").strip()
+        # The UI label must attribute the failure to the MODEL, not the code:
+        # the raw feedback ("Unknown action X. Valid actions: ...") is written for
+        # the LLM and reads like a code assertion in the timeline. Keep only the
+        # first clause for the headline and prefix it clearly; the full corrective
+        # text still shows in the card's expander (llm_reasoning).
+        headline = reason.split(". ")[0].splitlines()[0].strip().rstrip(".")
+        if not headline:
+            headline = "invalid proposal"
+        headline = headline if len(headline) <= 120 else headline[:117] + "..."
+        synthetic = JournalEntry(
+            iteration=iteration,
+            description=f"LLM output rejected — {headline} (no change applied)",
+            commands=[],
+            objective_value=None,
+            feasible=False,
+            convergence_status="FAILED",
+            violations_count=0,
+            voltage_min=0.0,
+            voltage_max=0.0,
+            max_line_loading_pct=0.0,
+            total_gen_mw=0.0,
+            total_load_mw=0.0,
+            llm_reasoning=reason,  # full detail shown in the card's expander
+            mode="discarded",
+            elapsed_seconds=0.0,
+        )
+        self._on_iteration(iteration, synthetic, "discarded", None)
 
     # ------------------------------------------------------------------
     # Single iteration
@@ -1322,6 +1455,11 @@ class AgentLoopController:
 
         response = self._backend.complete(system_prompt, user_prompt)
         logger.debug("LLM raw response: %s", response.raw_text[:500])
+        # Kept for journal telemetry if this iteration's action is discarded:
+        # the exact proposal the parser / validator rejected.
+        self._iteration_response_text = response.raw_text or ""
+        self._iteration_stop_reason = getattr(response, "stop_reason", None)
+        self._iteration_content_types = getattr(response, "content_types", None)
 
         # Track tokens
         pt = response.prompt_tokens or 0
@@ -1334,6 +1472,11 @@ class AgentLoopController:
                 f"(cumulative: ~{self._total_prompt_tokens + self._total_completion_tokens:,})"
             )
 
+        # A failed request (auth, invalid request, network) is not a model
+        # answer: journal it as an API error, not as a rejected action.
+        if getattr(response, "api_error", False):
+            self._iteration_api_error = True
+
         # Parse JSON from response
         if response.json_data is None:
             self._consecutive_parse_failures += 1
@@ -1343,14 +1486,23 @@ class AgentLoopController:
                 _MAX_CONSECUTIVE_PARSE_FAILURES,
                 response.json_error,
             )
-            self._print(f"[Iter {iteration}] Failed to parse LLM response as JSON")
+            truncated = getattr(response, "stop_reason", None) == "max_tokens"
+            self._print(f"[Iter {iteration}] Failed to parse LLM response as JSON"
+                        + (f" (output hit max_tokens={self._config.llm.max_tokens})" if truncated else ""))
             if self._consecutive_parse_failures >= _MAX_CONSECUTIVE_PARSE_FAILURES:
                 self._print(f"[Iter {iteration}] Too many consecutive parse failures — aborting")
                 return "error", False
-            self._error_feedback = (
-                "Failed to parse JSON from your response. "
-                "Please respond with a valid JSON object."
-            )
+            if truncated:
+                self._error_feedback = (
+                    "Your previous response was cut off at the output-token limit before "
+                    "a complete JSON object was produced. Respond with the JSON action "
+                    "only, keeping the reasoning brief."
+                )
+            else:
+                self._error_feedback = (
+                    "Failed to parse JSON from your response. "
+                    "Please respond with a valid JSON object."
+                )
             return "error", True
 
         self._consecutive_parse_failures = 0
@@ -1477,6 +1629,14 @@ class AgentLoopController:
             f"{skipped_count} skipped"
         )
 
+        # A modify that applied zero commands changes nothing — make the timeline
+        # say so instead of showing a blank "No description" card.
+        if applied_count == 0:
+            if not description or description == "No description":
+                description = "No commands applied (no change)"
+            else:
+                description = f"{description} — no commands applied"
+
         if all_errors:
             self._error_feedback = "Command errors:\n" + "\n".join(all_errors)
 
@@ -1592,7 +1752,7 @@ class AgentLoopController:
             self._active_steering_directives[-1]["directive"]
             if self._active_steering_directives else None
         )
-        self._journal.add_from_results(
+        _modify_entry = self._journal.add_from_results(
             iteration=iteration,
             description=description,
             commands=raw_commands,
@@ -1606,6 +1766,7 @@ class AgentLoopController:
             gencost=modified_net.gencost if self._config.search.application == "pflow" else None,
             exago_command=_single_call_record(sim_result),
         )
+        _modify_entry.skipped_commands = list(all_errors)
 
         # Extract tracked metrics for multi-objective tracking
         if opflow is not None:
@@ -2043,6 +2204,11 @@ class AgentLoopController:
         Returns (candidates, "") on success or (None, error_message) on failure.
         Shared by the feasibility sweep and the boundary sweep.
         """
+        if not isinstance(spec, dict):
+            return None, (
+                f"candidate_set must be an object with a 'type' field, "
+                f"got {type(spec).__name__}: {spec!r}"
+            )
         ctype = spec.get("type", "")
         if ctype == "all_buses":
             candidates = [b.bus_i for b in self._base_network.buses]
@@ -2200,6 +2366,8 @@ class AgentLoopController:
         candidate_set_spec = data.get("candidate_set", {})
         mutation_template = data.get("mutation", {})
         feasibility_spec = data.get("feasibility", {})
+        if not isinstance(feasibility_spec, dict):
+            feasibility_spec = {}
 
         if not mutation_template or "action" not in mutation_template:
             self._error_feedback = "sweep requires a 'mutation' dict with an 'action' key."
@@ -2624,6 +2792,8 @@ class AgentLoopController:
         pf_spec = data.get("power_factor", s.boundary_power_factor_default)
         candidate_set_spec = data.get("candidate_set", {})
         feasibility_spec = data.get("feasibility", {})
+        if not isinstance(feasibility_spec, dict):
+            feasibility_spec = {}
         vmin = feasibility_spec.get("Vmin", 0.9)
         vmax = feasibility_spec.get("Vmax", 1.1)
         q_frac = s.boundary_gen_q_frac
@@ -3228,6 +3398,8 @@ class AgentLoopController:
         description = data.get("description", "Hot reserve / N-1 generator security")
         reasoning = data.get("reasoning", "")
         feasibility_spec = data.get("feasibility", {})
+        if not isinstance(feasibility_spec, dict):
+            feasibility_spec = {}
         vmin = feasibility_spec.get("Vmin", 0.9)
         vmax = feasibility_spec.get("Vmax", 1.1)
         minimize = bool(data.get("minimize", False))
@@ -4641,6 +4813,16 @@ class AgentLoopController:
 
     def _finalize(self, session: SearchSession, elapsed_seconds: float) -> None:
         """Print summary and save journal."""
+        _totals = getattr(self._backend, "totals", None)
+        if callable(_totals):
+            self._journal.llm_usage = {
+                **_totals(),
+                "backend": self._backend.name(),
+                "model": self._config.llm.model,
+                "max_tokens": self._config.llm.max_tokens,
+                "prompt_cache": bool(getattr(self._config.llm, "prompt_cache", False)),
+            }
+
         total_tokens = self._total_prompt_tokens + self._total_completion_tokens
 
         # --- Post-search goal classification via LLM ---
@@ -4699,7 +4881,7 @@ class AgentLoopController:
         print(f"  Application:    {session.application}")
         print(f"  Backend:        {self._backend.name()} ({self._config.llm.model})")
         print(
-            f"  Iterations:     {stats['total_iterations']} "
+            f"  Iterations:     {format_iteration_count(stats)} "
             f"(of max {self._config.search.max_iterations})"
         )
         print(f"  Duration:       {elapsed_seconds:.1f} seconds")
@@ -4968,16 +5150,61 @@ class AgentLoopController:
 
         # Continue the agent loop from last_iteration + 1
         max_iter = self._config.search.max_iterations
+        try:
+            stall_limit = int(os.environ.get("AGENTIGRID_STALL_LIMIT", "0") or "0")
+        except ValueError:
+            stall_limit = 0
+        stall = 0
         for iteration in range(last_iteration + 1, max_iter + 1):
             if self._stop_requested:
                 session.termination_reason = "user_stopped"
                 self._print("\nSearch stopped by user.")
                 break
-            action_type, should_continue = self._iteration(iteration, goal)
+            self._iteration_api_error = False
+            self._iteration_response_text = None
+            self._iteration_stop_reason = None
+            self._iteration_content_types = None
+            try:
+                action_type, should_continue = self._iteration(iteration, goal)
+            except Exception as e:
+                import traceback
+                self._print(
+                    f"\n[Iter {iteration}] Action failed with an internal error "
+                    f"({type(e).__name__}: {e}); discarding and continuing."
+                )
+                traceback.print_exc()
+                self._error_feedback = (
+                    f"The previous action raised an internal error and was discarded: "
+                    f"{type(e).__name__}: {e}. Respond with a well-formed action that "
+                    f"strictly follows the schema."
+                )
+                action_type, should_continue = "error", True
+                internal_error = True
+            else:
+                internal_error = False
+
+            # Only emit when this iteration recorded a new entry (see run() above).
+            latest_entry = self._journal.latest
+            recorded = latest_entry is not None and latest_entry.iteration == iteration
+            if action_type == "error" and not recorded:
+                self._record_discarded(iteration, internal_error)
             if self._on_iteration:
-                latest_entry = self._journal.latest
-                if latest_entry:
+                if recorded:
                     self._on_iteration(iteration, latest_entry, action_type, self._latest_opflow)
+                elif action_type == "error":
+                    self._emit_discarded(iteration)
+            # Stall breaker: count consecutive no-progress iterations.
+            if recorded:
+                stall = 0
+            elif stall_limit:
+                stall += 1
+                if stall >= stall_limit:
+                    session.termination_reason = "stalled_no_progress"
+                    self._print(
+                        f"\nStopping early: {stall} consecutive no-progress "
+                        f"iterations (stall limit {stall_limit})."
+                    )
+                    break
             if not should_continue:
                 if not session.termination_reason:
                     session.termination_reason = "completed"
@@ -4989,14 +5216,8 @@ class AgentLoopController:
         if not session.termination_reason:
             session.termination_reason = "completed"
 
-        # Final notification
-        if self._on_iteration:
-            latest_entry = self._journal.latest
-            if latest_entry:
-                self._on_iteration(
-                    latest_entry.iteration, latest_entry,
-                    session.termination_reason, self._latest_opflow,
-                )
+        # No final on_iteration re-emit (see run() above) — it only duplicated
+        # the last timeline card.
 
         session.end_time = datetime.now().isoformat()
         session.total_prompt_tokens = self._total_prompt_tokens

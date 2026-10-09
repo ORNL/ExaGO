@@ -253,7 +253,7 @@ def load_example_goals() -> list[dict[str, str]]:
 
 # Default model names per backend
 DEFAULT_MODELS: dict[str, str] = {
-    "anthropic": "claude-sonnet-4-20250514",
+    "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-4o",
     "ollama": "qwen2.5:7b",
     "ollama-cloud": "qwen2.5:7b",

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import math
+import re
 from pathlib import Path
 
 from agentigrid.parsers.matpower_model import (
@@ -15,12 +17,30 @@ from agentigrid.parsers.matpower_model import (
 
 logger = logging.getLogger("agentigrid.parsers.matpower")
 
+_FUNC_RE = re.compile(r"^function\s+mpc\s*=\s*\w+", re.MULTILINE)
+
 
 def _fmt(value: float) -> str:
-    """Format a numeric value, writing integers without decimals."""
-    if value == int(value) and abs(value) < 1e15:
-        return str(int(value))
-    return f"{value:.10g}"
+    """Format a numeric value, writing integers without decimals.
+
+    Infinities and NaN are written as MATLAB ``Inf`` / ``-Inf`` / ``NaN``
+    (the parser reads them back).
+    """
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Inf" if value > 0 else "-Inf"
+    text = f"{value:.10g}"
+    rounded = float(text)
+    if math.isinf(rounded):
+        # Rounding to 10 digits pushed a value near the float maximum past
+        # it; that text would read back as Inf. Write it exactly instead.
+        text, rounded = repr(value), value
+    # Decide the integer form on the ROUNDED value, so a value that rounds to
+    # an integer is written the same way the second time (idempotence).
+    if rounded == int(rounded) and abs(rounded) < 1e15:
+        return str(int(rounded))
+    return text
 
 
 def _write_bus_row(b: Bus) -> str:
@@ -31,7 +51,7 @@ def _write_bus_row(b: Bus) -> str:
     ]
     for val in (b.lam_P, b.lam_Q, b.mu_Vmax, b.mu_Vmin):
         if val is not None:
-            parts.append(f"{val:.4f}")
+            parts.append(_fmt(val))
     return "\t" + "\t".join(parts) + ";"
 
 
@@ -64,6 +84,19 @@ def _write_gencost_row(gc: GenCost) -> str:
     return "\t" + "\t".join(parts) + ";"
 
 
+def _terminate(raw: str) -> str:
+    """Ensure a raw section ends with "};" / "];".
+
+    ExaGO locates the end of ``mpc.genfuel`` by the literal "};". Networks
+    parsed by older versions stored the block without the semicolon; writing
+    that back made ExaGO ignore the fuel types, leaving every ramp rate at 0
+    (SCOPFLOW cannot redispatch in contingencies) and wind/solar fixed at Pmax.
+    """
+    if raw.endswith("}") or raw.endswith("]"):
+        return raw + ";"
+    return raw
+
+
 def write_matpower(network: MATNetwork, path: Path) -> None:
     """Write a MATNetwork object to a MATPOWER .m file.
 
@@ -80,14 +113,22 @@ def write_matpower(network: MATNetwork, path: Path) -> None:
     lines: list[str] = []
 
     # --- Header ---
-    lines.append(network.header_comments.rstrip("\n"))
-    # Ensure function line is present (header_comments includes it)
-    if f"function mpc = {network.casename}" not in network.header_comments:
-        lines.append(f"function mpc = {network.casename}")
+    # The function line always carries network.casename: an existing one in
+    # header_comments is renamed, a missing one is added as the first line.
+    header = network.header_comments.rstrip("\n")
+    func_line = f"function mpc = {network.casename}"
+    if _FUNC_RE.search(header):
+        header = _FUNC_RE.sub(lambda _m: func_line, header, count=1)
+    else:
+        header = func_line + ("\n" + header if header else "")
+    lines.append(header)
 
     # --- Version & baseMVA ---
-    lines.append("")
-    lines.append(f"%% MATPOWER Case Format : Version {network.version}")
+    # The header read back from a file already holds the format comment;
+    # adding it again would grow the file on every read/write round trip.
+    if "MATPOWER Case Format" not in header:
+        lines.append("")
+        lines.append(f"%% MATPOWER Case Format : Version {network.version}")
     lines.append(f"mpc.version = '{network.version}';")
     lines.append("")
     lines.append("%%-----  Power Flow Data  -----%%")
@@ -137,9 +178,10 @@ def write_matpower(network: MATNetwork, path: Path) -> None:
     # --- Extra sections (gentype, genfuel, bus_name, etc.) ---
     for section_name, raw_text in network.extra_sections.items():
         lines.append("")
-        lines.append(raw_text.rstrip())
+        lines.append(_terminate(raw_text.rstrip()))
 
     lines.append("")
 
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Always LF line endings, whatever the platform or the source file used.
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     logger.info("Wrote MATPOWER file: %s", path)

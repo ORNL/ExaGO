@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -331,6 +332,8 @@ class TestMPIGuard:
             assert cmd_arg[0] != "mpirun"
 
 
+@pytest.mark.skipif(not _has_opflow, reason="opflow binary not available")
+@pytest.mark.skipif(not _has_test_file, reason="case_ACTIVSg200.m not in data/exago/examples/")
 class TestExecutorLive:
 
     def test_opflow_run(self, tmp_path: Path):
@@ -350,8 +353,11 @@ class TestExecutorLive:
         assert result.elapsed_seconds < exago.timeout
         assert result.exit_code == 0 or result.success  # MPI noise tolerance
 
-        # Save stdout for Step 1.6 (only if converged, to avoid overwriting good sample)
-        if "Optimal Solution Found" in result.stdout:
+        # Regenerate the parser fixture only on request: the parser tests in
+        # tests/results/ hard-code values from it, so overwriting it on every
+        # live run made their results depend on the machine and test order.
+        #   AGENTIGRID_REGENERATE_FIXTURES=1 python -m pytest tests/runner/test_executor.py -k test_opflow_run
+        if os.environ.get("AGENTIGRID_REGENERATE_FIXTURES") == "1" and "Optimal Solution Found" in result.stdout:
             sample_path = Path(__file__).resolve().parent.parent / "fixtures" / "sample_opflow_output.txt"
             sample_path.write_text(result.stdout, encoding="utf-8")
             print(f"\nSaved sample output to {sample_path} ({len(result.stdout)} bytes)")
