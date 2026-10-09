@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from agentigrid.backends.base import LLMBackend, LLMResponse
+from agentigrid.backends.base import LLMBackend, LLMResponse, UsageMeter
 from agentigrid.config import LLMConfig
 
-__all__ = ["LLMBackend", "LLMResponse", "create_backend"]
+__all__ = ["LLMBackend", "LLMResponse", "UsageMeter", "create_backend"]
 
 
 def create_backend(config: LLMConfig) -> LLMBackend:

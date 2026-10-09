@@ -254,6 +254,152 @@ class TestErrorRecovery:
         assert len(session.journal) == 3  # base + modify + complete
         assert session.termination_reason == "completed"
 
+    def test_discarded_iterations_are_journaled_as_telemetry(self, tmp_path: Path):
+        """An unparseable action and an unknown action record no entry, but are
+        kept in journal.discarded_actions (validator-rejection telemetry)."""
+        cfg = _make_config(tmp_path, max_iterations=10)
+        responses = [
+            _objectives_response(),                                   # objective parser
+            _make_llm_response(None, raw_text="This is not JSON"),    # iter 1
+            _make_llm_response({"action": "dance", "reasoning": "x"}),  # iter 2
+            _make_llm_response({"action": "complete", "reasoning": "Done",
+                                "findings": {"summary": "ok"}}),     # iter 3
+        ]
+        mock_backend = MockBackend(responses)
+        sim_result = _make_sim_result(stdout=_sample_stdout(), success=True)
+        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+            mock_executor = MagicMock()
+            mock_executor.run.return_value = sim_result
+            mock_exec_cls.return_value = mock_executor
+            controller = AgentLoopController(cfg)
+            session = controller.run(BASE_CASE, "Test discard telemetry")
+
+        assert len(session.journal) == 2  # base + complete
+        disc = session.journal.discarded_actions
+        assert [(d["iteration"], d["kind"]) for d in disc] == [(1, "rejected"), (2, "rejected")]
+        assert "parse JSON" in disc[0]["feedback"] and "Unknown action" in disc[1]["feedback"]
+        # the rejected proposal itself is kept (raw model output)
+        assert disc[0]["response"] == "This is not JSON" and disc[0]["response_truncated"] is False
+        assert '"dance"' in disc[1]["response"] or "dance" in disc[1]["response"]
+
+    def test_api_errors_are_not_counted_as_rejections(self, tmp_path: Path):
+        cfg = _make_config(tmp_path, max_iterations=10)
+        api_err = LLMResponse(raw_text="Anthropic API error: 400", json_data=None, json_error="x",
+                              model="m", backend="test", prompt_tokens=None, completion_tokens=None,
+                              api_error=True)
+        responses = [_objectives_response(), api_err,
+                     _make_llm_response({"action": "complete", "reasoning": "Done",
+                                         "findings": {"summary": "ok"}})]
+        mock_backend = MockBackend(responses)
+        sim_result = _make_sim_result(stdout=_sample_stdout(), success=True)
+        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+            mock_executor = MagicMock()
+            mock_executor.run.return_value = sim_result
+            mock_exec_cls.return_value = mock_executor
+            session = AgentLoopController(cfg).run(BASE_CASE, "Test api error")
+        disc = session.journal.discarded_actions
+        assert [(d["iteration"], d["kind"]) for d in disc] == [(1, "api_error")]
+        assert "response" not in disc[0]              # no model response for a failed request
+
+    def test_truncated_output_is_journaled_as_truncated(self, tmp_path: Path):
+        cfg = _make_config(tmp_path, max_iterations=10)
+        cut = LLMResponse(raw_text="", json_data=None, json_error="no JSON", model="m",
+                          backend="test", prompt_tokens=10, completion_tokens=4096,
+                          stop_reason="max_tokens", content_types=["thinking"])
+        responses = [_objectives_response(), cut,
+                     _make_llm_response({"action": "complete", "reasoning": "Done",
+                                         "findings": {"summary": "ok"}})]
+        mock_backend = MockBackend(responses)
+        sim_result = _make_sim_result(stdout=_sample_stdout(), success=True)
+        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+            mock_executor = MagicMock()
+            mock_executor.run.return_value = sim_result
+            mock_exec_cls.return_value = mock_executor
+            session = AgentLoopController(cfg).run(BASE_CASE, "Test truncation")
+        d = session.journal.discarded_actions[0]
+        assert (d["iteration"], d["kind"], d["stop_reason"]) == (1, "truncated", "max_tokens")
+        assert d["content_types"] == ["thinking"] and d["response"] == ""
+        assert "output-token limit" in d["feedback"]
+
+    def test_long_discarded_response_is_capped(self, tmp_path: Path):
+        from agentigrid.engine import agent_loop as al
+        cfg = _make_config(tmp_path, max_iterations=10)
+        long_text = "x" * (al.DISCARDED_RESPONSE_MAX + 50)
+        responses = [_objectives_response(), _make_llm_response(None, raw_text=long_text),
+                     _make_llm_response({"action": "complete", "reasoning": "Done",
+                                         "findings": {"summary": "ok"}})]
+        mock_backend = MockBackend(responses)
+        sim_result = _make_sim_result(stdout=_sample_stdout(), success=True)
+        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+            mock_executor = MagicMock()
+            mock_executor.run.return_value = sim_result
+            mock_exec_cls.return_value = mock_executor
+            session = AgentLoopController(cfg).run(BASE_CASE, "Test cap")
+        d = session.journal.discarded_actions[0]
+        assert len(d["response"]) == al.DISCARDED_RESPONSE_MAX and d["response_truncated"] is True
+
+    def _run(self, tmp_path, responses, goal="Test", max_iterations=10, **ctl_kw):
+        cfg = _make_config(tmp_path, max_iterations=max_iterations)
+        mock_backend = MockBackend([_objectives_response()] + responses)
+        sim_result = _make_sim_result(stdout=_sample_stdout(), success=True)
+        with patch("agentigrid.engine.agent_loop.create_backend", return_value=mock_backend), \
+             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+            mock_executor = MagicMock()
+            mock_executor.run.return_value = sim_result
+            mock_exec_cls.return_value = mock_executor
+            return AgentLoopController(cfg, **ctl_kw).run(BASE_CASE, goal)
+
+    _COMPLETE = {"action": "complete", "reasoning": "Done", "findings": {"summary": "ok"}}
+
+    def test_ui_callback_never_replays_a_stale_entry(self, tmp_path: Path):
+        """A rejected iteration produces a 'discarded' card for that iteration,
+        never a re-emit of the previous entry, and the run ends without a
+        final duplicate of the last card."""
+        calls = []
+        session = self._run(
+            tmp_path,
+            [_make_llm_response(None, raw_text="not JSON"),          # iter 1: rejected
+             _make_llm_response({"action": "dance", "reasoning": "x"}),  # iter 2: rejected
+             _make_llm_response(self._COMPLETE)],                    # iter 3
+            on_iteration=lambda it, entry, kind, opf: calls.append((it, kind, entry.mode)),
+        )
+        assert [c[0] for c in calls] == [0, 1, 2, 3]
+        assert [c[1] for c in calls[1:3]] == ["discarded", "discarded"]
+        assert all(c[2] == "discarded" for c in calls[1:3])
+        assert session.termination_reason == "completed"
+        # the synthetic cards are UI-only: the journal holds base case + complete
+        assert len(session.journal) == 2
+
+    def test_stall_breaker_is_off_by_default(self, tmp_path: Path, monkeypatch):
+        monkeypatch.delenv("AGENTIGRID_STALL_LIMIT", raising=False)
+        bad = {"action": "dance", "reasoning": "x"}
+        session = self._run(tmp_path, [_make_llm_response(bad)] * 3 + [_make_llm_response(self._COMPLETE)])
+        assert session.termination_reason == "completed"
+        assert len(session.journal.discarded_actions) == 3
+
+    def test_stall_breaker_stops_after_n_no_progress_iterations(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("AGENTIGRID_STALL_LIMIT", "2")
+        bad = {"action": "dance", "reasoning": "x"}
+        session = self._run(tmp_path, [_make_llm_response(bad)] * 3 + [_make_llm_response(self._COMPLETE)])
+        assert session.termination_reason == "stalled_no_progress"
+        assert [d["iteration"] for d in session.journal.discarded_actions] == [1, 2]
+
+    def test_internal_error_in_an_action_is_discarded_and_the_run_continues(self, tmp_path: Path):
+        with patch.object(AgentLoopController, "_handle_analyze", side_effect=RuntimeError("boom")):
+            session = self._run(
+                tmp_path,
+                [_make_llm_response({"action": "analyze", "query": "max loading", "reasoning": "x"}),
+                 _make_llm_response(self._COMPLETE)],
+            )
+        assert session.termination_reason == "completed"
+        d = session.journal.discarded_actions[0]
+        assert (d["iteration"], d["kind"]) == (1, "internal")
+        assert "RuntimeError: boom" in d["feedback"]
+
     def test_unknown_action(self, tmp_path: Path):
         """LLM returns unknown action, then completes."""
         cfg = _make_config(tmp_path, max_iterations=10)

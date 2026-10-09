@@ -35,13 +35,14 @@ DEFAULTS: dict[str, Any] = {
     },
     "llm": {
         "backend": "anthropic",
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-6",
         "api_key_env": "ANTHROPIC_API_KEY",
         "openai_base_url": None,
         "ollama_host": "http://localhost:11434",
         "ollama_cloud_host": None,
         "temperature": 0.3,
         "max_tokens": 4096,
+        "prompt_cache": True,
     },
     "search": {
         "max_iterations": 20,
@@ -132,6 +133,9 @@ class LLMConfig:
     ollama_cloud_host: Optional[str]
     temperature: float
     max_tokens: int
+    # Anthropic prompt caching of the (per-session constant) system prompt.
+    # Billing-only: does not change model outputs. Ignored by other backends.
+    prompt_cache: bool = True
 
 
 @dataclass(frozen=True)
@@ -310,6 +314,15 @@ def load_config(
                 target = target.setdefault(part, {})
             target[parts[-1]] = value
         logger.debug("Applied CLI overrides: %s", cli_overrides)
+
+    # AGENTIGRID_MAX_TOKENS overrides the output-token cap (e.g. to fix it for a
+    # batch of runs); the value used is recorded in the journal's llm_usage.
+    _mt = os.environ.get("AGENTIGRID_MAX_TOKENS", "").strip()
+    if _mt:
+        try:
+            merged["llm"] = {**merged["llm"], "max_tokens": int(_mt)}
+        except ValueError:
+            logger.warning("Ignoring non-integer AGENTIGRID_MAX_TOKENS=%r", _mt)
 
     # Build frozen dataclass sections
     exago_path_fields = {
