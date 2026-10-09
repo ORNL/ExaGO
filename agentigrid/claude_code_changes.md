@@ -4,6 +4,90 @@ This document records significant changes made by Claude Code, grouped by the pr
 
 ---
 
+## Optional retrieval grounding (RAG) for LLM proposals (2026-10-06)
+
+**What.** AgentiGrid can add a short block of reference material, retrieved from a curated corpus, to the LLM's per-iteration prompt. It is **off by default**: with RAG off, behaviour and dependencies are unchanged. Retrieval touches only the generation step. The deterministic validator never sees it, and any retrieval failure leaves the prompt unchanged, so the run behaves like the baseline.
+
+### Package `agentigrid/rag/`
+
+| File | Role |
+|---|---|
+| `__init__.py` | `build_retriever()` chooses the mode from `AGENTIGRID_RAG_MODE` (`off` / `basic` / `corrective`; legacy `AGENTIGRID_RAG=1` means `basic`), the grader and the thresholds |
+| `retriever.py` | Basic mode: top `k=3` chunks with cosine similarity of at least `0.35`. Counts calls, errors and empty results |
+| `corrective.py` | Corrective mode: grade hits (CORRECT / AMBIGUOUS / INCORRECT), refine to relevant sentences, reformulate once, withhold context when still INCORRECT |
+| `grader_reranker.py` | Optional local cross-encoder grader (`sentence-transformers`). Failures fall back to cosine and are counted |
+| `embed.py`, `store.py` | Ollama embeddings (`nomic-embed-text`) and a persistent Chroma index; `chromadb` is imported lazily |
+| `ingest.py`, `corpus_hash.py` | Build the index; record the corpus SHA-256 and chunking scheme; `corpus_status()` checks a store against the frozen corpus |
+
+### Integration
+
+- **`engine/agent_loop.py`.** Builds the retriever at start-up. Before each per-iteration LLM call it retrieves with the goal text and prepends "Section B: Reference Material (retrieved)". It emits a `rag_retrieved:<refs>:<top score>` phase when RAG is on, and records `rag_enabled` / `rag_config` (mode, thresholds, grader, call/error counts) at the end of the run. Post-search analysis is not grounded.
+- **`engine/journal.py`.** Exports `rag_enabled` and `rag_config`.
+- **`launcher/app.py`, `launcher/session_manager.py`.** "Reference knowledge (RAG)" selector under **Advanced** (default **Off**). The relevance grader choice appears for corrective mode, and the reranker is offered only when `sentence-transformers` is installed. A grounding caption shows on the live monitor and on the results page.
+
+### Corpus and tools
+
+- **`rag/corpus/` (frozen v1, 12 files, manifest SHA-256 `da4b77a5…`).** ExaGO `--help` text per application, case metadata, methodology notes, certified schema exemplars, and solver-certified worked examples from successful runs.
+- **`rag/tools/rag_harvest.py`.** Generates tool help and case metadata from the binaries and `.m` files.
+- **`rag/tools/rag_schema_exemplars.py`.** Builds response examples, certified by AgentiGrid's own parser, validator and modifier on `case118`.
+- **`rag/tools/corpus_guard.py`.** Hold-out leakage and personal-path audit, plus `--freeze`.
+
+### Dependencies
+
+`requirements-rag.txt` (optional): `chromadb`, `requests`, and `sentence-transformers` (commented out) for the reranker. The core `requirements.txt` is unchanged.
+
+### Tests
+
+`tests/rag/` has 23 tests, using fake embeddings and fake models, so no Ollama, Chroma or model download is needed:
+
+- off by default;
+- references reach the prompt and the journal;
+- a failed retrieval leaves the prompt unchanged;
+- retrieval errors are counted;
+- the corrective grader contract;
+- the chunking scheme;
+- the shipped corpus matches its manifest and contains no personal paths;
+- the schema exemplars certify on `case118`;
+- the guard flags.
+
+With chromadb installed and a fake embedder: ingest of `rag/corpus` gives 92 chunks and the manifest hash; basic returns 3 references, corrective returns refined strips, and off returns nothing.
+
+---
+
+## Agent loop and LLM backends: robust iterations, honest UI, usage accounting (2026-10-03)
+
+**Motivation.** Long runs with local models (Ollama) showed iterations that went wrong in ways the UI hid or misreported: a malformed action crashed the run; a rejected iteration re-emitted the previous card, so the timeline showed stale or out-of-order cards (e.g. "Iteration 6" after iteration 20); analysis and completion entries were labelled FAILED; a modify that applied no command showed "No description"; and the summary counted the base case as an iteration ("Iterations 3" for max 2). Separately, Anthropic runs re-sent the same system prompt at full price on every iteration, and some newer models reject the `temperature` parameter.
+
+### Agent loop (`agentigrid/engine/agent_loop.py`)
+
+- Each iteration runs inside a guard: an exception in an action handler is discarded with feedback to the model, and the run continues. Handlers that read `feasibility` / `candidate_set` tolerate non-dict values.
+- The UI callback fires only when the iteration recorded a journal entry. Otherwise a UI-only "discarded" card explains why ("LLM output rejected — … (no change applied)"); it is never added to the journal. The final re-emit of the last entry is gone (it duplicated the last card). Same in `resume`.
+- `journal.discarded_actions` records every iteration that produced no entry: kind (`rejected`, `api_error`, `truncated`, `internal`), the feedback sent to the model, `stop_reason`, content block types and the raw response (capped at 4,000 characters). Entries and summary statistics are unchanged.
+- A response cut at `max_tokens` gets its own message and feedback asking for the JSON action only.
+- A modify that applies zero commands says so in its description; modify entries record `skipped_commands`.
+- Optional stall breaker: `AGENTIGRID_STALL_LIMIT=N` ends the run after N consecutive iterations without a new entry (`termination_reason = "stalled_no_progress"`). Off by default.
+
+### Backends (`agentigrid/backends/`)
+
+- Anthropic prompt caching of the per-session system prompt (`llm.prompt_cache`, default on). Billing only; the model sees the same text. `prompt_tokens` stays the total input; cache writes and reads are reported separately.
+- `UsageMeter` wraps the backend and counts every call (including post-search analysis); totals go to the journal as `llm_usage`.
+- Models that reject `temperature` are retried once without it, and it is not sent again in that session.
+- `LLMResponse` gains `api_error`, `stop_reason`, `content_types` and cache token fields; failed requests in all backends set `api_error`.
+- `AGENTIGRID_MAX_TOKENS` overrides the output-token cap.
+
+### UI and reports
+
+- Iterations shown as "N + base case" (UI summary and live panel, CLI summary, PDF report). `summary_stats()` adds `llm_iterations` and `has_base_case`; `total_iterations` is unchanged.
+- Timeline cards show FAILED only for solves that did not converge, not for analysis / complete / sweep / contingency / explore entries or discarded proposals.
+- Sidebar checkbox for the stall breaker (unchecked by default).
+- Default Anthropic model `claude-sonnet-4-20250514` (retired) → `claude-sonnet-4-6`.
+
+### Tests
+
+`tests/llm/test_prompt_cache.py` (new: caching, token breakdown, `UsageMeter`, temperature retry, API errors, max_tokens, env override), `tests/journal/test_iteration_count.py` (new), `tests/agent_loop/test_agent_loop.py` (+8: discarded telemetry, API errors, truncation, response cap, no stale UI cards, stall breaker off/on, internal errors). The 4 new agent-loop callback/stall/error tests fail on the previous agent loop.
+
+---
+
 ## C.2/C.3 corrections — metric gating, summary aggregation, predicate audit, sweep dedup (2026-06-23)
 
 Four contained fixes from the prompt-13/15/17 runs. No capability behavior changed (capacity numbers, dispatch results, metric/predicate definitions, and the C.1 binding identifier are untouched) — only how results are gated, summarized, audited, and deduplicated.

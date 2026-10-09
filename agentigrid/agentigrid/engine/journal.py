@@ -54,6 +54,10 @@ class JournalEntry:
     exago_command: Optional[dict] = None  # Reproducible ExaGO invocation record (JSON journal only; see add_* methods)
     contingency_meta: Optional[dict] = None  # C.5: target bus, neighbors, order, pass/fail counts
     reserve_meta: Optional[dict] = None  # C.8: hot-reserve / N-1 generator security accounting
+    # Modify iterations: commands the LLM proposed that were NOT applied (parse
+    # errors or validator skips), as messages. [] = every proposed command was
+    # applied; None = not recorded (non-modify entries, older journals).
+    skipped_commands: Optional[list[str]] = None
 
 
 def is_solve_iteration(entry: JournalEntry) -> bool:
@@ -187,6 +191,11 @@ class SearchJournal:
         self.session_best: Optional[dict] = None
         # load_factor: session-level load scaling factor (updated by set_load_factor action).
         self.load_factor: Optional[float] = None
+        # discarded_actions: iterations whose LLM action recorded no entry --
+        # rejected by the deterministic validator / parser ("rejected"), a failed
+        # API request ("api_error"), output cut at max_tokens ("truncated") or
+        # an internal error ("internal"). Exported with the journal.
+        self.discarded_actions: list[dict] = []
 
     def update_session_best(
         self,
@@ -1075,6 +1084,14 @@ class SearchJournal:
             data["session_best"] = self.session_best
         if self.load_factor is not None:
             data["load_factor"] = self.load_factor
+        if getattr(self, "rag_enabled", None) is not None:
+            data["rag_enabled"] = self.rag_enabled
+        if getattr(self, "llm_usage", None) is not None:
+            data["llm_usage"] = self.llm_usage
+        if getattr(self, "rag_config", None) is not None:
+            data["rag_config"] = self.rag_config
+        if getattr(self, "discarded_actions", None):
+            data["discarded_actions"] = self.discarded_actions
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info("Journal exported to %s (%d entries)", path, len(self._entries))
 
@@ -1092,7 +1109,7 @@ class SearchJournal:
             "mode", "elapsed_seconds", "timestamp", "steering_directive",
             "tracked_metrics", "feasibility_detail", "solver", "num_steps", "num_scenarios",
             "explored_variants", "candidate_count", "feasible_buses", "exago_command",
-            "contingency_meta", "reserve_meta",
+            "contingency_meta", "reserve_meta", "skipped_commands",
         ]
 
         with open(path, "w", newline="", encoding="utf-8") as f:
@@ -1107,6 +1124,7 @@ class SearchJournal:
                 row["exago_command"] = json.dumps(row.get("exago_command") or None)
                 row["contingency_meta"] = json.dumps(row.get("contingency_meta") or None)
                 row["reserve_meta"] = json.dumps(row.get("reserve_meta") or None)
+                row["skipped_commands"] = json.dumps(row.get("skipped_commands"))
                 writer.writerow(row)
 
         logger.info("Journal CSV exported to %s (%d entries)", path, len(self._entries))
@@ -1114,6 +1132,22 @@ class SearchJournal:
     # ------------------------------------------------------------------
     # Summary statistics
     # ------------------------------------------------------------------
+
+    def _iteration_counts(self) -> tuple[int, bool]:
+        """Agent iterations actually run, and whether a base case was solved.
+
+        ``total_iterations`` counts journal entries: it includes the base-case
+        solve (iteration 0) and leaves out iterations whose LLM output was
+        rejected (they are kept in ``discarded_actions``, not as entries).
+        This counts distinct iteration numbers >= 1 across both, which is the
+        number of agent iterations the user asked for and the run performed.
+        """
+        numbers = {e.iteration for e in self._entries}
+        for d in getattr(self, "discarded_actions", None) or []:
+            it = d.get("iteration") if isinstance(d, dict) else None
+            if isinstance(it, int):
+                numbers.add(it)
+        return sum(1 for n in numbers if n >= 1), 0 in numbers
 
     def summary_stats(
         self,
@@ -1134,9 +1168,12 @@ class SearchJournal:
             feasible_count, infeasible_count, objective_trend,
             voltage_range_trend, goal_type.
         """
+        llm_iterations, has_base_case = self._iteration_counts()
         if not self._entries:
             return {
                 "total_iterations": 0,
+                "llm_iterations": llm_iterations,
+                "has_base_case": has_base_case,
                 "best_objective": None,
                 "best_iteration": None,
                 "best_bus": None,
@@ -1194,6 +1231,8 @@ class SearchJournal:
 
         return {
             "total_iterations": len(self._entries),
+            "llm_iterations": llm_iterations,
+            "has_base_case": has_base_case,
             "best_objective": best_objective,
             "best_iteration": best_iteration,
             "best_bus": best_bus,
@@ -1248,3 +1287,15 @@ class SearchJournal:
                     if best is None or c < best[0]:
                         best = (c, e.iteration, v.get("bus"))
         return best
+
+
+def format_iteration_count(stats: dict) -> str:
+    """Display form of the iteration count, e.g. ``"2 + base case"``.
+
+    Falls back to ``total_iterations`` for stats dicts written before
+    ``llm_iterations`` existed.
+    """
+    if "llm_iterations" not in stats:
+        return str(stats.get("total_iterations", 0))
+    n = stats["llm_iterations"]
+    return f"{n} + base case" if stats.get("has_base_case") else str(n)

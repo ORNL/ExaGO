@@ -226,6 +226,10 @@ When resuming, the goal and journal are loaded from the saved session, but the L
 
 The launcher sidebar includes a "Session Save/Resume" section with a Save button (available after search completes or while running) and a dropdown to resume from previously saved sessions.
 
+## Retrieval Grounding (optional RAG)
+
+AgentiGrid can ground the LLM's proposals in a curated, provenance-tagged corpus (`rag/corpus/`: ExaGO tool help, case metadata, certified response examples). It is **off by default**, touches only the generation step (never the deterministic validator), and degrades to the no-RAG baseline on any retrieval failure. Modes are `off`, `basic` and `corrective`, set with `AGENTIGRID_RAG_MODE` or the UI's **Advanced** panel. Setup, optional dependencies (`requirements-rag.txt`) and troubleshooting: [docs/RAG_USAGE.md](docs/RAG_USAGE.md).
+
 ## Interactive Steering
 
 While a search is running, you can inject steering directives from the terminal (CLI) or the GUI — without stopping and restarting the search.
@@ -307,7 +311,7 @@ agentigrid ./data/exago/examples/case_ACTIVSg200.m "Find the maximum load scalin
 
 # With options
 agentigrid ./data/exago/examples/case_ACTIVSg200.m "Minimize generation cost" \
-  --backend anthropic --model claude-sonnet-4-20250514 \
+  --backend anthropic --model claude-sonnet-4-6 \
   --app opflow --max-iter 30 --verbose
 
 # Quiet mode (only show final summary)
@@ -364,7 +368,7 @@ python -m agentigrid ./data/exago/examples/case_ACTIVSg200.m "test goal" --dry-r
   Version 0.1.0
 ============================================================
   Backend:        anthropic
-  Model:          claude-sonnet-4-20250514
+  Model:          claude-sonnet-4-6
   Application:    opflow
   Base case:      data/exago/examples/case_ACTIVSg200.m
   Goal:           Find the maximum load scaling factor
@@ -375,7 +379,7 @@ python -m agentigrid ./data/exago/examples/case_ACTIVSg200.m "test goal" --dry-r
 [Iter 0] Running base case simulation...
 [Iter 0] Base case: CONVERGED, cost=$27,557.57
 
-[Iter 1] Sending prompt to anthropic (claude-sonnet-4-20250514)...
+[Iter 1] Sending prompt to anthropic (claude-sonnet-4-6)...
 [Iter 1] LLM action: modify — "Scale all loads +20%"
 [Iter 1] Applied 1 command(s), 0 skipped
 [Iter 1] Simulation completed in 0.04s — CONVERGED, cost=$33,019.55
@@ -390,7 +394,7 @@ python -m agentigrid ./data/exago/examples/case_ACTIVSg200.m "test goal" --dry-r
 ============================================================
   Goal:           Find the maximum load scaling factor
   Application:    opflow
-  Backend:        anthropic (claude-sonnet-4-20250514)
+  Backend:        anthropic (claude-sonnet-4-6)
   Iterations:     6 (of max 20)
   Duration:       18.3 seconds
   Tokens used:    ~12,450 (prompt: 9,200, completion: 3,250)

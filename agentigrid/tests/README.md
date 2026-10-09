@@ -14,6 +14,7 @@ Tests are grouped by the part of AgentiGrid they cover:
 | `journal/` | Search journal, objectives, Pareto front, session save and report regeneration |
 | `analyses/` | Explore, sweeps, boundary search, contingency, relief, reserve and topology |
 | `e2e/` | End-to-end runs through the agent loop |
+| `rag/` | Optional retrieval grounding: retrievers, corrective-RAG graders, corpus tools (`agentigrid/rag/`, `rag/tools/`) |
 | `fixtures/` | Shared sample files (e.g. `sample_opflow_output.txt`) |
 
 Run the fast tests from the AgentiGrid root:

@@ -113,7 +113,7 @@ def _make_config(
         data=DataConfig(data_dir=DATA_DIR),
         llm=LLMConfig(
             backend="anthropic" if _has_anthropic_key else "openai",
-            model="claude-sonnet-4-20250514" if _has_anthropic_key else "gpt-4o-mini",
+            model="claude-sonnet-4-6" if _has_anthropic_key else "gpt-4o-mini",
             api_key_env="ANTHROPIC_API_KEY" if _has_anthropic_key else "OPENAI_API_KEY",
             openai_base_url=None,
             ollama_host="http://localhost:11434",

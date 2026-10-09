@@ -120,4 +120,5 @@ class OllamaBackend(LLMBackend):
                 backend=self.name(),
                 prompt_tokens=None,
                 completion_tokens=None,
+                api_error=True,
             )
