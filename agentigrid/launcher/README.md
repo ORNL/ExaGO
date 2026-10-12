@@ -35,9 +35,10 @@ Do **not** run `streamlit run app.py` from inside `launcher/` — paths will not
 ## Features
 
 ### Configuration Panel (Sidebar)
+
 - Select MATPOWER base case files from `data/exago/datafiles/` and `data/exago/examples/`
 - Choose LLM backend (Anthropic, OpenAI, Ollama, Ollama-Cloud) with auto-populated model defaults
-- Adjust temperature, iteration mode (accumulative/fresh), and max iterations
+- Optionally enable temperature, adjust iteration mode (accumulative/fresh), and max iterations
 - Search mode selector: **Standard** (goal-directed search) or **Stress Test** (adversarial contingency exploration)
 - Application selector: choose between supported ExaGO applications (OPFLOW for full AC OPF, DCOPFLOW for fast DC approximation, SCOPFLOW for security-constrained OPF, TCOPFLOW for multi-period OPF, SOPFLOW for stochastic OPF, PFLOW for LLM-driven power flow analysis)
 - Contingency file selector: appears when SCOPFLOW is selected, showing available `.cont` files from `data/exago/datafiles/` and `data/exago/examples/`

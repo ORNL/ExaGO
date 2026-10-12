@@ -40,7 +40,7 @@ DEFAULTS: dict[str, Any] = {
         "openai_base_url": None,
         "ollama_host": "http://localhost:11434",
         "ollama_cloud_host": None,
-        "temperature": 0.3,
+        "temperature": None,
         "max_tokens": 4096,
     },
     "search": {
@@ -130,7 +130,7 @@ class LLMConfig:
     openai_base_url: Optional[str]
     ollama_host: str
     ollama_cloud_host: Optional[str]
-    temperature: float
+    temperature: Optional[float]
     max_tokens: int
 
 
@@ -268,6 +268,12 @@ def _build_section(cls: type, raw: dict, root: Path, path_fields: set[str]) -> A
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def get_default_config_path() -> Path:
+    """Retrieve the default configuration path."""
+    config_dir = os.environ.get("AGENTIGRID_CONFIG_DIR", "configs")
+    return Path(config_dir) / "default_config.yaml"
 
 
 def load_config(

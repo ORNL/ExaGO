@@ -1,0 +1,45 @@
+{
+  "nodes": {
+    "hiop-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1757607534,
+        "narHash": "sha256-4Q5bwMdeI3xzm5ux0JqmnF7c6sN7JM/ehzkHv2og8KI=",
+        "owner": "LLNL",
+        "repo": "hiop",
+        "rev": "6acee835136e9beddf3570b28739a1b1001e528a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "LLNL",
+        "ref": "v1.2.0",
+        "repo": "hiop",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1791734076,
+        "narHash": "sha256-i5qk1kLiit98rRbh1AXmWBNT9QXC/y4l5Wk/u5EdpDQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7fd4004d0511991fff3a0524856a9be09e28c5f0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "hiop-src": "hiop-src",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

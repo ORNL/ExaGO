@@ -72,32 +72,3 @@ data/exago/datafiles/
 ├── case9_scenarios.csv     # Multi-period wind scenarios
 └── case9_10_scenarios.csv  # Single-period wind scenarios with weights
 ```
-
-## Example data symlinks
-
-`examples/` links to ExaGO's own `datafiles/` folder (not the `datafiles/`
-folder here). The case9 files live in ExaGO's `datafiles/case9/`
-subdirectory under different names, so they are linked individually under
-the names the conventions above expect. The IEEE 118-bus
-case used by several tests comes from ExaGO's `tests/data/`. Run from the
-AgentiGrid root, with `EXAGO` set to your ExaGO checkout:
-
-```bash
-EXAGO=/path/to/ExaGO
-mkdir -p data/exago/examples
-cd data/exago/examples
-for f in "$EXAGO"/datafiles/*; do
-  case "$(basename "$f")" in test_validation|unit) ;; *) ln -s "$f" . ;; esac
-done
-ln -s "$EXAGO/datafiles/case9/case9.cont"             case9.cont
-ln -s "$EXAGO/datafiles/case9/case9_dcline.m"         case9_dcline.m
-ln -s "$EXAGO/datafiles/case9/case9mod.m"             case9mod.m
-ln -s "$EXAGO/datafiles/case9/case9mod_gen3_wind.m"   case9mod_gen3_wind.m
-ln -s "$EXAGO/datafiles/case9/case9mod_gen3_wind2.m"  case9mod_gen3_wind2.m
-ln -s "$EXAGO/datafiles/case9/case9mod_loadloss.m"    case9mod_loadloss.m
-ln -s "$EXAGO/datafiles/case9/load_P.csv"             case9_load_P.csv
-ln -s "$EXAGO/datafiles/case9/load_Q.csv"             case9_load_Q.csv
-ln -s "$EXAGO/datafiles/case9/scenarios_9bus.csv"     case9_scenarios.csv
-ln -s "$EXAGO/datafiles/case9/10_scenarios_9bus.csv"  case9_10_scenarios.csv
-ln -s "$EXAGO/tests/data/ieee_118_bus_v10.m"          ieee_118_bus_v10.m
-```

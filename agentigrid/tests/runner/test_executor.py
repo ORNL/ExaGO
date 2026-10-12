@@ -11,9 +11,10 @@ import pytest
 from agentigrid.config import ExagoConfig, OutputConfig
 from agentigrid.engine.executor import SimulationExecutor, SimulationResult
 from agentigrid.parsers import parse_matpower
+from tests.paths import get_binary_dir
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
-APP_DIR = Path(__file__).resolve().parent.parent.parent / "applications" / "exago"
+APP_DIR = get_binary_dir()
 ACTIVSG200 = DATA_DIR / "case_ACTIVSg200.m"
 ENV_SCRIPT = Path(__file__).resolve().parent.parent.parent / "configs" / "env_setup.sh"
 
@@ -110,7 +111,7 @@ class TestWorkdirManagement:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
         fake_bin = bin_dir / "opflow"
-        fake_bin.write_text("#!/bin/bash\necho 'fake output'\nexit 0\n")
+        fake_bin.write_text("#!/usr/bin/env bash\necho 'fake output'\nexit 0\n")
         fake_bin.chmod(0o755)
 
         exago, output = _make_config(tmp_path, binary_dir=bin_dir)
@@ -127,7 +128,7 @@ class TestWorkdirManagement:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
         fake_bin = bin_dir / "opflow"
-        fake_bin.write_text("#!/bin/bash\necho 'fake'\nexit 0\n")
+        fake_bin.write_text("#!/usr/bin/env bash\necho 'fake'\nexit 0\n")
         fake_bin.chmod(0o755)
 
         exago, output = _make_config(tmp_path, binary_dir=bin_dir)
@@ -149,7 +150,7 @@ class TestCommandConstruction:
         bin_dir.mkdir()
         fake_bin = bin_dir / "opflow"
         # Script that prints the args it received
-        fake_bin.write_text("#!/bin/bash\necho \"ARGS: $@\"\nexit 0\n")
+        fake_bin.write_text("#!/usr/bin/env bash\necho \"ARGS: $@\"\nexit 0\n")
         fake_bin.chmod(0o755)
 
         exago, output = _make_config(tmp_path, binary_dir=bin_dir)
@@ -165,7 +166,7 @@ class TestCommandConstruction:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
         fake_bin = bin_dir / "opflow"
-        fake_bin.write_text("#!/bin/bash\necho \"ARGS: $@\"\nexit 0\n")
+        fake_bin.write_text("#!/usr/bin/env bash\necho \"ARGS: $@\"\nexit 0\n")
         fake_bin.chmod(0o755)
 
         exago, output = _make_config(tmp_path, binary_dir=bin_dir)
@@ -184,7 +185,7 @@ class TestTimeout:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
         fake_bin = bin_dir / "opflow"
-        fake_bin.write_text("#!/bin/bash\nsleep 30\n")
+        fake_bin.write_text("#!/usr/bin/env bash\nsleep 30\n")
         fake_bin.chmod(0o755)
 
         exago, output = _make_config(tmp_path, binary_dir=bin_dir, timeout=2)
@@ -231,7 +232,7 @@ class TestMPIGuard:
     def _make_fake_bin(self, bin_dir: Path, name: str) -> Path:
         bin_dir.mkdir(parents=True, exist_ok=True)
         fake_bin = bin_dir / name
-        fake_bin.write_text("#!/bin/bash\necho OK; exit 0\n")
+        fake_bin.write_text("#!/usr/bin/env bash\necho OK; exit 0\n")
         fake_bin.chmod(0o755)
         return fake_bin
 
@@ -331,6 +332,7 @@ class TestMPIGuard:
             assert cmd_arg[0] != "mpirun"
 
 
+@pytest.mark.skipif(not _has_opflow, reason="opflow binary not available")
 class TestExecutorLive:
 
     def test_opflow_run(self, tmp_path: Path):
@@ -349,9 +351,3 @@ class TestExecutorLive:
         assert result.input_file.exists()
         assert result.elapsed_seconds < exago.timeout
         assert result.exit_code == 0 or result.success  # MPI noise tolerance
-
-        # Save stdout for Step 1.6 (only if converged, to avoid overwriting good sample)
-        if "Optimal Solution Found" in result.stdout:
-            sample_path = Path(__file__).resolve().parent.parent / "fixtures" / "sample_opflow_output.txt"
-            sample_path.write_text(result.stdout, encoding="utf-8")
-            print(f"\nSaved sample output to {sample_path} ({len(result.stdout)} bytes)")

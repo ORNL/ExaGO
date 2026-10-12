@@ -5,6 +5,7 @@ Bridges Streamlit GUI widget values to the AgentiGrid configuration system.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -22,20 +23,20 @@ def get_project_root() -> Path:
 
 def get_data_dir() -> Path:
     """Return the ExaGO data directory (<project_root>/data/exago)."""
+    if os.environ.get("AGENTIGRID_CONFIG_DIR"):
+        from agentigrid.config import load_config
+        return load_config(get_default_config_path()).data.data_dir
     return get_project_root() / "data" / "exago"
 
 
 def _glob_data(data_dir: Path, pattern: str) -> list[Path]:
-    """Glob *pattern* in *data_dir* and its ``datafiles/`` and ``examples/`` subdirectories.
-
-    User files live in ``datafiles/``; ``examples/`` holds symlinks to the
-    example data shipped with ExaGO.
-    """
-    found = list(data_dir.glob(pattern))
-    for sub in ("datafiles", "examples"):
-        if (data_dir / sub).is_dir():
-            found += (data_dir / sub).glob(pattern)
-    return sorted(found)
+    """Find inputs recursively, including case directories and example symlinks."""
+    found = set(data_dir.rglob(pattern))
+    # pathlib does not recurse into directory symlinks by default.
+    for sub in data_dir.iterdir():
+        if sub.is_symlink() and sub.is_dir():
+            found.update(sub.rglob(pattern))
+    return sorted(path for path in found if path.is_file())
 
 
 def scan_data_files(data_dir: Path | None = None) -> list[Path]:
@@ -64,7 +65,7 @@ def scan_config_files(configs_dir: Path | None = None) -> list[Path]:
         Sorted list of .yaml file paths (absolute).
     """
     if configs_dir is None:
-        configs_dir = get_project_root() / "configs"
+        configs_dir = Path(os.environ.get("AGENTIGRID_CONFIG_DIR", get_project_root() / "configs"))
     if not configs_dir.is_dir():
         return []
     # Include both .yaml and .yml, exclude templates
@@ -105,7 +106,7 @@ def scan_profile_files(data_dir: Path | None = None) -> list[Path]:
         data_dir = get_data_dir()
     if not data_dir.is_dir():
         return []
-    return _glob_data(data_dir, "*_load_*.csv")
+    return _glob_data(data_dir, "*load_*.csv")
 
 
 def scan_scenario_files(data_dir: Path | None = None) -> list[Path]:
@@ -123,9 +124,7 @@ def scan_scenario_files(data_dir: Path | None = None) -> list[Path]:
         data_dir = get_data_dir()
     if not data_dir.is_dir():
         return []
-    singles = _glob_data(data_dir, "*_scenarios.csv")
-    tens = _glob_data(data_dir, "*_10_scenarios.csv")
-    return sorted(set(singles + tens))
+    return _glob_data(data_dir, "*scenarios*.csv")
 
 
 _KNOWN_CASE_SUFFIXES = ("mod",)
@@ -178,8 +177,13 @@ def match_profiles_for_case(
     if not data_dir.is_dir():
         return {"pload": [], "qload": []}
 
-    all_p = _glob_data(data_dir, "*_load_P.csv")
-    all_q = _glob_data(data_dir, "*_load_Q.csv")
+    all_p = _glob_data(data_dir, "*load_P.csv")
+    all_q = _glob_data(data_dir, "*load_Q.csv")
+
+    local_p = [p for p in all_p if p.parent == case_path.parent]
+    local_q = [p for p in all_q if p.parent == case_path.parent]
+    if case_path.parent != data_dir and case_path.parent.name.startswith("case") and (local_p or local_q):
+        return {"pload": local_p, "qload": local_q}
 
     case_stem = case_path.stem
     variants = _case_stem_variants(case_stem)
@@ -222,6 +226,9 @@ def match_scenarios_for_case(
         return []
 
     all_scenarios = scan_scenario_files(data_dir)
+    local_scenarios = [p for p in all_scenarios if p.parent == case_path.parent]
+    if case_path.parent != data_dir and case_path.parent.name.startswith("case") and local_scenarios:
+        return local_scenarios
     case_stem = case_path.stem
     variants = _case_stem_variants(case_stem)
 
@@ -229,6 +236,8 @@ def match_scenarios_for_case(
         matches = sorted(
             s for s in all_scenarios
             if s.name.startswith(stem + "_") or s.name.startswith(stem)
+            or s.stem.endswith("_" + stem.removeprefix("case_"))
+            or ("_" + stem.removeprefix("case_") + "_") in s.stem
         )
         if matches:
             return matches
@@ -254,7 +263,7 @@ def load_example_goals() -> list[dict[str, str]]:
 # Default model names per backend
 DEFAULT_MODELS: dict[str, str] = {
     "anthropic": "claude-sonnet-4-20250514",
-    "openai": "gpt-4o",
+    "openai": "gpt-6-luna",
     "ollama": "qwen2.5:7b",
     "ollama-cloud": "qwen2.5:7b",
 }
@@ -279,7 +288,7 @@ def build_config_overrides(
     base_case: str | Path,
     backend: str,
     model: str,
-    temperature: float,
+    temperature: Optional[float],
     application: str,
     default_mode: str,
     max_iterations: int,
@@ -315,7 +324,7 @@ def build_config_overrides(
         base_case: Path to the .m base case file.
         backend: LLM backend name (anthropic, openai, ollama, ollama-cloud).
         model: Model name/identifier.
-        temperature: LLM temperature (0.0-1.0).
+        temperature: LLM temperature (0.0-1.0), or None to omit it.
         application: ExaGO application name (e.g., "opflow").
         default_mode: Search mode ("accumulative" or "fresh").
         max_iterations: Maximum search iterations.
@@ -407,4 +416,5 @@ def get_default_config_path() -> Path:
     Returns:
         Absolute path to configs/default_config.yaml.
     """
-    return get_project_root() / "configs" / "default_config.yaml"
+    config_dir = os.environ.get("AGENTIGRID_CONFIG_DIR", get_project_root() / "configs")
+    return Path(config_dir) / "default_config.yaml"

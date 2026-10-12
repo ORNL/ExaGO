@@ -1,20 +1,25 @@
-import sys
 import os
+from pathlib import Path
 
 
 def check_import():
-    '''Check that ExaGO python bindings can be imported with the current
-    PYTHONPATH'''
+    """Ensure the bindings from the current build can be imported."""
     try:
-        import exago
-    except ImportError as e:
-        print('Could not import ExaGO python bindings!\n'
-              'Have you run `make install` yet?\n'
-              'The python tests require the python bindings to have already '
-              'been installed.\n')
-        sys.exit(1)
+        import exago  # noqa: F401
+    except ImportError as error:
+        raise ImportError(
+            "Could not import the ExaGO bindings."
+        ) from error
+
+
+def datafile(*parts):
+    """Find test input data."""
+    root = Path(os.environ.get(
+        "EXAGO_TEST_DATA_DIR", Path(__file__).resolve().parents[3] / "datafiles"
+    ))
+    return str(root.joinpath(*parts))
 
 
 def check_preconditions():
-    '''Ensure all preconditions for testing python bindings have been met.'''
+    """Ensure all preconditions for testing Python bindings have been met."""
     check_import()

@@ -35,7 +35,7 @@
       };
 
       try {
-        Object.defineProperty(globalThis.crypto, "subtle", {
+        if (!globalThis.crypto.subtle) Object.defineProperty(globalThis.crypto, "subtle", {
           value: subtleShim,
           configurable: true
         });
@@ -43,58 +43,75 @@
         console.error("Cannot install crypto.subtle shim", e);
       }
     </script>
+
     <script type="importmap">
     {
       "imports": {
+        "exago/dataprocess": "/assets/js/dataprocess.js",
+        "exago/color": "/assets/js/color.js",
+        "exago/validate": "/assets/js/validate.js",
         "react": "https://esm.sh/react@19.2.0",
         "react/": "https://esm.sh/react@19.2.0/",
         "react-dom": "https://esm.sh/react-dom@19.2.0?external=react",
         "react-dom/server": "https://esm.sh/react-dom@19.2.0/server?external=react",
         "react-dom/client": "https://esm.sh/react-dom@19.2.0/client?external=react",
 
-        "@deck.gl/core": "https://esm.sh/@deck.gl/core@9.3.10",
-        "@deck.gl/mapbox": "https://esm.sh/@deck.gl/mapbox@9.3.10",
-        "@deck.gl/extensions": "https://esm.sh/@deck.gl/extensions@9.3.10",
-        "@deck.gl/layers": "https://esm.sh/@deck.gl/layers@9.3.10",
-        "@deck.gl/react": "https://esm.sh/@deck.gl/react@9.3.10?external=react,react-dom",
+        "@luma.gl/constants": "https://esm.sh/@luma.gl/constants@9.4.2",
+        "@luma.gl/core": "https://esm.sh/@luma.gl/core@9.4.2",
+
+        "@luma.gl/shadertools": "https://esm.sh/@luma.gl/shadertools@9.4.2?external=@luma.gl/core",
+        "@luma.gl/shadertools/wgsl": "https://esm.sh/@luma.gl/shadertools@9.4.2/wgsl?external=@luma.gl/core",
+
+        "@luma.gl/engine": "https://esm.sh/@luma.gl/engine@9.4.2?external=@luma.gl/core,@luma.gl/shadertools",
+
+        "@luma.gl/webgl": "https://esm.sh/@luma.gl/webgl@9.4.2?external=@luma.gl/core",
+        "@luma.gl/webgl/constants": "https://esm.sh/@luma.gl/webgl@9.4.2/constants?external=@luma.gl/core,@luma.gl/constants",
+        "@luma.gl/webgl/debug": "https://esm.sh/@luma.gl/webgl@9.4.2/debug?external=@luma.gl/core",
+        "@luma.gl/webgl/webgl-constants": "https://esm.sh/@luma.gl/webgl@9.4.2/webgl-constants?external=@luma.gl/core,@luma.gl/constants",
+        "@luma.gl/webgl/webgl-types": "https://esm.sh/@luma.gl/webgl@9.4.2/webgl-types?external=@luma.gl/core",
+
+        "@luma.gl/webgpu": "https://esm.sh/@luma.gl/webgpu@9.4.2?external=@luma.gl/core,@luma.gl/shadertools",
+
+        "@luma.gl/gpgpu": "https://esm.sh/@luma.gl/gpgpu@9.4.2?external=@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgpu",
+        "@luma.gl/gpgpu/cpu": "https://esm.sh/@luma.gl/gpgpu@9.4.2/cpu?external=@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgpu",
+        "@luma.gl/gpgpu/webgl": "https://esm.sh/@luma.gl/gpgpu@9.4.2/webgl?external=@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgpu",
+        "@luma.gl/gpgpu/webgpu": "https://esm.sh/@luma.gl/gpgpu@9.4.2/webgpu?external=@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgpu",
+        "@luma.gl/gpgpu/gpu-data": "https://esm.sh/@luma.gl/gpgpu@9.4.2/gpu-data?external=@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgpu",
+        "@luma.gl/gpgpu/gpu-core": "https://esm.sh/@luma.gl/gpgpu@9.4.2/gpu-core?external=@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgpu",
+        "@luma.gl/gpgpu/gpu-graph": "https://esm.sh/@luma.gl/gpgpu@9.4.2/gpu-graph?external=@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgpu",
+        "@luma.gl/gpgpu/gpu-graph/benchmarks": "https://esm.sh/@luma.gl/gpgpu@9.4.2/gpu-graph/benchmarks?external=@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgpu",
+
+        "@deck.gl/core": "https://esm.sh/@deck.gl/core@9.4.0?external=@luma.gl/constants,@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgl,@luma.gl/webgpu,@luma.gl/gpgpu",
+
+        "@deck.gl/layers": "https://esm.sh/@deck.gl/layers@9.4.0?external=@deck.gl/core,@luma.gl/constants,@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgl,@luma.gl/webgpu,@luma.gl/gpgpu",
+
+        "@deck.gl/extensions": "https://esm.sh/@deck.gl/extensions@9.4.0?external=@deck.gl/core,@deck.gl/layers,@luma.gl/constants,@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgl,@luma.gl/webgpu,@luma.gl/gpgpu",
+
+        "@deck.gl/mapbox": "https://esm.sh/@deck.gl/mapbox@9.4.0?external=@deck.gl/core,@deck.gl/layers,@luma.gl/constants,@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgl,@luma.gl/webgpu,@luma.gl/gpgpu",
+
+        "@deck.gl/widgets": "https://esm.sh/@deck.gl/widgets@9.4.0?external=@deck.gl/core,@luma.gl/core",
+
+        "@deck.gl/react": "https://esm.sh/@deck.gl/react@9.4.0?external=react,react-dom,@deck.gl/core,@deck.gl/layers,@deck.gl/widgets,@luma.gl/constants,@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgl,@luma.gl/webgpu,@luma.gl/gpgpu",
 
         "@flowmap.gl/data": "https://esm.sh/@flowmap.gl/data@9.4.0",
-        "@flowmap.gl/layers": "https://esm.sh/@flowmap.gl/layers@9.4.0",
+
+        "@flowmap.gl/layers": "https://esm.sh/@flowmap.gl/layers@9.4.0?external=@flowmap.gl/data,@deck.gl/core,@deck.gl/layers,@luma.gl/constants,@luma.gl/core,@luma.gl/engine,@luma.gl/shadertools,@luma.gl/webgl,@luma.gl/webgpu,@luma.gl/gpgpu",
 
         "@emotion/react": "https://esm.sh/@emotion/react@11.14.0?external=react",
-        "@emotion/styled": "https://esm.sh/@emotion/styled@11.14.1?external=react",
+        "@emotion/styled": "https://esm.sh/@emotion/styled@11.14.1?external=react,@emotion/react",
 
-        "@mui/material": "https://esm.sh/@mui/material@7.3.5?external=react,react-dom",
-        "@mui/material/Checkbox": "https://esm.sh/@mui/material@7.3.5/Checkbox?external=react,react-dom",
-        "@mui/material/FormControlLabel": "https://esm.sh/@mui/material@7.3.5/FormControlLabel?external=react,react-dom",
-        "@mui/material/FormGroup": "https://esm.sh/@mui/material@7.3.5/FormGroup?external=react,react-dom",
-        "@mui/material/Slider": "https://esm.sh/@mui/material@7.3.5/Slider?external=react,react-dom",
-        "@mui/material/Box": "https://esm.sh/@mui/material@7.3.5/Box?external=react,react-dom",
-        "@mui/material/Accordion": "https://esm.sh/@mui/material@7.3.5/Accordion?external=react,react-dom",
-        "@mui/material/AccordionSummary": "https://esm.sh/@mui/material@7.3.5/AccordionSummary?external=react,react-dom",
-        "@mui/material/AccordionDetails": "https://esm.sh/@mui/material@7.3.5/AccordionDetails?external=react,react-dom",
-        "@mui/material/Dialog": "https://esm.sh/@mui/material@7.3.5/Dialog?external=react,react-dom",
-        "@mui/material/DialogTitle": "https://esm.sh/@mui/material@7.3.5/DialogTitle?external=react,react-dom",
-        "@mui/material/DialogContent": "https://esm.sh/@mui/material@7.3.5/DialogContent?external=react,react-dom",
-        "@mui/material/DialogActions": "https://esm.sh/@mui/material@7.3.5/DialogActions?external=react,react-dom",
-        "@mui/material/Button": "https://esm.sh/@mui/material@7.3.5/Button?external=react,react-dom",
-        "@mui/material/Switch": "https://esm.sh/@mui/material@7.3.5/Switch?external=react,react-dom",
-        "@mui/material/Select": "https://esm.sh/@mui/material@7.3.5/Select?external=react,react-dom",
-        "@mui/material/MenuItem": "https://esm.sh/@mui/material@7.3.5/MenuItem?external=react,react-dom",
-        "@mui/material/FormControl": "https://esm.sh/@mui/material@7.3.5/FormControl?external=react,react-dom",
-        "@mui/material/InputLabel": "https://esm.sh/@mui/material@7.3.5/InputLabel?external=react,react-dom",
-        "@mui/material/Divider": "https://esm.sh/@mui/material@7.3.5/Divider?external=react,react-dom",
+        "@mui/material": "https://esm.sh/@mui/material@7.3.5?bundle&external=react,react-dom,@emotion/react,@emotion/styled",
 
-        "@mui/icons-material": "https://esm.sh/@mui/icons-material@7.3.5?external=react,react-dom",
-        "@mui/icons-material/HomeOutlined": "https://esm.sh/@mui/icons-material@7.3.5/HomeOutlined?external=react,react-dom",
-        "@mui/icons-material/SettingsOutlined": "https://esm.sh/@mui/icons-material@7.3.5/SettingsOutlined?external=react,react-dom",
-        "@mui/icons-material/ArrowDropDown": "https://esm.sh/@mui/icons-material@7.3.5/ArrowDropDown?external=react,react-dom",
+        "@mui/icons-material": "https://esm.sh/@mui/icons-material@7.3.5?external=react,react-dom,@emotion/react,@emotion/styled",
+        "@mui/icons-material/HomeOutlined": "https://esm.sh/@mui/icons-material@7.3.5/HomeOutlined?external=react,react-dom,@emotion/react,@emotion/styled",
+        "@mui/icons-material/SettingsOutlined": "https://esm.sh/@mui/icons-material@7.3.5/SettingsOutlined?external=react,react-dom,@emotion/react,@emotion/styled",
+        "@mui/icons-material/ArrowDropDown": "https://esm.sh/@mui/icons-material@7.3.5/ArrowDropDown?external=react,react-dom,@emotion/react,@emotion/styled",
 
         "chart.js": "https://esm.sh/chart.js@4.5.1",
-        "react-chartjs-2": "https://esm.sh/react-chartjs-2@5.3.1?external=react",
+        "react-chartjs-2": "https://esm.sh/react-chartjs-2@5.3.1?external=react,chart.js",
 
         "maplibre-gl": "https://esm.sh/maplibre-gl@4.7.1",
-        "react-map-gl/maplibre": "https://esm.sh/react-map-gl@7.1.6/maplibre?external=react,react-dom",
+        "react-map-gl/maplibre": "https://esm.sh/react-map-gl@7.1.6/maplibre?external=react,react-dom,maplibre-gl",
 
         "react-chatbotify": "https://esm.sh/react-chatbotify@2.4.1?external=react,react-dom",
         "@rcb-plugins/markdown-renderer": "https://esm.sh/@rcb-plugins/markdown-renderer@0.3.1?external=react,react-dom,react-chatbotify",
@@ -118,6 +135,7 @@
   <body>
     <div id="root"></div>
     <script type="text/jsx">
+      import { validateNetworkData } from "exago/validate";
       import { createRoot } from "react-dom/client";
       import { StrictMode, useMemo, useRef, useState, useCallback, useEffect } from "react";
       import {
@@ -130,7 +148,7 @@
         getContours,
         getAreas,
         getZones,
-      } from "/assets/js/dataprocess.js";
+      } from "exago/dataprocess";
 
       import { FlowmapLayer, PickingType } from "@flowmap.gl/layers";
 
@@ -138,29 +156,15 @@
       import { MapboxOverlay } from "@deck.gl/mapbox";
 
       // MUI
-      import Checkbox from "@mui/material/Checkbox";
-      import FormControlLabel from "@mui/material/FormControlLabel";
-      import FormGroup from "@mui/material/FormGroup";
-      import { Typography } from "@mui/material";
+      import {
+        Typography, Checkbox, FormControlLabel, FormGroup, Slider, Box,
+        Accordion, AccordionSummary, AccordionDetails, Dialog, DialogTitle,
+        DialogContent, DialogActions, Button, Switch, Select, MenuItem,
+        FormControl, InputLabel, Divider,
+      } from "@mui/material";
       import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
       import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
-      import Slider from "@mui/material/Slider";
-      import Box from "@mui/material/Box";
-      import Accordion from "@mui/material/Accordion";
-      import AccordionSummary from "@mui/material/AccordionSummary";
-      import AccordionDetails from "@mui/material/AccordionDetails";
       import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-      import Dialog from "@mui/material/Dialog";
-      import DialogTitle from "@mui/material/DialogTitle";
-      import DialogContent from "@mui/material/DialogContent";
-      import DialogActions from "@mui/material/DialogActions";
-      import Button from "@mui/material/Button";
-      import Switch from "@mui/material/Switch";
-      import Select from "@mui/material/Select";
-      import MenuItem from "@mui/material/MenuItem";
-      import FormControl from "@mui/material/FormControl";
-      import InputLabel from "@mui/material/InputLabel";
-      import Divider from "@mui/material/Divider";
       import { Multiselect } from "react-widgets";
 
       import { Chart as ChartJS, RadialLinearScale, ArcElement, Tooltip, Legend } from "chart.js";
@@ -197,7 +201,7 @@
         fillGenColumnColor,
         fillGenColumnColorCap,
         getVoltageFillColor,
-      } from "/assets/js/color.js";
+      } from "exago/color";
 
       ChartJS.register(RadialLinearScale, ArcElement, Tooltip, Legend);
 
@@ -628,6 +632,8 @@
         selected,
         onSelectCase,
         onFileUpload,
+        caseFiles,
+        uploadedName,
         mapStyle = MAP_STYLE,
       }) {
         const mapRef = useRef(null);
@@ -636,36 +642,32 @@
         const [settings, , patchSettings] = useLocalStorage(SETTINGS_KEY, DEFAULT_SETTINGS);
         const [settingsOpen, setSettingsOpen] = useState(false);
 
-        const [gridData, setGridData] = useState(refdata);
+        const gridData = refdata;
 
         // ── Selection widget state ──────────────────────────────────────────────
         const [nameSelectItems, setNameSelectItems] = useState([]);
-        const [nameItems] = useState(gendata.Gens.map((g) => g.name));
+        const nameItems = useMemo(() => gendata.Gens.map((g) => g.name), [gendata]);
 
         const [lineNameSelectItems, setLineNameSelectItems] = useState([]);
-        const [lineNameItems] = useState(
-          gridData.features.filter((f) => f.geometry.type === "LineString").map((f) => f.properties.NAME)
+        const lineNameItems = useMemo(() =>
+          gridData.features.filter((f) => f.geometry.type === "LineString").map((f) => f.properties.NAME), [gridData]
         );
 
         const [busNameSelectItems, setBusNameSelectItems] = useState([]);
-        const [busNameItems] = useState(
-          gridData.features.filter((f) => f.geometry.type === "Point").map((f) => f.properties.NAME)
+        const busNameItems = useMemo(() =>
+          gridData.features.filter((f) => f.geometry.type === "Point").map((f) => f.properties.NAME), [gridData]
         );
 
         const [areaNameSelectItems, setAreaNameSelectItems] = useState([]);
-        const [areaNameItems] = useState(areas.features.map((f) => f.properties.name));
+        const areaNameItems = useMemo(() => areas.features.map((f) => f.properties.name), [areas]);
 
         const [zoneNameSelectItems, setZoneNameSelectItems] = useState([]);
-        const [zoneNameItems] = useState(zones.features.map((f) => f.properties.name));
+        const zoneNameItems = useMemo(() => zones.features.map((f) => f.properties.name), [zones]);
 
         const [countyNameSelectItems, setCountyNameSelectItems] = useState([]);
-        const [countyNameItems] = useState(
-          countyload.features.map((c) => c.properties.countyname)
+        const countyNameItems = useMemo(() =>
+          countyload.features.map((c) => c.properties.countyname), [countyload]
         );
-
-        // ── Flow data ───────────────────────────────────────────────────────────
-        const [flowdata, setFlowData] = useState(refflowdata);
-        const [reactiveflowdata, setReactivFlowData] = useState(refflowdata_reactive);
 
         // ── Filter sliders ──────────────────────────────────────────────────────
         const [genfiltervalue, setGenFilterValue] = useState([gendata.minPg, gendata.maxPg]);
@@ -716,112 +718,33 @@
         // ── Screenshot state ────────────────────────────────────────────────────
         const [screenshotUrl, setScreenshotUrl] = useState(null);
 
-        // ─── Rebuild flow data whenever filters or selections change ─────────────
+        const [flowdata, reactiveflowdata] = useMemo(() => ExtractFlowData(refdata, {
+          voltageRange: netfiltervalue,
+          activeRange: flowfiltervalue,
+          reactiveRange: flowfilterreactivevalue,
+          lineNames: lineNameSelectItems,
+          busNames: busNameSelectItems,
+        }), [refdata, netfiltervalue, flowfiltervalue, flowfilterreactivevalue, lineNameSelectItems, busNameSelectItems]);
+
+        const [chartVersion, setChartVersion] = useState(0);
         useEffect(() => {
-          setGridData(refdata);
-          setFlowData(refflowdata);
-          setReactivFlowData(refflowdata_reactive);
-
-          const locations = [];
-          const flows = [];
-          const reactive_flows = [];
-
-          if (lineNameSelectItems.length > 0) {
-            const pointNames = lineNameSelectItems.map((n) => n.split(" -- ")).flat();
-            gridData.features.forEach((feature) => {
-              if (feature.geometry.type === "Point" && pointNames.includes(feature.properties.NAME)) {
-                locations.push({
-                  id: feature.properties.NAME,
-                  name: feature.properties.NAME,
-                  lon: feature.geometry.coordinates[0],
-                  lat: feature.geometry.coordinates[1],
-                });
-              } else if (
-                feature.geometry.type === "LineString" &&
-                lineNameSelectItems.includes(feature.properties.NAME)
-              ) {
-                const RATE_A = feature.properties.RATE_A === 0 ? 10000 : feature.properties.RATE_A;
-                const loading = Math.abs(feature.properties.PF / RATE_A) * 100;
-                const [a, b] = feature.properties.NAME.split(" -- ");
-                flows.push({
-                  origin: feature.properties.PF > 0 ? a : b,
-                  dest: feature.properties.PF > 0 ? b : a,
-                  count: feature.properties.KV,
-                  loading,
-                });
-              }
-            });
-          } else if (busNameSelectItems.length > 0) {
-            gridData.features.forEach((feature) => {
-              if (feature.geometry.type === "Point" && busNameSelectItems.includes(feature.properties.NAME)) {
-                locations.push({
-                  id: feature.properties.NAME,
-                  name: feature.properties.NAME,
-                  lon: feature.geometry.coordinates[0],
-                  lat: feature.geometry.coordinates[1],
-                });
-              } else if (
-                feature.geometry.type === "LineString" &&
-                feature.properties.NAME.split(" -- ").some((r) => busNameSelectItems.includes(r))
-              ) {
-                const RATE_A = feature.properties.RATE_A === 0 ? 10000 : feature.properties.RATE_A;
-                const loading = Math.abs(feature.properties.PF / RATE_A) * 100;
-                const [a, b] = feature.properties.NAME.split(" -- ");
-                flows.push({
-                  origin: feature.properties.PF > 0 ? a : b,
-                  dest: feature.properties.PF > 0 ? b : a,
-                  count: feature.properties.KV,
-                  loading,
-                });
-              }
-            });
-          } else {
-            gridData.features.forEach((feature) => {
-              if (
-                feature.geometry.type === "Point" &&
-                netfiltervalue[0] <= feature.properties.KVlevels[0] &&
-                feature.properties.KVlevels[0] <= netfiltervalue[1]
-              ) {
-                locations.push({
-                  id: feature.properties.NAME,
-                  name: feature.properties.NAME,
-                  lon: feature.geometry.coordinates[0],
-                  lat: feature.geometry.coordinates[1],
-                });
-              } else if (
-                feature.geometry.type === "LineString" &&
-                netfiltervalue[0] <= feature.properties.KV &&
-                feature.properties.KV <= netfiltervalue[1]
-              ) {
-                const RATE_A = feature.properties.RATE_A === 0 ? 10000 : feature.properties.RATE_A;
-                const loading = Math.abs(feature.properties.PF / RATE_A) * 100;
-                const var_loading = Math.abs(feature.properties.QF / RATE_A) * 100;
-                const [a, b] = feature.properties.NAME.split(" -- ");
-
-                if (flowfiltervalue[0] <= loading && loading <= flowfiltervalue[1]) {
-                  flows.push({
-                    origin: feature.properties.PF > 0 ? a : b,
-                    dest: feature.properties.PF > 0 ? b : a,
-                    count: feature.properties.KV,
-                    loading,
-                  });
-                }
-
-                if (flowfilterreactivevalue[0] <= var_loading && var_loading <= flowfilterreactivevalue[1]) {
-                  reactive_flows.push({
-                    origin: feature.properties.QF > 0 ? a : b,
-                    dest: feature.properties.QF > 0 ? b : a,
-                    count: feature.properties.KV,
-                    loading: var_loading,
-                  });
-                }
-              }
-            });
-          }
-
-          setFlowData({ locations, flows, maxloading: 120 });
-          setReactivFlowData({ locations, flows: reactive_flows, maxloading: 120 });
-        }, [refdata, gridData, netfiltervalue, flowfiltervalue, flowfilterreactivevalue, lineNameSelectItems]);
+          setNetFilterValue([0, 800]);
+          setFlowFilterValue([0, 120]);
+          setFlowFilterReactiveValue([0, 120]);
+          setVoltageFilterValue([0.89, 1.11]);
+          setGenFilterValue([gendata.minPg, gendata.maxPg]);
+          setLoadFilterValue([0, countyloaddata.maxPd]);
+          setNameSelectItems([]);
+          setLineNameSelectItems([]);
+          setBusNameSelectItems([]);
+          setCountyNameSelectItems([]);
+          setAreaNameSelectItems([]);
+          setZoneNameSelectItems([]);
+          setDoughlabels(["Wind", "Solar", "Nuclear", "Natural Gas", "Hydro", "Coal", "Other"]);
+          setChartVersion((v) => v + 1);
+          setTooltip(undefined);
+          setScreenshotUrl(null);
+        }, [refdata]);
 
         // ─── Rotate camera ────────────────────────────────────────────────────────
         // FIX: use a ref instead of a plain var so the value survives re-renders
@@ -861,6 +784,7 @@
         }, [activatePopup]);
 
         const zoomToData = useCallback((info) => {
+          if (!info?.object || !info.coordinate) return;
           const lat = info.coordinate[1];
           const long = info.coordinate[0];
 
@@ -1081,7 +1005,7 @@
 
         function getGenFilterValue(data) {
           if (!data) return 10000;
-          if (genDoughlabels.length > 0 && !genDoughlabels.includes(colorMap[data.color])) return 10000;
+          if (!genDoughlabels.includes(colorMap[data.color])) return 10000;
           const inKV = data.KVlevels.some((KV) => netfiltervalue[0] <= KV && KV <= netfiltervalue[1]);
           if (nameSelectItems.length > 0)
             return nameSelectItems.includes(data.name) && inKV ? data.Pg : 10000;
@@ -1114,10 +1038,14 @@
             const response = await fetch("/query", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ inputText: params.userInput }),
+              body: JSON.stringify({
+                inputText: params.userInput,
+                caseData: { geojsondata: gridData },
+              }),
             });
+            if (!response.ok) throw new Error(`ChatGrid request failed (HTTP ${response.status}).`);
             const chatOutput = await response.json();
-            const chatList = chatOutput.result_list;
+            const chatList = Array.isArray(chatOutput.result_list) ? chatOutput.result_list : [];
 
             if (chatList.length > 0) {
               const keyList = Object.keys(chatList[0]);
@@ -1212,11 +1140,11 @@
             setInitialViewState((vs) => ({ ...vs, pitch: 40, transitionInterpolator: transitionFlyToInterpolator, transitionDuration: 2000 }));
         };
 
-        const handleGenRangeFilterChange = (e) => setGenFilterValue(e.target.value);
-        const handleLoadRangeFilterChange = (e) => setLoadFilterValue(e.target.value);
-        const handleVoltageRangeFilterChange = (e) => setVoltageFilterValue(e.target.value);
-        const handleNetRangeFilterChange = (e) => setNetFilterValue(e.target.value);
-        const handleFlowRangeFilterChange = (e) => setFlowFilterValue(e.target.value);
+        const handleGenRangeFilterChange = (_, value) => setGenFilterValue(value);
+        const handleLoadRangeFilterChange = (_, value) => setLoadFilterValue(value);
+        const handleVoltageRangeFilterChange = (_, value) => setVoltageFilterValue(value);
+        const handleNetRangeFilterChange = (_, value) => setNetFilterValue(value);
+        const handleFlowRangeFilterChange = (_, value) => setFlowFilterValue(value);
         const handleReactiveFlowRangeFilterChange = (e) => setFlowFilterReactiveValue(e.target.value);
 
         // ─── Multiselect handlers ─────────────────────────────────────────────────
@@ -1298,7 +1226,7 @@
         };
 
         // ─── Layers ───────────────────────────────────────────────────────────────
-        const filterExt = [new DataFilterExtension({ filtersize: 1 })];
+        const filterExt = [new DataFilterExtension({ filterSize: 1 })];
 
         // Zoom-adaptive bar radius: at the reference zoom (4) radius == genBarRadius.
         // Each zoom step halves/doubles the geographic size of one screen pixel, so
@@ -1488,6 +1416,7 @@
 
         const layer_generator_capacity = new ColumnLayer({
           id: "gen-column-cap",
+          parameters: { depthWriteEnabled: false },
           data: generation,
           diskResolution: 50,
           radius: effectiveGenRadius,
@@ -1551,6 +1480,10 @@
           getLineWidth: 1,
           opacity: 0.1,
           onClick: zoomToArea,
+          extensions: filterExt,
+          getFilterValue: (d) => !areaNameSelectItems.length || areaNameSelectItems.includes(d.properties.name) ? 1 : 0,
+          filterRange: [1, 1],
+          updateTriggers: { getFilterValue: [areaNameSelectItems] },
         });
 
         const layer_zone = new GeoJsonLayer({
@@ -1568,6 +1501,10 @@
           getLineWidth: 1,
           opacity: 0.1,
           onClick: zoomToZone,
+          extensions: filterExt,
+          getFilterValue: (d) => !zoneNameSelectItems.length || zoneNameSelectItems.includes(d.properties.name) ? 1 : 0,
+          filterRange: [1, 1],
+          updateTriggers: { getFilterValue: [zoneNameSelectItems] },
         });
 
         const layer_county_load = new GeoJsonLayer({
@@ -1580,7 +1517,7 @@
           extruded: true,
           wireframe: true,
           lineWidthMinPixels: 1,
-          getFillColor: (d) => [(255 * d.properties.Pd) / countymaxPd, 0, 0],
+          getFillColor: (d) => [countymaxPd > 0 ? (255 * d.properties.Pd) / countymaxPd : 0, 0, 0],
           getLineColor: [80, 80, 80],
           getLineWidth: 1,
           opacity: 0.1,
@@ -1663,7 +1600,10 @@
           layer_flow_reactive,
           layer_generator_capacity,
           layer_generator_power,
-        ];
+        // avoid depth fighting when generation tilts the camera
+        ].map((layer) => layer instanceof ColumnLayer ? layer : layer.clone({
+          parameters: { depthCompare: "always", depthWriteEnabled: false },
+        }));
 
         // ─── Generation chart data ────────────────────────────────────────────────
         const genmixlabels = ["Wind", "Solar", "Nuclear", "Natural Gas", "Hydro", "Coal", "Other"];
@@ -1709,6 +1649,24 @@
                 preventStyleDiffing
                 preserveDrawingBuffer={true}
               >
+                <details open style={{ position: "absolute", bottom: 35, left: 10, zIndex: 1, background: "rgba(255,255,255,0.95)", padding: 10, borderRadius: 6, maxHeight: "45vh", overflowY: "auto", boxShadow: "0 1px 5px #aaa" }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 600 }}>Legend</summary>
+                  {netlayeractive && <ColorLegend />}
+                  {[[flowlayeractive, "Active flow loading", settings.activeFlowColorStart, settings.activeFlowColorEnd],
+                    [reactiveflowlayeractive, "Reactive flow loading", settings.reactiveFlowColorStart, settings.reactiveFlowColorEnd]]
+                    .filter(([visible]) => visible).map(([, title, start, end]) => <div key={title} style={{ marginTop: 8 }}>
+                      <strong>{title}</strong>
+                      <div style={{ background: `linear-gradient(to right, ${start}, ${end})`, height: 10, marginTop: 4 }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span>Low</span><span>High</span></div>
+                    </div>)}
+                  {(genlayeractive || genlayercapactive) && <ColorLegend title="Generation fuel" bins={[
+                    {label: "Wind", color: [0,255,0]}, {label: "Solar", color: [244,219,135]},
+                    {label: "Nuclear", color: [255,0,0]}, {label: "Natural Gas", color: [255,165,0]},
+                    {label: "Hydro", color: [28,163,236]}, {label: "Coal", color: [128,128,128]}, {label: "Other", color: [0,0,0]},
+                  ]} />}
+                  {voltagelayeractive && <div style={{ marginTop: 8 }}><strong>Voltage (p.u.)</strong><div style={{ background: "linear-gradient(to right, red, #00ff00)", height: 10, marginTop: 4 }} /><div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span>0.9</span><span>1.1</span></div></div>}
+                  {loadlayeractive && <div style={{ marginTop: 8 }}>Load loss: darker red indicates higher loss (MW).</div>}
+                </details>
                 <NavigationControl position="top-left" />
                 <FullscreenControl position="top-left" />
 
@@ -1732,10 +1690,21 @@
             <div
               style={{
                 position: "absolute", top: 0, right: 0, width: 300,
-                background: "#fff", padding: "10px 12px", color: "#6b6b76", zIndex: 1000,
+                background: "#fff", padding: "10px 12px 100px", color: "#6b6b76", zIndex: 1000,
                 maxHeight: "100vh", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box",
               }}
             >
+
+              <label style={{ display: "block", marginBottom: 8, fontSize: 12 }}>
+                Case
+                <select aria-label="Case" value={uploadedName ? "" : selected}
+                  onChange={(e) => onSelectCase(e.target.value)}
+                  style={{ display: "block", width: "100%", marginTop: 4 }}>
+                  {uploadedName && <option value="" disabled>{uploadedName} (uploaded)</option>}
+                  {[...new Set([DEFAULT_JSON_FILENAME, selected, ...caseFiles])].map((name) =>
+                    <option key={name} value={name}>{name}</option>)}
+                </select>
+              </label>
 
               {/* ── File upload ─────────────────────────────────────────────────── */}
               <div style={{ marginBottom: 8 }}>
@@ -1747,6 +1716,7 @@
                   onChange={(e) => {
                     const file = e.target.files[0];
                     if (file) onFileUpload(file);
+                    e.target.value = ""; // allow choosing the same file again
                   }}
                 />
               </div>
@@ -1792,6 +1762,7 @@
                     setCountyNameSelectItems([]);
                     setAreaNameSelectItems([]);
                     setZoneNameSelectItems([]);
+                    setChartVersion((v) => v + 1);
                     setDoughlabels(["Wind", "Solar", "Nuclear", "Natural Gas", "Hydro", "Coal", "Other"]);
                   }}
                 >
@@ -1818,20 +1789,19 @@
                 <Accordion defaultExpanded>
                   <AccordionSummary style={accordionSummaryStyle} expandIcon={<ArrowDropDownIcon />}>
                     <Typography>
-                      <Checkbox checked={netlayeractive} onChange={handleNetLayerChange} />
+                      <Checkbox checked={netlayeractive} onChange={handleNetLayerChange} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.stopPropagation()} />
                       Net
                     </Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <Typography component="div">
-                      <ColorLegend />
                       {netlayeractive && (
                         <>
                           <div style={{ paddingRight: 40 }}>
                             <Slider value={netfiltervalue} valueLabelDisplay="auto" onChange={handleNetRangeFilterChange} getAriaValueText={valuetext} step={1} min={0} max={800} />
                           </div>
                           <div style={{ paddingRight: 40 }}>
-                            <Multiselect defaultValue={busNameSelectItems} data={busNameItems} placeholder="Search for buses" onChange={handleBusMultiselect} />
+                            <Multiselect value={busNameSelectItems} data={busNameItems} placeholder="Search for buses" onChange={handleBusMultiselect} />
                           </div>
                         </>
                       )}
@@ -1843,7 +1813,7 @@
                 <Accordion defaultExpanded>
                   <AccordionSummary style={accordionSummaryStyle} expandIcon={<ArrowDropDownIcon />}>
                     <Typography>
-                      <Checkbox checked={flowlayeractive} onChange={handleFlowLayerChange} />
+                      <Checkbox checked={flowlayeractive} onChange={handleFlowLayerChange} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.stopPropagation()} />
                       Flow
                     </Typography>
                   </AccordionSummary>
@@ -1855,7 +1825,7 @@
                             <Slider value={flowfiltervalue} valueLabelDisplay="auto" onChange={handleFlowRangeFilterChange} getAriaValueText={valuetext} step={10} min={0} max={120} />
                           </div>
                           <div style={{ paddingRight: 40 }}>
-                            <Multiselect defaultValue={lineNameSelectItems} data={lineNameItems} placeholder="Search for transmission lines" onChange={handleLineMultiselect} />
+                            <Multiselect value={lineNameSelectItems} data={lineNameItems} placeholder="Search for transmission lines" onChange={handleLineMultiselect} />
                           </div>
                         </>
                       )}
@@ -1867,7 +1837,7 @@
                 <Accordion defaultExpanded>
                   <AccordionSummary style={accordionSummaryStyle} expandIcon={<ArrowDropDownIcon />}>
                     <Typography>
-                      <Checkbox checked={reactiveflowlayeractive} onChange={handleReactiveFlowLayerChange} />
+                      <Checkbox checked={reactiveflowlayeractive} onChange={handleReactiveFlowLayerChange} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.stopPropagation()} />
                       Reactive Flow
                     </Typography>
                   </AccordionSummary>
@@ -1886,7 +1856,7 @@
                 <Accordion defaultExpanded={false}>
                   <AccordionSummary style={accordionSummaryStyle} expandIcon={<ArrowDropDownIcon />}>
                     <Typography>
-                      <Checkbox checked={genlayeractive} onChange={handleGenLayerChange} />
+                      <Checkbox checked={genlayeractive} onChange={handleGenLayerChange} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.stopPropagation()} />
                       Generation Power
                     </Typography>
                   </AccordionSummary>
@@ -1902,10 +1872,10 @@
                             <Slider value={genfiltervalue} valueLabelDisplay="auto" onChange={handleGenRangeFilterChange} getAriaValueText={valuetext} step={100} min={gendata.minPg} max={gendata.maxPg + 10} />
                           </div>
                           <div style={{ paddingRight: 40 }}>
-                            <Multiselect defaultValue={nameSelectItems} data={nameItems} placeholder="Search for generators" onChange={handleGenMultiselect} />
+                            <Multiselect value={nameSelectItems} data={nameItems} placeholder="Search for generators" onChange={handleGenMultiselect} />
                           </div>
-                          <div style={{ width: 300, height: 300, transform: "translate(-1.5vw, 10px)" }}>
-                            <Doughnut data={chartdata} options={{ plugins: { legend: { onClick: handleDoughnutClick } } }} />
+                          <div style={{ width: "100%", marginTop: 10 }}>
+                            <Doughnut key={chartVersion} data={chartdata} options={{ plugins: { legend: { onClick: handleDoughnutClick } } }} />
                           </div>
                         </>
                       )}
@@ -1917,7 +1887,7 @@
                 <Accordion defaultExpanded={false}>
                   <AccordionSummary style={accordionSummaryStyle} expandIcon={<ArrowDropDownIcon />}>
                     <Typography>
-                      <Checkbox checked={loadlayeractive} onChange={handleLoadLayerChange} />
+                      <Checkbox checked={loadlayeractive} onChange={handleLoadLayerChange} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.stopPropagation()} />
                       Load loss
                     </Typography>
                   </AccordionSummary>
@@ -1929,7 +1899,7 @@
                             <Slider value={loadfiltervalue} valueLabelDisplay="auto" onChange={handleLoadRangeFilterChange} getAriaValueText={valuetext} step={100} min={0} max={countyloaddata.maxPd + 10} />
                           </div>
                           <div style={{ paddingRight: 40 }}>
-                            <Multiselect defaultValue={countyNameSelectItems} data={countyNameItems} placeholder="Search for counties" onChange={handleCountyMultiselect} />
+                            <Multiselect value={countyNameSelectItems} data={countyNameItems} placeholder="Search for counties" onChange={handleCountyMultiselect} />
                           </div>
                         </>
                       )}
@@ -1941,7 +1911,7 @@
                 <Accordion defaultExpanded={false}>
                   <AccordionSummary style={accordionSummaryStyle} expandIcon={<ArrowDropDownIcon />}>
                     <Typography>
-                      <Checkbox checked={voltagelayeractive} onChange={handleVoltageLayerChange} />
+                      <Checkbox checked={voltagelayeractive} onChange={handleVoltageLayerChange} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.stopPropagation()} />
                       Voltage
                     </Typography>
                   </AccordionSummary>
@@ -1953,7 +1923,7 @@
                             <Slider value={voltagefiltervalue} valueLabelDisplay="auto" onChange={handleVoltageRangeFilterChange} getAriaValueText={valuetext} step={0.01} min={0.89} max={1.11} />
                           </div>
                           <div style={{ paddingRight: 40 }}>
-                            <Multiselect defaultValue={countyNameSelectItems} data={countyNameItems} placeholder="Search for counties" onChange={handleCountyMultiselect} />
+                            <Multiselect value={countyNameSelectItems} data={countyNameItems} placeholder="Search for counties" onChange={handleCountyMultiselect} />
                           </div>
                         </>
                       )}
@@ -1965,7 +1935,7 @@
                 <Accordion defaultExpanded={false}>
                   <AccordionSummary style={accordionSummaryStyle} expandIcon={<ArrowDropDownIcon />}>
                     <Typography>
-                      <Checkbox checked={arealayeractive} onChange={handleAreaLayerChange} />
+                      <Checkbox checked={arealayeractive} onChange={handleAreaLayerChange} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.stopPropagation()} />
                       Show Areas
                     </Typography>
                   </AccordionSummary>
@@ -1973,7 +1943,7 @@
                     <Typography component="div">
                       {arealayeractive && (
                         <div style={{ paddingRight: 40 }}>
-                          <Multiselect defaultValue={areaNameSelectItems} data={areaNameItems} placeholder="Search for areas" onChange={handleAreaMultiselect} />
+                          <Multiselect value={areaNameSelectItems} data={areaNameItems} placeholder="Search for areas" onChange={handleAreaMultiselect} />
                         </div>
                       )}
                     </Typography>
@@ -1984,7 +1954,7 @@
                 <Accordion defaultExpanded={false}>
                   <AccordionSummary style={accordionSummaryStyle} expandIcon={<ArrowDropDownIcon />}>
                     <Typography>
-                      <Checkbox checked={zonelayeractive} onChange={handleZoneLayerChange} />
+                      <Checkbox checked={zonelayeractive} onChange={handleZoneLayerChange} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.stopPropagation()} />
                       Show Zones
                     </Typography>
                   </AccordionSummary>
@@ -1992,7 +1962,7 @@
                     <Typography component="div">
                       {zonelayeractive && (
                         <div style={{ paddingRight: 40 }}>
-                          <Multiselect defaultValue={zoneNameSelectItems} data={zoneNameItems} placeholder="Search for zones" onChange={handleZoneMultiselect} />
+                          <Multiselect value={zoneNameSelectItems} data={zoneNameItems} placeholder="Search for zones" onChange={handleZoneMultiselect} />
                         </div>
                       )}
                     </Typography>
@@ -2107,29 +2077,41 @@
       function AppContainer() {
         const urlFile = new URLSearchParams(window.location.search).get("file");
         const [selected, setSelected] = useState(urlFile ?? DEFAULT_JSON_FILENAME);
+        const [reloadVersion, setReloadVersion] = useState(0);
         const [casedata, setCasedata] = useState(null);
         const [loading, setLoading] = useState(false);
         const [err, setErr] = useState(null);
+        const [caseFiles, setCaseFiles] = useState([]);
+        const [uploadedName, setUploadedName] = useState(null);
+        const requestVersion = useRef(0);
 
         useEffect(() => {
           let cancelled = false;
+          fetch("/datasets").then((response) => response.json()).then((files) => {
+            if (!cancelled && Array.isArray(files)) setCaseFiles(files);
+          }).catch(() => {});
+          return () => { cancelled = true; };
+        }, []);
+
+        useEffect(() => {
+          const version = ++requestVersion.current;
+          const controller = new AbortController();
           (async () => {
             setLoading(true);
             setErr(null);
-            setCasedata(null);
             try {
-              const res = await fetch(`/data/${selected}`);
-              if (!res.ok) return;   // file not on server — stay blank, no error
-              const json = await res.json();
-              if (!cancelled) setCasedata(json);
-            } catch {
-              // network / parse error — stay blank silently
+              const res = await fetch(`/data/${encodeURIComponent(selected)}`, { signal: controller.signal, cache: "no-store" });
+              if (!res.ok) throw new Error(`Could not load ${selected} (HTTP ${res.status}). Upload an ExaGO JSON file to continue.`);
+              const json = validateNetworkData(await res.json());
+              if (version === requestVersion.current) setCasedata(json);
+            } catch (error) {
+              if (!controller.signal.aborted && version === requestVersion.current) setErr(error);
             } finally {
-              if (!cancelled) setLoading(false);
+              if (version === requestVersion.current) setLoading(false);
             }
           })();
-          return () => { cancelled = true; };
-        }, [selected]);
+          return () => controller.abort();
+        }, [selected, reloadVersion]);
 
         const derived = useMemo(() => {
           if (!casedata) return null;
@@ -2225,14 +2207,12 @@
             {/* ── Error overlay ────────────────────────────────────────────────── */}
             {err && (
               <div style={{
-                position: "fixed", inset: 0, zIndex: 99999,
-                background: "rgba(15, 23, 42, 0.55)",
-                backdropFilter: "blur(4px)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
+                position: "fixed", bottom: 20, left: 20, right: 320, zIndex: 99999,
+                display: "flex", justifyContent: "center",
+              }} role="alert">
                 <div style={{
                   background: "#fff", borderRadius: 16,
-                  padding: "32px 40px",
+                  padding: "24px 30px",
                   boxShadow: "0 24px 64px rgba(0,0,0,0.35)",
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 16,
                   maxWidth: 360,
@@ -2243,10 +2223,10 @@
                     {String(err)}
                   </div>
                   <button
-                    onClick={() => window.location.reload()}
+                    onClick={() => setErr(null)}
                     style={{ marginTop: 4, padding: "8px 20px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 14 }}
                   >
-                    Reload
+                    Dismiss
                   </button>
                 </div>
               </div>
@@ -2270,14 +2250,20 @@
                   mapcenter={d.mapcenter}
                   homeViewState={d.homeViewState}
                   selected={selected}
-                  onSelectCase={setSelected}
+                  onSelectCase={(filename) => { setUploadedName(null); setSelected(filename); setReloadVersion((v) => v + 1); }}
+                  caseFiles={caseFiles}
+                  uploadedName={uploadedName}
                   onFileUpload={(file) => {
+                    const version = ++requestVersion.current;
                     setLoading(true);
                     setErr(null);
                     const reader = new FileReader();
                     reader.onload = () => {
+                      if (version !== requestVersion.current) return;
                       try {
-                        setCasedata(JSON.parse(reader.result));
+                        const data = validateNetworkData(JSON.parse(reader.result));
+                        setCasedata(data);
+                        setUploadedName(file.name);
                       } catch (e) {
                         setErr(e);
                       } finally {
@@ -2285,6 +2271,7 @@
                       }
                     };
                     reader.onerror = () => {
+                      if (version !== requestVersion.current) return;
                       setErr(new Error("Failed to read file"));
                       setLoading(false);
                     };

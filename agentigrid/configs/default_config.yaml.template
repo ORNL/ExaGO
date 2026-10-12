@@ -31,7 +31,7 @@ llm:
   ollama_host: "http://localhost:11434"
   ollama_cloud_host: null
   # Generation parameters
-  temperature: 0.3
+  temperature: null            # omitted unless set
   max_tokens: 4096
 
 # Search settings

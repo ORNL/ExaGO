@@ -21,10 +21,7 @@ The following features have been added on top of the base visualization:
 
 ### Settings panel
 
-A persistent settings dialog (gear icon in the control panel) allows users
-to configure visualization options without reloading. Settings are saved
-to the browser's local storage and restored on next launch. Configurable
-options include:
+The following features are configurable:
 
 - **Map style** — switch between Positron, Positron (no labels), Dark
   Matter, or no basemap
@@ -100,20 +97,21 @@ provided in the data folder.
 opflow -netfile case_ACTIVSg2000.m -save_output -opflow_output_format JSON -gicfile ACTIVSg2000_GIC_data.gic
 ```
 
-Next, you can put the `opflowout.json` file in the `viz/data` folder. When
-the visualization tool will be launched, it will find all `*.json` files in
-the `viz/data` folder and show a list of files in the top right corner. The
-first item in the list will be visualized as default. Users can change the
-selection and the visualization will be updated accordingly. In addition,
-users can upload a compatible `json` case file (generated via `opflow`)
-using the file upload button next to the selection list.
+Next, you can put the `opflowout.json` file in the configured data directory
+(`viz/data` in a source checkout or `share/exago/datafiles/viz` after
+installation). When the visualization tool is launched, it will find all
+`*.json` files in the data directory and show a list of files in the top
+right corner. The `opflowout.json` is visualized by default. Users can
+change the selection and the visualization will be updated accordingly. In
+addition, users can upload a compatible `json` case file (generated via
+`opflow`) using the file upload button next to the selection list.
 
 ## Launch visualization
 
 To launch the visualization, run
 
 ```
-$EXAGO_INSTALL/share/exago/viz/server.py
+$EXAGO_INSTALL/bin/exago_viz
 ```
 
 This will start a server that you can visit at `http://localhost:8080`
@@ -164,31 +162,15 @@ flow chart shows the architecture design of ChatGrid.
 
 ![](.github/chatgrid_arch.png)
 
-### Preparing the source tree
+### Configuration
 
-Behind the scenes, an LLM translates natural language queries into SQL queries
-to retrieve data from a database. It may be set up using the following steps.
+Behind the scenes, an LLM translates natural language questions into SQL
+queries. It may be set up by editing the configuration file.
 
-1. Convert data formats.
+Within `viz/backend`, copy `config.example.py` to `config.py`. Set
+`llm_provider` to the desired provider and configure its key and model
+as described in that file. Rebuild/reinstall ExaGO after configuring the
+source tree, or set `EXAGO_VIZ_CONFIG` to a configuration file at runtime.
 
-    First, we need to convert the ExaGO output `.json` files to `.csv`
-    files. Ensure `opflowout.json` is present in `viz/data` as this is
-    the network first loaded by the visualization interface. Then, after
-    ensuring that your local Python install has the requisite dependencies,
-    from `viz/data` in the source checkout, run:
-
-    ```
-    $ python jsontocsv.py opflowout.json
-    ```
-
-2. Configure large language model API keys
-
-    Next, we need to configure the backend so that it is able to use a
-    large language model API provider. First, within `viz/backend`, copy
-    `config.example.py` to `config.py`. Then, open `config.py` and set
-    `llm_provider` to the desired LLM provider, then set the corresponding
-    `<llm_provider>_key` variable to your API key and if desired, the
-    `<llm_provider>_model` variable to something other than the default.
-
-After these steps and rebuilding/reinstalling ExaGO, running the visualization
-as normal will also now provide support for ChatGrid.
+If ChatGrid configuration is unavailable, the server logs a configuration
+message and continues serving the visualization.

@@ -3,17 +3,17 @@
 import argparse
 import io
 import os
-import signal
 import subprocess
 import sys
 import time
 import zipfile
 from pathlib import Path
-import shutil
 from urllib.parse import urlparse
 
 import streamlit as st
 import yaml
+from viz_process import start_viz_server
+from viz_files import stage_viz_input
 
 # ── Configuration Loading ────────────────────────────────────────────────────
 
@@ -23,7 +23,7 @@ def resolve_variables(config):
 
     def _resolve(value):
         if isinstance(value, str):
-            return value.replace("${exago_dir}", exago_dir)
+            return os.path.expandvars(value.replace("${exago_dir}", exago_dir))
         if isinstance(value, dict):
             return {k: _resolve(v) for k, v in value.items()}
         if isinstance(value, list):
@@ -136,7 +136,7 @@ cfg = st.session_state.cfg
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    app_path = os.path.dirname(os.path.realpath(__file__))
+    app_path = cfg.get("assets_dir") or os.path.dirname(os.path.realpath(__file__))
     st.image(app_path + "/figs/ornl-logo.png", width='stretch')
 
     st.title("⚡ ExaGO Launcher")
@@ -488,6 +488,8 @@ with tab_viz:
     st.header("Visualization")
 
     viz_dir = cfg.get("viz_dir", "")
+    viz_data_dir = Path(cfg.get("output_dir", "")) / "viz"
+    viz_data_dir.mkdir(parents=True, exist_ok=True)
     gic_data_dir_v = cfg.get("gic_data_dir", "")
 
     mode = st.radio("Mode", ["Run OPFLOW & Visualize", "Use Existing JSON"], horizontal=True, key="viz_mode")
@@ -548,8 +550,6 @@ with tab_viz:
                     st.error(f"Binary not found: `{opflow_bin}`")
                     st.session_state.viz_opflow_output = None
 
-            # TODO: below could be replaced by configuring the data path via
-            #       environment variables
             if st.session_state.get("viz_opflow_output"):
                 # Find the JSON output file
                 output_dir = cfg.get("output_dir", "")
@@ -557,7 +557,7 @@ with tab_viz:
                 if json_outputs:
                     latest_json = max(json_outputs, key=lambda p: p.stat().st_mtime)
                     st.info(f"JSON output: `{latest_json.name}`")
-                    shutil.copy(latest_json, viz_dir + "/data")
+                    stage_viz_input(latest_json, viz_data_dir)
                 else:
                     st.warning("No JSON output found. Run OPFLOW first.")
 
@@ -569,29 +569,33 @@ with tab_viz:
 
         if st.button("Configure Viz with Selected File", key="viz_existing_btn",
                      disabled=json_path is None):
-            shutil.copy(json_path, viz_dir + "/data")
+            stage_viz_input(json_path, viz_data_dir)
+            st.success("JSON loaded. Open or refresh the visualization to view it.")
 
     # Launch viz server
     st.divider()
     st.subheader("Visualization Server")
 
     used_hostname = urlparse(st.context.url).hostname
+    viz_process = st.session_state.get("viz_process")
+    viz_running = viz_process is not None and viz_process.poll() is None
     col_launch, col_status = st.columns(2)
     with col_launch:
-        if st.button("🚀 Launch Viz Server", key="viz_launch_btn"):
+        if st.button("🚀 Launch Viz Server", key="viz_launch_btn", disabled=viz_running):
             try:
                 env = os.environ.copy()
                 env["EXAGO_VIZ_HOST"] = used_hostname
                 env["EXAGO_VIZ_PORT"] = "8085"
+                env["EXAGO_VIZ_DATA"] = str(viz_data_dir.resolve())
 
                 # NOTE: this may not be the best way of doing this but 0.0.0.0
                 #       is probably a bad idea for this specifically
-                proc = subprocess.Popen(
-                    f"{viz_dir}/server.py",
+                proc = start_viz_server(
+                    [cfg.get("viz_launcher") or f"{viz_dir}/server.py"],
                     cwd=viz_dir,
                     env=env,
-                    start_new_session=True,
                 )
+                st.session_state.viz_process = proc
                 st.session_state.viz_pid = proc.pid
                 st.success(f"Viz server started (PID: {proc.pid})")
             except FileNotFoundError:
@@ -601,13 +605,12 @@ with tab_viz:
         if st.session_state.get("viz_pid"):
             st.info(f"Server PID: {st.session_state.viz_pid}")
             if st.button("Stop Server", key="viz_stop_btn"):
-                try:
-                    os.killpg(os.getpgid(st.session_state.viz_pid), signal.SIGTERM)
-                    st.success("Server stopped")
-                    del st.session_state.viz_pid
-                except ProcessLookupError:
-                    st.info("Server already stopped")
-                    del st.session_state.viz_pid
+                if st.session_state.get("viz_process") is not None:
+                    st.session_state.viz_process.stdin.close()
+                    st.session_state.viz_process.wait(timeout=7)
+                    del st.session_state.viz_process
+                st.success("Server stopped")
+                del st.session_state.viz_pid
 
     st.markdown(f"**Open visualization:** <http://{used_hostname}:8085>")
 

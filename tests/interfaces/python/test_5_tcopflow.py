@@ -1,4 +1,4 @@
-from check_preconditions import check_preconditions
+from check_preconditions import check_preconditions, datafile
 import tempfile
 import os
 import shutil
@@ -12,11 +12,9 @@ import exago  # noqa
 
 def run_tcopflow(solver):
     tcopf = exago.TCOPFLOW()
-    path = exago.prefix()
 
     tcopf.set_tolerance(1.0E-03)
-    tcopf.set_network_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod_gen3_wind.m'))
+    tcopf.set_network_data(datafile('case9', 'case9mod_gen3_wind.m'))
     tcopf.set_solver(solver)
 
     tcopf.setup()

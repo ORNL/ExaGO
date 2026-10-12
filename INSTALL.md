@@ -87,42 +87,82 @@ If you are using the HiOp solver, HiOp must be built with the same RAJA and Umpi
 git clone git@github.com:ornl/ExaGO.git
 cd ExaGO
 git submodule update --init --recursive
-mkdir build
-cd build
 
-# Pass any configuration options here
-cmake .. -DEXAGO_BUILD_SHARED=ON
+# Pass any other configuration options here.
+cmake -S . -B ../exago-build -DEXAGO_BUILD_SHARED=ON
 
 # You may also customize your build here
-ccmake . 
+ccmake ../exago-build
 
-make -j
-make install
-make test # if you like
+cmake --build ../exago-build -j
+ctest --test-dir ../exago-build -j --output-on-failure
+cmake --install ../exago-build
 ```
 
 ### CMake Configuration Options
 
-ExaGO uses a CMake build system for building, installing, and testing.
-To build ExaGO with CMake, first create build directory outside the ExaGO source directory. For example
+ExaGO uses CMake for building, installing, and testing.
+
+First, create the build directory:
+
 ```console
 mkdir build
 ```
-Then from build directory configure ExaGO using `cmake`:
+
+Then, configure ExaGO using `cmake`:
+
 ```shell
 cd build
 cmake ../exago
 make install
 ```
 
-The ExaGO library and its applications are installed in the default installation
-directory. To change installation directory run CMake with flag
+The ExaGO library and its applications are installed in the default
+installation directory. To change the installation directory, run CMake
+with the following flag:
+
 ```console
-$ cmake ../exago -DCMAKE_INSTALL_PREFIX=<your_exago_install_dir>
+cmake ../exago -DCMAKE_INSTALL_PREFIX=<your_exago_install_dir>
 ```
 
+The installation has the following layout:
+
+```text
+<prefix>/
+- bin/                   # binaries and launchers
+  - agentigrid
+  - agentigrid_launcher
+  - exago_launcher
+  - exago_viz
+- include/
+- lib/                   # alternatively, lib64
+- libexec/exago/         # application Python code and virtualenvs
+  - agentigrid/
+  - launcher/
+  - viz/
+- share/exago/
+  - agentigrid/configs/
+  - launcher/            # launcher configuration and images
+  - viz/assets/
+  - options/
+  - datafiles/           # shared input data
+    - case118/
+    - case9/
+    - case_ACTIVSg200/
+    - case_ACTIVSg2000/
+    - viz/               # visualization JSON and supporting CSV files
+```
+
+The default installation prefix is `/usr/local`. When Python is enabled via
+`EXAGO_ENABLE_PYTHON=ON`, the installation process will create private
+virtual environments for launchers. Note that AgentiGrid is not enabled
+by default, it may be enabled with `EXAGO_ENABLE_AGENTIGRID=ON`. Public
+launcher scripts will use these virtual environments automatically. If
+dependency installation inside of virtual environments is not desired,
+this may be disabled with `EXAGO_INSTALL_PYTHON_DEPENDENCIES=OFF`.
+
 ExaGO assumes PETSc is built with MPI support. If it is not, it is recommended
-you configure ExaGO not to use MPI: 
+you configure ExaGO not to use MPI:
 ```console
 $ cmake -DEXAGO_ENABLE_MPI=Off ../exago
 ```

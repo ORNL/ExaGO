@@ -1,56 +1,40 @@
-# Generate YAML config and launcher script for without install
-set(LAUNCH_EXAGO_DIR ${CMAKE_SOURCE_DIR})
-set(LAUNCH_BIN_DIR ${CMAKE_BINARY_DIR}/applications)
-set(LAUNCH_EXAGO_PYTHON_PATH ${CMAKE_BINARY_DIR}/interfaces/python)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/launcher/config.yaml.in
-  ${CMAKE_SOURCE_DIR}/launcher/config.yaml @ONLY
-)
-set(LAUNCH_EXAGO_LAUNCHER_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(LAUNCH_EXAGO_STREAMLIT_CMD "'${Python_EXECUTABLE} -m streamlit run'")
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/run.sh.in ${CMAKE_CURRENT_SOURCE_DIR}/run.sh
-  @ONLY
-)
+set(LAUNCH_EXAGO_DIR "${CMAKE_SOURCE_DIR}")
+set(LAUNCH_BIN_DIR "${CMAKE_BINARY_DIR}/applications")
+set(LAUNCH_EXAGO_PYTHON_PATH "${CMAKE_BINARY_DIR}/interfaces/python")
+set(LAUNCH_DATAFILES_DIR "${CMAKE_SOURCE_DIR}/datafiles")
+set(LAUNCH_VIZ_DIR "${CMAKE_BINARY_DIR}/viz")
+set(LAUNCH_VIZ_LAUNCHER "${CMAKE_BINARY_DIR}/viz/server.py")
+set(LAUNCH_VIZ_DATA_DIR "${CMAKE_SOURCE_DIR}/viz/data")
+set(LAUNCH_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/output")
+set(LAUNCH_EXAGO_LAUNCHER_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(LAUNCH_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(LAUNCH_CONFIG "${CMAKE_CURRENT_BINARY_DIR}/config.yaml")
+set(LAUNCH_PYTHON "${Python_EXECUTABLE}")
+set(LAUNCH_VENV_DIR "")
+configure_file(config.yaml.in config.yaml @ONLY)
+configure_file(run.sh.in run.sh @ONLY
+               FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                                GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
-# Install app and logo
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/app.py
-        DESTINATION share/exago/launcher
-)
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/figs/ornl-logo.png
-        DESTINATION share/exago/launcher/figs
-)
+install(FILES app.py viz_process.py viz_files.py
+        DESTINATION "${EXAGO_INSTALL_LIBEXECDIR}/launcher")
+install(DIRECTORY figs DESTINATION "${EXAGO_INSTALL_DATADIR}/launcher")
+exago_install_python_app(launcher "${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt")
 
-# Delay configuration of installed launcher to install time
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/config.yaml.in
-              ${CMAKE_CURRENT_SOURCE_DIR}/run.sh.in
-        DESTINATION share/exago/launcher
-)
-string(
-  JOIN
-  "\n"
-  install_script
-  "set(EXAGO_PYTHON_SITELIB ${EXAGO_PYTHON_SITELIB})"
-  "set(LAUNCH_EXAGO_STREAMLIT_CMD \"${LAUNCH_EXAGO_STREAMLIT_CMD}\")"
-  [[
-  get_filename_component(LAUNCH_INSTALL_DIR ${CMAKE_INSTALL_PREFIX} ABSOLUTE)
-  set(LAUNCH_EXAGO_DIR ${LAUNCH_INSTALL_DIR}/share/exago)
-  set(LAUNCH_BIN_DIR ${LAUNCH_INSTALL_DIR}/bin)
-  set(LAUNCH_EXAGO_LAUNCHER_DIR ${LAUNCH_EXAGO_DIR}/launcher)
-  set(LAUNCH_EXAGO_PYTHON_PATH ${LAUNCH_INSTALL_DIR}/${EXAGO_PYTHON_SITELIB})
-  configure_file(
-      ${LAUNCH_EXAGO_LAUNCHER_DIR}/config.yaml.in
-      ${LAUNCH_EXAGO_LAUNCHER_DIR}/config.yaml @ONLY
-  )
-  configure_file(
-      ${LAUNCH_EXAGO_LAUNCHER_DIR}/run.sh.in
-      ${LAUNCH_BIN_DIR}/exago_launcher.sh @ONLY
-  )
-  file(CHMOD ${LAUNCH_BIN_DIR}/exago_launcher.sh
-      PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ
-  )
-  file(REMOVE ${LAUNCH_EXAGO_LAUNCHER_DIR}/config.yaml.in)
-  file(REMOVE ${LAUNCH_EXAGO_LAUNCHER_DIR}/run.sh.in)
-  ]]
-)
-install(CODE "${install_script}")
+install(CODE [=[
+set(LAUNCH_EXAGO_DIR "${CMAKE_INSTALL_PREFIX}")
+set(LAUNCH_BIN_DIR "${EXAGO_BINDIR}")
+set(LAUNCH_DATAFILES_DIR "${EXAGO_DATADIR}/datafiles")
+set(LAUNCH_VIZ_DIR "${EXAGO_LIBEXECDIR}/viz")
+set(LAUNCH_VIZ_LAUNCHER "${EXAGO_BINDIR}/exago_viz")
+set(LAUNCH_VIZ_DATA_DIR "${EXAGO_DATADIR}/datafiles/viz")
+set(LAUNCH_OUTPUT_DIR "\${EXAGO_STATE_DIR}/launcher/output")
+set(LAUNCH_EXAGO_PYTHON_PATH "${EXAGO_PYTHON_SITELIB}")
+set(LAUNCH_EXAGO_LAUNCHER_DIR "${EXAGO_APP_DIR}")
+set(LAUNCH_CONFIG "${EXAGO_APP_DATA_DIR}/config.yaml")
+set(LAUNCH_ASSETS_DIR "${EXAGO_APP_DATA_DIR}")
+set(LAUNCH_VENV_DIR "${EXAGO_VENV_DIR}")
+set(LAUNCH_PYTHON "${EXAGO_VENV_DIR}/bin/python")
+exago_configure_install("${EXAGO_PYTHON_APP_SOURCE}/config.yaml.in" "${LAUNCH_CONFIG}")
+exago_install_launcher("run.sh.in" "exago_launcher")
+]=])

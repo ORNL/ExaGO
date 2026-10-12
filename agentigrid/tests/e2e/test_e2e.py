@@ -16,6 +16,7 @@ from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
 from agentigrid.engine.agent_loop import AgentLoopController, SearchSession
+from tests.paths import get_binary_dir
 
 # ---------------------------------------------------------------------------
 # Paths and availability checks
@@ -25,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SAMPLE = PROJECT_ROOT / "tests" / "fixtures" / "sample_opflow_output.txt"
 DATA_DIR = PROJECT_ROOT / "data" / "exago" / "examples"
 BASE_CASE = DATA_DIR / "case_ACTIVSg200.m"
-APPS_DIR = PROJECT_ROOT / "applications" / "exago"
+APPS_DIR = get_binary_dir()
 OPFLOW_BIN = APPS_DIR / "opflow"
 ENV_SCRIPT = PROJECT_ROOT / "configs" / "env_setup.sh"
 
@@ -145,7 +146,6 @@ def _make_config(
 
 @pytest.mark.skipif(not _has_opflow, reason="opflow binary not available")
 @pytest.mark.skipif(not _has_base_case, reason="base case not available")
-@pytest.mark.skipif(not _has_env_script, reason="configs/env_setup.sh not available")
 class TestE2EMockLLMRealOpflow:
     """Full pipeline with mock LLM and real opflow binary."""
 

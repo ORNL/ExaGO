@@ -1,4 +1,4 @@
-from check_preconditions import check_preconditions
+from check_preconditions import check_preconditions, datafile
 import os
 import pytest
 import mpi4py.rc
@@ -29,7 +29,5 @@ def test_creating_pflow():
 def test_solve():
     '''Testing pflow solve'''
     pflow = exago.PFLOW()
-    path = exago.prefix()
-    pflow.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    pflow.read_mat_power_data(datafile('case9', 'case9mod.m'))
     pflow.solve()

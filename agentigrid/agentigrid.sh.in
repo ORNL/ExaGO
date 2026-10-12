@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e
+source "@EXAGO_VENV_DIR@/bin/activate"
+export PYTHONPATH="@EXAGO_APP_DIR@${PYTHONPATH:+:$PYTHONPATH}"
+export AGENTIGRID_CONFIG_DIR="${AGENTIGRID_CONFIG_DIR:-@EXAGO_APP_DATA_DIR@/configs}"
+export EXAGO_STATE_DIR="${EXAGO_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/exago}"
+exec "@EXAGO_VENV_DIR@/bin/python" -m agentigrid "$@"

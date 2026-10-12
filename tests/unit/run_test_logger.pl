@@ -2,14 +2,19 @@
 use warnings;
 use strict;
 use v5.16;
+use Text::ParseWords qw(shellwords);
 
 die "USAGE: $0 <path to mpirun> <maximum nprocs> <path to test_logger executable>" unless (3 == scalar @ARGV);
 
 my ($mpicmd, $maxprocs, $target) = @ARGV;
+my @mpicmd = shellwords($mpicmd);
 
 my @fails = ();
 foreach my $nprocs (1..$maxprocs) {
-  my $out = `$mpicmd -n $nprocs $target`;
+  open(my $pipe, "-|", @mpicmd, "-n", $nprocs, $target)
+    or die "Cannot run logger test: $!";
+  my $out = do { local $/; <$pipe> };
+  close($pipe);
 
   # Keep the exit code of the subprocess
   my $ec = $?;

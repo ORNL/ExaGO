@@ -19,7 +19,7 @@ function LineColor(line) {
 }
 
 function FlowColor(line) {
-  var loading = Math.abs(line.properties.PF / line.properties.RATE_A);
+  var loading = Math.abs(line.properties.PF / (line.properties.RATE_A > 0 ? line.properties.RATE_A : 10000));
   var r = Math.min(255, 255 * loading);
   var g = 0;
   var b = Math.max(0, 255 * (1 - loading));
@@ -29,9 +29,9 @@ function FlowColor(line) {
 
 function FillColor(subst) {
   var Vm = subst.properties.bus[0].VM;
-  var r = Math.min(255, (255 * (1.1 - Vm)) / 0.2);
-  var g = b;
-  var b = Math.max(0, (255 * (Vm - 0.9)) / 0.2);
+  var r = Math.max(0, Math.min(255, (255 * (1.1 - Vm)) / 0.2));
+  var g = 0;
+  var b = Math.min(255, Math.max(0, (255 * (Vm - 0.9)) / 0.2));
 
   return [r, g, b];
 }
@@ -43,7 +43,7 @@ function fillGenColumnColor(data) {
   else if (data.color == "gray") return [128, 128, 128];
   else if (data.color == "blue") return [28, 163, 236];
   else if (data.color == "orange") return [255, 165, 0];
-  else if (data.color == "black") return [0, 0, 0];
+  else return [0, 0, 0];
 }
 
 function fillGenColumnColorCap(data) {
@@ -58,9 +58,9 @@ function fillGenColumnColorCap(data) {
 
 function getVoltageFillColor(data) {
   var Vm = data.properties.Vm_avg;
-  var r = Math.min(255, (255 * (1.1 - Vm)) / 0.2);
+  var r = Math.max(0, Math.min(255, (255 * (1.1 - Vm)) / 0.2));
   var b = 0;
-  var g = Math.max(0, (255 * (Vm - 0.9)) / 0.2);
+  var g = Math.min(255, Math.max(0, (255 * (Vm - 0.9)) / 0.2));
 
   return [r, g, b];
 }

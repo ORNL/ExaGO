@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+source "@EXAGO_VENV_DIR@/bin/activate"
+exec "@EXAGO_VENV_DIR@/bin/python" "@EXAGO_APP_DIR@/server.py" "$@"

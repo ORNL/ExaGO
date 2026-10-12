@@ -1,15 +1,22 @@
 #!@VENV_PYTHON@
 
-from flask import Flask, jsonify, send_from_directory
-from flask_cors import CORS
-from flask.globals import request
-import duckdb
+import json
 import os
+import sys
+from pathlib import Path
+
+import duckdb
+from flask import Flask, jsonify, send_from_directory
+from flask.globals import request
+from flask_cors import CORS
+
+sys.path.insert(0, "@INSTALL_CODE@")
 
 # TODO: there are probably better ways of doing this, but this works to set a
 #       default for now
 install_root = os.environ.get("EXAGO_VIZ_ROOT", default="@INSTALL_ROOT@")
-data_path = os.environ.get("EXAGO_VIZ_DATA", default=f"{install_root}/data")
+data_path = os.environ.get("EXAGO_VIZ_DATA", default="@INSTALL_DATA@")
+reference_data_path = os.environ.get("EXAGO_VIZ_REFERENCE_DATA", default="@INSTALL_DATA@")
 assets_path = os.environ.get("EXAGO_VIZ_ASSETS", default=f"{install_root}/assets")
 viz_host = os.environ.get("EXAGO_VIZ_HOST", default="localhost")
 viz_port = os.environ.get("EXAGO_VIZ_PORT", default="8080")
@@ -18,42 +25,40 @@ app = Flask(__name__)
 CORS(app)
 
 try:
-    from backend.sqlchain import sqlchain
+    from backend.data import load_case, reference_tables
+    from backend.sqlchain import sqlchain, validate_config
 
-    # TODO: externalize the db setup into a module or something like that,
-    #       and generate the data loaded on the fly at setup. possibly also
-    #       generate it from uploaded csv files using a new endpoint? needs
-    #       further research
-
-    _ = duckdb.sql("INSTALL spatial")
-    _ = duckdb.sql("LOAD spatial")
-    _ = duckdb.sql(
-        f"CREATE TABLE transmission_lines AS SELECT * FROM read_csv('{data_path}/transmission_line.csv')"
-    )
-    _ = duckdb.sql(
-        f"CREATE TABLE buses AS SELECT * FROM read_csv('{data_path}/bus.csv')"
-    )
-    _ = duckdb.sql(
-        f"CREATE TABLE generators AS SELECT * FROM read_csv('{data_path}/generation.csv')"
-    )
-    _ = duckdb.sql(
-        f"CREATE TABLE states AS SELECT * FROM read_csv('{data_path}/us_states.csv')"
-    )
-    _ = duckdb.sql(
-        f"CREATE TABLE counties AS SELECT * FROM read_csv('{data_path}/counties.csv')"
-    )
+    validate_config()
 
     @app.route("/query", methods=["POST"])
     def post_data():
         """Perform a query against the database using natural language."""
 
-        input_text = request.get_json(force=True)["inputText"]
-        output = sqlchain(input_text)
+        payload = request.get_json(force=True)
+        if not isinstance(payload, dict) or not isinstance(payload.get("inputText"), str):
+            return jsonify(error="Provide inputText with your ChatGrid question."), 400
+        try:
+            data = payload.get("caseData")
+            if data is None:
+                with (Path(data_path) / "opflowout.json").open() as casefile:
+                    data = json.load(casefile)
+            if not isinstance(data, dict):
+                raise TypeError("Provide an ExaGO JSON case as caseData.")
+            references = reference_tables(data_path, reference_data_path)
 
-        return jsonify(output)
+            with duckdb.connect(":memory:") as connection:
+                load_case(connection, data, references)
+                connection.execute("INSTALL spatial")
+                connection.execute("LOAD spatial")
+                return jsonify(sqlchain(payload["inputText"], connection))
+        except (KeyError, TypeError, ValueError, FileNotFoundError) as error:
+            return jsonify(error=f"Could not prepare ChatGrid data: {error}"), 400
 
-except:
-    print("ChatGrid not configured or set up. Disabling support.")
+except Exception as error:
+    app.logger.warning(
+        "ChatGrid is unavailable (%s). Configure backend/config.py or "
+        "EXAGO_VIZ_CONFIG to enable it; visualization will continue.", error,
+    )
 
 
 @app.route("/")
@@ -63,11 +68,21 @@ def index():
     return send_from_directory(assets_path, "index.html")
 
 
-@app.route("/data/opflowout.json")
-def serve_opflowout():
-    """Serves the default data file (if provided)"""
+@app.route("/data/<path:filename>")
+def serve_data(filename):
+    """Serve visualization input files from the configured data directory."""
 
-    return send_from_directory(data_path, "opflowout.json")
+    return send_from_directory(data_path, filename, max_age=0)
+
+
+@app.route("/datasets")
+def list_datasets():
+    """List available JSON cases for the visualization selector."""
+    if not os.path.isdir(data_path):
+        return jsonify([])
+    return jsonify(sorted(name for name in os.listdir(data_path)
+                          if name.lower().endswith(".json")
+                          and os.path.isfile(os.path.join(data_path, name))))
 
 
 @app.route("/assets/<path:filename>")
@@ -78,5 +93,4 @@ def serve_static(filename):
 
 
 if __name__ == "__main__":
-    # TODO: make this configurable
     app.run(host=viz_host, port=viz_port)

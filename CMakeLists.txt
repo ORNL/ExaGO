@@ -8,8 +8,9 @@ cmake_minimum_required(VERSION 3.18)
 
 project(ExaGO VERSION "2.1.0")
 
+include(GNUInstallDirs)
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
 
 # We default to release builds
 set(_DEFAULT_CMAKE_BUILD_TYPE RelWithDebInfo)
@@ -42,6 +43,7 @@ Configuration and library discovery.
 # Specify where CMake modules are to be found
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/buildsystem/cmake)
 include(ExaGOCheckGitSubmodules)
+include(ExaGOPythonApps)
 
 # Set the path to options file in EXAGO installation
 set(EXAGO_OPTIONS_DIR ${CMAKE_SOURCE_DIR}/options)
@@ -317,25 +319,10 @@ if(EXAGO_ENABLE_IPOPT)
 endif()
 
 # Install options files
-install(FILES ${EXAGO_OPTIONS_FILES} DESTINATION options)
+install(FILES ${EXAGO_OPTIONS_FILES} DESTINATION ${EXAGO_INSTALL_DATADIR}/options)
 
-# EXAGO datafiles to install
-set(EXAGO_DATA_FILES ${PROJECT_SOURCE_DIR}/datafiles/case118.m
-                     ${PROJECT_SOURCE_DIR}/datafiles/case_ACTIVSg200.m
-)
-
-if(EXAGO_ENABLE_IPOPT OR EXAGO_ENABLE_HIOP)
-  set(EXAGO_DATA_FILES
-      ${EXAGO_DATA_FILES}
-      ${PROJECT_SOURCE_DIR}/datafiles/case118.cont
-      ${PROJECT_SOURCE_DIR}/datafiles/case_ACTIVSg200.cont
-      ${PROJECT_SOURCE_DIR}/datafiles/10_scenarios_ACTIVSg200.csv
-      ${PROJECT_SOURCE_DIR}/datafiles/10_scenarios_ACTIVSg2000.csv
-  )
-endif()
-
-# Install data files
-install(FILES ${EXAGO_DATA_FILES} DESTINATION datafiles)
+# Install shared input data
+include(ExaGOInstallData)
 
 # EXAGO headers to install
 set(EXAGO_COMMON_INCLUDE
@@ -344,7 +331,7 @@ set(EXAGO_COMMON_INCLUDE
 )
 
 # Install header files
-install(FILES ${EXAGO_COMMON_INCLUDE} DESTINATION include)
+install(FILES ${EXAGO_COMMON_INCLUDE} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 #[[#############################################################################
 
@@ -400,5 +387,4 @@ if(EXAGO_ENABLE_PYTHON)
   if(EXAGO_ENABLE_AGENTIGRID)
     add_subdirectory(agentigrid)
   endif()
-  install(DIRECTORY ${PROJECT_SOURCE_DIR}/datafiles DESTINATION share/exago)
 endif()
