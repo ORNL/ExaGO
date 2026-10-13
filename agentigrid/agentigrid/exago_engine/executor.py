@@ -6,6 +6,7 @@ import logging
 import os
 import shlex
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -90,6 +91,10 @@ def _sopflow_cmd_builder(
     return cmd
 
 
+# Solved cases written by _steady_state_cmd_builder runs (-save_output).
+SOLUTION_FILES = ("opflowout.m", "pflowout.m")
+
+
 _CMD_BUILDERS: dict[str, Callable] = {
     "opflow": _steady_state_cmd_builder,
     "dcopflow": _default_cmd_builder,
@@ -128,6 +133,44 @@ class SimulationExecutor:
         self._env_script: Path | None = exago_config.env_script
         if self._env_script and not self._env_script.exists():
             logger.warning("env_script does not exist: %s", self._env_script)
+
+        # Run folders of the current batch (one agent action), in completion order.
+        self._batch: list[Path] | None = None
+        self._batch_lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # Saved solutions (exago.save_solutions)
+    # ------------------------------------------------------------------
+
+    def begin_batch(self) -> None:
+        """Start recording the run folders of one agent action."""
+        with self._batch_lock:
+            self._batch = []
+
+    def end_batch(self) -> list[Path]:
+        """Stop recording; the batch's run folders, in completion order."""
+        with self._batch_lock:
+            dirs, self._batch = self._batch or [], None
+        return dirs
+
+    def prune_solutions(self, run_dirs: list[Path], best: Path | None = None) -> Path | None:
+        """Keep one saved solution among *run_dirs*, per ``exago.save_solutions``:
+        "best" keeps *best* if it has one, else the most recent; "newest" keeps
+        the most recent; "all" and "none" delete nothing. Only the solution
+        files are deleted; run folders and their input cases stay.
+        Returns the folder whose solution was kept (None if none was saved)."""
+        mode = self._exago.save_solutions
+        saved = [d for d in run_dirs if any((d / f).exists() for f in SOLUTION_FILES)]
+        if mode not in ("best", "newest") or not saved:
+            return None
+        kept = best if mode == "best" and best in saved else saved[-1]
+        for d in saved:
+            if d != kept:
+                for f in SOLUTION_FILES:
+                    (d / f).unlink(missing_ok=True)
+        if len(saved) > 1:
+            logger.info("Saved solutions (%s): kept %s, removed %d", mode, kept.name, len(saved) - 1)
+        return kept
 
     # ------------------------------------------------------------------
     # Public API
@@ -214,6 +257,8 @@ class SimulationExecutor:
 
         # 4. Build command
         builder = _CMD_BUILDERS.get(application, _default_cmd_builder)
+        if builder is _steady_state_cmd_builder and self._exago.save_solutions == "none":
+            builder = _default_cmd_builder
         cmd = builder(binary, input_file, extra_args)
 
         if self._exago.mpi_np > 1 and application in ("scopflow", "sopflow"):
@@ -312,6 +357,9 @@ class SimulationExecutor:
             "succeeded" if success else "FAILED",
             elapsed, proc.returncode, len(proc.stdout),
         )
+        with self._batch_lock:
+            if self._batch is not None:
+                self._batch.append(run_dir)
 
         return SimulationResult(
             success=success,

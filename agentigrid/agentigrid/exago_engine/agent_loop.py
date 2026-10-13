@@ -811,6 +811,10 @@ class AgentLoopController:
         self._sopflow_num_scenarios: int = 0
         self._sopflow_scenario_override: Optional[Path] = None
         self._explore_cache: Optional[ExploreCache] = None
+        # Saved-solution pruning (exago.save_solutions): the best run folder of the
+        # current action, and an explore's folders waiting for the next action.
+        self._batch_best: Optional[Path] = None
+        self._pending_explore: Optional[tuple[list[Path], Optional[Path]]] = None
         # Sticky session-level load factor (Task 1)
         self._session_load_factor: Optional[float] = config.search.load_factor
         # Benchmark result computed at session start (Task 2)
@@ -1360,7 +1364,16 @@ class AgentLoopController:
         data = response.json_data
         action = data.get("action", "").lower()
 
-        # Dispatch action
+        # The solves of one action form a batch whose saved solutions are
+        # pruned afterwards (exago.save_solutions).
+        self._batch_best = None
+        self._executor.begin_batch()
+        try:
+            return self._dispatch_action(action, iteration, data)
+        finally:
+            self._prune_saved_solutions(action, self._executor.end_batch())
+
+    def _dispatch_action(self, action: str, iteration: int, data: dict) -> tuple[str, bool]:
         if action == "modify":
             self._explore_cache = None
             return self._handle_modify(iteration, data)
@@ -1386,6 +1399,24 @@ class AgentLoopController:
             else:
                 self._error_feedback = f"Unknown action '{action}'. Valid actions: modify, complete, analyze."
             return "error", True
+
+    def _prune_saved_solutions(self, action: str, run_dirs: list[Path]) -> None:
+        """Keep one saved solution per multi-solve action (exago.save_solutions).
+
+        The variants of an explore are pruned only after the next action, so a
+        variant the LLM then selects keeps its solution: select reuses the
+        variant's run, and GridKit may start from it.
+        """
+        pending, self._pending_explore = self._pending_explore, None
+        if pending is not None:
+            dirs, best = pending
+            if action == "select" and self._batch_best is not None:
+                best = self._batch_best
+            self._executor.prune_solutions(dirs, best)
+        if action == "explore":
+            self._pending_explore = (run_dirs, self._batch_best)
+        elif len(run_dirs) > 1:
+            self._executor.prune_solutions(run_dirs, self._batch_best)
 
     # ------------------------------------------------------------------
     # Action handlers
@@ -1941,6 +1972,8 @@ class AgentLoopController:
             best = variant_results[pareto_labels[0]]
             if best.opflow_result is not None:
                 self._latest_opflow = best.opflow_result
+            if best.sim_result is not None:
+                self._batch_best = best.sim_result.workdir
 
         self._print(
             f"[Iter {iteration}] Explored {len(variant_results)} variants. "
@@ -2530,6 +2563,15 @@ class AgentLoopController:
                 objective_name = "cost"
                 objective_direction = "minimize"
 
+        # Best feasible candidate by the same ranking: its saved solution is kept.
+        cand_index = {bus: i for i, bus in enumerate(candidates)}
+        ranked = [(s[rank_key], cand_index[s["bus"]]) for s in candidate_summaries
+                  if s.get("feasible") and s.get(rank_key) is not None
+                  and cand_index.get(s["bus"]) in results_by_cand]
+        if ranked:
+            pick = (max if objective_direction == "maximize" else min)(ranked)
+            self._batch_best = results_by_cand[pick[1]].workdir
+
         self._latest_results_text = _build_sweep_llm_view(
             candidate_summaries=candidate_summaries,
             feasible_buses=feasible_buses,
@@ -2604,6 +2646,7 @@ class AgentLoopController:
         s = self._config.search
         tan_phi = _tan_phi_from_pf_spec(pf_spec, tan_phi_avg) if entity == "load" else 0.0
         probe_counter = {"n": 0}
+        boundary_probe = {"mw": None, "dir": None}   # highest feasible probe = boundary point
 
         def solve_probe(delta_mw: float) -> _ProbeOutcome:
             probe_counter["n"] += 1
@@ -2624,6 +2667,8 @@ class AgentLoopController:
             feasible = (
                 opflow.feasibility_detail == "feasible" and opflow.num_violations == 0
             )
+            if feasible and (boundary_probe["mw"] is None or delta_mw > boundary_probe["mw"]):
+                boundary_probe["mw"], boundary_probe["dir"] = delta_mw, sim_result.workdir
             return _ProbeOutcome(
                 feasible=feasible,
                 voltage_min=opflow.voltage_min,
@@ -2643,6 +2688,7 @@ class AgentLoopController:
         )
         result["bus"] = bus
         result["entity"] = entity
+        result["_boundary_run_dir"] = boundary_probe["dir"]   # popped by _handle_boundary_sweep
         if entity == "load":
             result["pf_tan_phi"] = tan_phi
         return result
@@ -2759,8 +2805,16 @@ class AgentLoopController:
         # Assemble per-candidate summaries (in sorted candidate order).
         candidate_summaries: list[dict] = []
         determined_buses: list[int] = []
+        best_mw = None
         for idx, bus in enumerate(candidates):
             r = results_map.get(idx)
+            if isinstance(r, dict):
+                # The largest hosting capacity is the best; its boundary point's
+                # saved solution is kept.
+                run_dir = r.pop("_boundary_run_dir", None)
+                mw = r.get("max_feasible_mw")
+                if run_dir is not None and mw is not None and (best_mw is None or mw > best_mw):
+                    best_mw, self._batch_best = mw, run_dir
             if r is None or isinstance(r, Exception):
                 candidate_summaries.append({
                     "bus": bus,
@@ -3950,6 +4004,8 @@ class AgentLoopController:
             )
             return "error", True
         self._print(f'[Iter {iteration}] Selected variant {choice} — "{selected.description}"')
+        if selected.sim_result is not None:
+            self._batch_best = selected.sim_result.workdir   # keeps its saved solution
 
         # Update current state
         self._current_network = selected.modified_net
@@ -4772,6 +4828,10 @@ class AgentLoopController:
     def _finalize(self, session: SearchSession, elapsed_seconds: float) -> None:
         """Print summary and save journal."""
         total_tokens = self._total_prompt_tokens + self._total_completion_tokens
+        if self._pending_explore is not None:      # session ended right after an explore
+            dirs, best = self._pending_explore
+            self._pending_explore = None
+            self._executor.prune_solutions(dirs, best)
 
         # --- Post-search goal classification via LLM ---
         goal_classification: Optional[dict] = None

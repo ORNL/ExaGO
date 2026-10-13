@@ -15,6 +15,13 @@ exago:
   env_script: "./configs/env_setup.sh"
   # Default timeout for simulation execution (seconds)
   timeout: 360
+  # Solved cases written by OPFLOW/PFLOW (opflowout.m / pflowout.m) in each run folder:
+  #   all     keep every one
+  #   best    single solves kept; a multi-solve action (sweep, explore, boundary,
+  #           contingency, reserve) keeps only its best, or the most recent if it has no best
+  #   newest  single solves kept; a multi-solve action keeps only its most recent
+  #   none    not written (GridKit cannot start from the latest ExaGO steady state)
+  save_solutions: "best"
 
 # Data settings
 data:

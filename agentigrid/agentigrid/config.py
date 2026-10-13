@@ -29,6 +29,7 @@ DEFAULTS: dict[str, Any] = {
         "env_script": None,
         "timeout": 600,
         "mpi_np": 1,
+        "save_solutions": "best",
     },
     "data": {
         "data_dir": "./data/exago",
@@ -117,6 +118,8 @@ DEFAULTS: dict[str, Any] = {
     },
 }
 
+SAVE_SOLUTIONS = ("all", "best", "newest", "none")
+
 # ---------------------------------------------------------------------------
 # Frozen dataclasses
 # ---------------------------------------------------------------------------
@@ -134,6 +137,11 @@ class ExagoConfig:
     env_script: Optional[Path]
     timeout: int
     mpi_np: int = 1
+    # Solved cases written by OPFLOW/PFLOW (opflowout.m / pflowout.m): "all" keeps
+    # every one; "best" / "newest" keep one per multi-solve action (the best, else
+    # the most recent / the most recent); single solves are always kept; "none"
+    # writes none.
+    save_solutions: str = "best"
 
 
 @dataclass(frozen=True)
@@ -425,6 +433,10 @@ def _validate(cfg: AppConfig) -> None:
         )
     if not cfg.data.data_dir.exists():
         logger.warning("Data directory does not exist: %s", cfg.data.data_dir)
+
+    if cfg.exago.save_solutions not in SAVE_SOLUTIONS:
+        logger.warning("Unknown exago.save_solutions '%s' (expected one of %s)",
+                       cfg.exago.save_solutions, SAVE_SOLUTIONS)
 
     valid_backends = {"openai", "anthropic", "ollama", "ollama-cloud"}
     if cfg.llm.backend not in valid_backends:

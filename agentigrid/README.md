@@ -91,6 +91,22 @@ converge, was a sweep, or has an online generator without a dynamic model in the
 GridKit case. The converted case is saved as `from_exago.case.json` in the session
 folder.
 
+**Saved solutions** (`exago.save_solutions` in the config, or
+`--set exago.save_solutions=<value>`). Single solves (base case, `modify`, `select`)
+always keep their solved case. For an action with many solves (sweep, explore,
+boundary, contingency, reserve):
+
+| Value | Kept |
+|---|---|
+| `best` (default) | the best run: cheapest feasible sweep candidate (or best by the sweep's metric), largest hosting capacity (boundary), Pareto-best variant (explore); the most recent if the action has no best (contingency, reserve) |
+| `newest` | the most recent run |
+| `all` | every run |
+| `none` | nothing is written; GridKit cannot start from the latest ExaGO steady state |
+
+Only the solution files are removed; run folders and their input cases stay. After an
+`explore`, pruning waits for the next action, so a variant chosen by `select` keeps
+its solution.
+
 **ContingencyAnalysis.** With `"application": "ContingencyAnalysis"` (the LLM sets it
 when the goal asks for contingency analysis), one GridKit `ContingencyAnalysis` process
 runs all bus faults of the screen, writing `output_<fault index>.csv` per fault in the
