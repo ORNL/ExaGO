@@ -77,6 +77,7 @@ if(EXAGO_RUN_TESTS)
     DEPENDS
     GPU
     HIOP_SPARSE
+    IPOPT
     RAJA
     COMMAND
     ${RUNCMD}

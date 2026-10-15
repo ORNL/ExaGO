@@ -174,26 +174,31 @@ int main(int argc, char **argv) {
 
   double *ref_vals =
       static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
+  int *ref_rows = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+  int *ref_cols = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
 
   PetscInt nrow, ncol;
   ierr = MatGetSize(opflow->Jac_Gi, &nrow, &ncol);
   CHKERRQ(ierr);
 
-  double *vptr = ref_vals;
+  int ref_count = 0;
   for (int i = 0; i < nrow; i++) {
     PetscInt nvals;
     const PetscInt *cols;
     const PetscScalar *vals;
     ierr = MatGetRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
     CHKERRQ(ierr);
-    for (int j = 0; j < nvals; j++)
-      vptr[j] = vals[j];
-    vptr += nvals;
+    for (int j = 0; j < nvals; j++, ref_count++) {
+      if (ref_count < nnz) { // Excess entries counted, reported below
+        ref_rows[ref_count] = opflow->nconeq + i;
+        ref_cols[ref_count] = cols[j];
+        ref_vals[ref_count] = vals[j];
+      }
+    }
     ierr = MatRestoreRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
     CHKERRQ(ierr);
   }
 
-  int ref_count = (int)(vptr - ref_vals);
   std::cout << "  PETSc extracted " << ref_count << " ineq Jacobian values"
             << " (expected " << nnz << ")" << std::endl;
 
@@ -241,8 +246,50 @@ int main(int argc, char **argv) {
   resmgr.copy(x_dev, x_sd);
 #endif
 
+  /* Build the sparsity pattern and the permutation used by the kernel */
+  int nnz_jac = opflow->nnz_eqjacsp + nnz;
+  int *iJacS_dev, *jJacS_dev;
+#ifdef EXAGO_ENABLE_GPU
+  iJacS_dev = static_cast<int *>(d_allocator.allocate(nnz_jac * sizeof(int)));
+  jJacS_dev = static_cast<int *>(d_allocator.allocate(nnz_jac * sizeof(int)));
+#else
+  iJacS_dev = static_cast<int *>(h_allocator.allocate(nnz_jac * sizeof(int)));
+  jJacS_dev = static_cast<int *>(h_allocator.allocate(nnz_jac * sizeof(int)));
+#endif
+  ierr = (*opflow->modelops.computesparseinequalityconstraintjacobianhiop)(
+      opflow, x_dev, iJacS_dev, jJacS_dev, NULL);
+  CHKERRQ(ierr);
+  const int *perm_dev =
+      reinterpret_cast<PbpolModelRajaHiop *>(opflow->model)->perm_jacineq_dev;
+
+  int *gpu_rows = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+  int *gpu_cols = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+  resmgr.copy(gpu_rows, iJacS_dev + opflow->nnz_eqjacsp, nnz * sizeof(int));
+  resmgr.copy(gpu_cols, jJacS_dev + opflow->nnz_eqjacsp, nnz * sizeof(int));
+
+  std::cout << "  Comparing " << nnz
+            << " inequality Jacobian (row, col) pairs..." << std::endl;
+  int struct_fail = 0;
+  for (int i = 0; i < nnz; i++) {
+    if (gpu_rows[i] != ref_rows[i] || gpu_cols[i] != ref_cols[i]) {
+      std::cout << "  MISMATCH ineqjac structure[" << i << "]: PETSc=("
+                << ref_rows[i] << ", " << ref_cols[i] << ")  GPU=("
+                << gpu_rows[i] << ", " << gpu_cols[i] << ")" << std::endl;
+      struct_fail++;
+    }
+  }
+  fail += struct_fail;
+
+  if (struct_fail == 0)
+    std::cout << "  PASS: All " << nnz
+              << " inequality Jacobian (row, col) pairs match" << std::endl;
+  else
+    std::cout << "  FAIL: " << struct_fail << " of " << nnz
+              << " (row, col) pairs differ" << std::endl;
+
   std::cout << "  Running RAJA GPU inequality Jacobian kernel..." << std::endl;
-  ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, gpu_vals_dev);
+  ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, perm_dev,
+                                              gpu_vals_dev);
 
   gpu_vals = static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
 #ifdef EXAGO_ENABLE_GPU
@@ -274,60 +321,8 @@ int main(int argc, char **argv) {
    * ------------------------------------------------------------------ */
   {
     int niters = 1000;
-    PetscInt bench_nrow, bench_ncol;
-    ierr = MatGetSize(opflow->Jac_Gi, &bench_nrow, &bench_ncol);
-    CHKERRQ(ierr);
-
-    double *bench_vals =
-        static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
-
     std::cout << "\n=== Performance benchmark (" << niters
               << " iterations) ===" << std::endl;
-
-    /* --- PETSc path: compute + MatGetRow extraction + copy to device --- */
-    {
-      double *bench_dev;
-      size_t nnz_bytes = nnz * sizeof(double);
-#ifdef EXAGO_ENABLE_GPU
-      bench_dev = static_cast<double *>(d_allocator.allocate(nnz_bytes));
-#else
-      bench_dev = static_cast<double *>(h_allocator.allocate(nnz_bytes));
-#endif
-
-      auto t0 = std::chrono::high_resolution_clock::now();
-      for (int iter = 0; iter < niters; iter++) {
-        ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
-            opflow, opflow->X, opflow->Jac_Gi);
-
-        double *vp = bench_vals;
-        for (int i = 0; i < bench_nrow; i++) {
-          PetscInt nv;
-          const PetscInt *c;
-          const PetscScalar *v;
-          MatGetRow(opflow->Jac_Gi, i, &nv, &c, &v);
-          for (int j = 0; j < nv; j++)
-            vp[j] = v[j];
-          vp += nv;
-          MatRestoreRow(opflow->Jac_Gi, i, &nv, &c, &v);
-        }
-#ifdef EXAGO_ENABLE_GPU
-        resmgr.copy(bench_dev, bench_vals);
-#else
-        memcpy(bench_dev, bench_vals, nnz_bytes);
-#endif
-      }
-      auto t1 = std::chrono::high_resolution_clock::now();
-      double petsc_us =
-          std::chrono::duration<double, std::micro>(t1 - t0).count() / niters;
-      std::cout << "  PETSc path (compute + MatGetRow + copy): " << petsc_us
-                << " us/iter" << std::endl;
-
-#ifdef EXAGO_ENABLE_GPU
-      d_allocator.deallocate(bench_dev);
-#else
-      h_allocator.deallocate(bench_dev);
-#endif
-    }
 
     /* --- PETSc path: CPU compute only --- */
     {
@@ -362,7 +357,8 @@ int main(int argc, char **argv) {
 #endif
       auto t0 = std::chrono::high_resolution_clock::now();
       for (int iter = 0; iter < niters; iter++) {
-        ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, bench_dev);
+        ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(opflow, x_dev, perm_dev,
+                                                    bench_dev);
       }
 #ifdef EXAGO_ENABLE_HIP
       (void)hipDeviceSynchronize();
@@ -380,7 +376,6 @@ int main(int argc, char **argv) {
 #endif
     }
 
-    h_allocator.deallocate(bench_vals);
     std::cout << "=== End benchmark ===" << std::endl;
   }
 
@@ -388,13 +383,21 @@ int main(int argc, char **argv) {
    * Cleanup
    * ------------------------------------------------------------------ */
   h_allocator.deallocate(ref_vals);
+  h_allocator.deallocate(ref_rows);
+  h_allocator.deallocate(ref_cols);
+  h_allocator.deallocate(gpu_rows);
+  h_allocator.deallocate(gpu_cols);
   h_allocator.deallocate(gpu_vals);
   h_allocator.deallocate(x_sd);
 #ifdef EXAGO_ENABLE_GPU
   d_allocator.deallocate(x_dev);
   d_allocator.deallocate(gpu_vals_dev);
+  d_allocator.deallocate(iJacS_dev);
+  d_allocator.deallocate(jJacS_dev);
 #else
   h_allocator.deallocate(gpu_vals_dev);
+  h_allocator.deallocate(iJacS_dev);
+  h_allocator.deallocate(jJacS_dev);
 #endif
 
   ierr = OPFLOWDestroy(&opflow);

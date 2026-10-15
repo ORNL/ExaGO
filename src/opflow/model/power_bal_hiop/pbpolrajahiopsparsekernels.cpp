@@ -578,13 +578,7 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   PbpolModelRajaHiop *pbpolrajahiopsparse =
       reinterpret_cast<PbpolModelRajaHiop *>(opflow->model);
   PetscErrorCode ierr;
-  PetscInt *iRowstart, *jColstart;
   PetscInt roffset, coffset;
-  PetscInt nrow, ncol;
-  PetscInt nvals;
-  const PetscInt *cols;
-  const PetscScalar *vals;
-  PetscInt i, j;
   auto &resmgr = umpire::ResourceManager::getInstance();
 
   PetscFunctionBegin;
@@ -592,44 +586,123 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
   // If sparsity pattern does not exist, create it!
   if (iJacS_dev != NULL && jJacS_dev != NULL) {
 
-    // Create arrays on host to store i,j, and val arrays
     if (opflow->Nconineq) {
-      umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
-
-      pbpolrajahiopsparse->i_jacineq =
-          (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
-      pbpolrajahiopsparse->j_jacineq =
-          (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
-
-      iRowstart = pbpolrajahiopsparse->i_jacineq;
-      jColstart = pbpolrajahiopsparse->j_jacineq;
-
+      // Compute sparsity pattern on host, matching the flat-array layout
+      // defined during setup in OPFLOWModelSetUp_PBPOLRAJAHIOPSPARSE.
       /* Inequality constraints start after equality constraints
          Hence the offset
       */
       roffset = opflow->nconeq;
       coffset = 0;
 
-      ierr = (*opflow->modelops.computeinequalityconstraintjacobian)(
-          opflow, opflow->X, opflow->Jac_Gi);
-      CHKERRQ(ierr);
+      umpire::Allocator h_allocator_ = resmgr.getAllocator("HOST");
 
-      ierr = MatGetSize(opflow->Jac_Gi, &nrow, &ncol);
-      CHKERRQ(ierr);
-      /* Copy over locations to triplet format */
-      for (i = 0; i < nrow; i++) {
-        ierr = MatGetRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
-        CHKERRQ(ierr);
-        for (j = 0; j < nvals; j++) {
-          iRowstart[j] = roffset + i;
-          jColstart[j] = coffset + cols[j];
+      pbpolrajahiopsparse->i_jacineq =
+          (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
+      pbpolrajahiopsparse->j_jacineq =
+          (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
+      pbpolrajahiopsparse->perm_jacineq =
+          (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
+
+      int *iRow_temp =
+          (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
+      int *jCol_temp =
+          (int *)(h_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
+
+      BUSParamsRajaHiop *busparams = &pbpolrajahiopsparse->busparams;
+      GENParamsRajaHiop *genparams = &pbpolrajahiopsparse->genparams;
+      LINEParamsRajaHiop *lineparams = &pbpolrajahiopsparse->lineparams;
+
+      /* Generator set-point entries */
+      if (opflow->has_gensetpoint && opflow->use_agc) {
+        int delP_col = coffset + pbpolrajahiopsparse->agc_xidx;
+        for (int g = 0; g < genparams->ngenON; g++) {
+          if (genparams->isrenewable[g])
+            continue;
+          int base = genparams->ineqjacspgen_idx[g];
+          int row0 = roffset + genparams->gineqidxgen[g];
+          int Pg_col = coffset + genparams->xidx[g];
+          int delPg_col = coffset + genparams->xpdevidx[g];
+
+          for (int r = 0; r < 2; r++) {
+            iRow_temp[base + 3 * r + 0] = row0 + r;
+            jCol_temp[base + 3 * r + 0] = Pg_col;
+            iRow_temp[base + 3 * r + 1] = row0 + r;
+            jCol_temp[base + 3 * r + 1] = delPg_col;
+            iRow_temp[base + 3 * r + 2] = row0 + r;
+            jCol_temp[base + 3 * r + 2] = delP_col;
+          }
         }
-        /* Increment iRow,jCol pointers */
-        iRowstart += nvals;
-        jColstart += nvals;
-        ierr = MatRestoreRow(opflow->Jac_Gi, i, &nvals, &cols, &vals);
-        CHKERRQ(ierr);
       }
+
+      /* FIXED_WITHIN_QBOUNDS voltage entries */
+      if (opflow->genbusvoltagetype == FIXED_WITHIN_QBOUNDS) {
+        for (int ibus = 0; ibus < busparams->nbus; ibus++) {
+          if (!busparams->ispv[ibus] && !busparams->isref[ibus])
+            continue;
+          int base = busparams->ineqjacsp_idx[ibus];
+          int ngen = busparams->ngenONbus[ibus];
+          int goff = busparams->genoffset[ibus];
+          int row0 = roffset + busparams->gineqidx[ibus];
+          int Vm_col = coffset + busparams->xidx[ibus] + 1;
+
+          for (int r = 0; r < 2; r++) {
+            int rbase = base + r * (ngen + 1);
+            for (int k = 0; k < ngen; k++) {
+              iRow_temp[rbase + k] = row0 + r;
+              jCol_temp[rbase + k] = coffset + genparams->xidx[goff + k] + 1;
+            }
+            iRow_temp[rbase + ngen] = row0 + r;
+            jCol_temp[rbase + ngen] = Vm_col;
+          }
+        }
+      }
+
+      /* Line flow entries */
+      int has_slack = (int)opflow->allow_lineflow_violation;
+      int row_stride = 4 + has_slack;
+      for (int i = 0; i < lineparams->nlinelim; i++) {
+        int l = lineparams->linelimidx[i];
+        int base = lineparams->ineqjacsp_idx[i];
+        int row0 = roffset + lineparams->gineqidx[i];
+        int thetaf_col = coffset + lineparams->xidxf[l];
+        int thetat_col = coffset + lineparams->xidxt[l];
+
+        for (int r = 0; r < 2; r++) {
+          int rbase = base + r * row_stride;
+          iRow_temp[rbase + 0] = row0 + r;
+          jCol_temp[rbase + 0] = thetaf_col;
+          iRow_temp[rbase + 1] = row0 + r;
+          jCol_temp[rbase + 1] = thetaf_col + 1;
+          iRow_temp[rbase + 2] = row0 + r;
+          jCol_temp[rbase + 2] = thetat_col;
+          iRow_temp[rbase + 3] = row0 + r;
+          jCol_temp[rbase + 3] = thetat_col + 1;
+          if (has_slack) {
+            iRow_temp[rbase + 4] = row0 + r;
+            jCol_temp[rbase + 4] = coffset + lineparams->xslackidx[i] + r;
+          }
+        }
+      }
+
+      // Sort and permute indices
+      std::vector<int> perm_temp(opflow->nnz_ineqjacsp);
+      std::iota(perm_temp.begin(), perm_temp.end(), 0);
+      std::sort(perm_temp.begin(), perm_temp.end(), [&](int i, int j) {
+        return (iRow_temp[i] != iRow_temp[j]) ? iRow_temp[i] < iRow_temp[j]
+                                              : jCol_temp[i] < jCol_temp[j];
+      });
+
+      int *iRow = pbpolrajahiopsparse->i_jacineq;
+      int *jCol = pbpolrajahiopsparse->j_jacineq;
+      int *perm = pbpolrajahiopsparse->perm_jacineq;
+      for (int i = 0; i < opflow->nnz_ineqjacsp; i++) {
+        iRow[i] = iRow_temp[perm_temp[i]];
+        jCol[i] = jCol_temp[perm_temp[i]];
+        perm[perm_temp[i]] = i;
+      }
+      h_allocator_.deallocate(iRow_temp);
+      h_allocator_.deallocate(jCol_temp);
 
       // Copy over i_jacineq and j_jacineq arrays to device
       resmgr.copy(iJacS_dev + opflow->nnz_eqjacsp,
@@ -637,8 +710,11 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
       resmgr.copy(jJacS_dev + opflow->nnz_eqjacsp,
                   pbpolrajahiopsparse->j_jacineq);
 
-      ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
-      CHKERRQ(ierr);
+      umpire::Allocator d_allocator_ = resmgr.getAllocator("DEVICE");
+      pbpolrajahiopsparse->perm_jacineq_dev =
+          (int *)(d_allocator_.allocate(opflow->nnz_ineqjacsp * sizeof(int)));
+      resmgr.copy(pbpolrajahiopsparse->perm_jacineq_dev,
+                  pbpolrajahiopsparse->perm_jacineq);
     }
   }
 
@@ -653,7 +729,8 @@ OPFLOWComputeSparseInequalityConstraintJacobian_PBPOLRAJAHIOPSPARSE(
          No H2D, D2H copies: x_dev is already on device, output goes
          straight into the ineq portion of MJacS_dev. */
       ComputeIneqJacValuesGPU_PBPOLRAJAHIOPSPARSE(
-          opflow, x_dev, MJacS_dev + opflow->nnz_eqjacsp);
+          opflow, x_dev, pbpolrajahiopsparse->perm_jacineq_dev,
+          MJacS_dev + opflow->nnz_eqjacsp);
 
       ierr = PetscLogEventEnd(opflow->ineqconsjaclogger, 0, 0, 0, 0);
       CHKERRQ(ierr);

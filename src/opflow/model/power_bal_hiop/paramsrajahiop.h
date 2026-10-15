@@ -282,6 +282,7 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
     i_jacineq = j_jacineq = NULL;
     i_hess = j_hess = NULL;
     perm_jaceq = perm_jaceq_dev = NULL;
+    perm_jacineq = perm_jacineq_dev = NULL;
     perm_hess = perm_hess_dev = NULL;
   }
 
@@ -307,6 +308,9 @@ struct PbpolModelRajaHiop : public _p_FormPBPOLRAJAHIOP {
       *j_hess; // Row and column indices for hessian
   int *perm_jaceq,
       *perm_jaceq_dev; // Permutation for equality constraints Jacobian indices
+  int *perm_jacineq,
+      *perm_jacineq_dev; // Permutation for inequality constraints Jacobian
+                         // indices
   int *perm_hess,
       *perm_hess_dev; // Permutation for equality constraints Jacobian indices
 };
