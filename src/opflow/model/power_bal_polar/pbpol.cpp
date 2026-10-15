@@ -913,18 +913,22 @@ PetscErrorCode OPFLOWComputeEqualityConstraintJacobian_PBPOL(OPFLOW opflow,
           col[0] = line->startxdcloc;
           val[0] = 1.0;
           ierr = MatSetValues(Je, 1, row, 1, col, val, ADD_VALUES);
+          CHKERRQ(ierr);
 
           col[0] = line->startxdcloc + 1;
           val[0] = 1.0;
           ierr = MatSetValues(Je, 1, row + 1, 1, col, val, ADD_VALUES);
+          CHKERRQ(ierr);
         } else {
           col[0] = line->startxdcloc;
           val[0] = -(1.0 - line->loss1);
           ierr = MatSetValues(Je, 1, row, 1, col, val, ADD_VALUES);
+          CHKERRQ(ierr);
 
           col[0] = line->startxdcloc + 2;
           val[0] = -1.0;
           ierr = MatSetValues(Je, 1, row + 1, 1, col, val, ADD_VALUES);
+          CHKERRQ(ierr);
         }
       }
     }
@@ -2072,7 +2076,7 @@ PetscErrorCode OPFLOWComputeEqualityConstraintsHessian_PBPOL(OPFLOW opflow,
         dPt_dthetat_dVmf = Vmt * (-Gtf * sin_thetatf + Btf * cos_thetatf);
 
         /* dPt_Vmt  = 2*Gtt*Vmt + Vmf*(Gtf*cos_thetatf + Btf*sin_thetatf); */
-        dPt_dVmt_dthetat = Vmf * (-Gtf * sin_thetatf + Bft * cos_thetatf);
+        dPt_dVmt_dthetat = Vmf * (-Gtf * sin_thetatf + Btf * cos_thetatf);
         dPt_dVmt_dVmt = 2 * Gtt;
         dPt_dVmt_dthetaf = Vmf * (Gtf * sin_thetatf - Btf * cos_thetatf);
         dPt_dVmt_dVmf = (Gtf * cos_thetatf + Btf * sin_thetatf);
@@ -2277,6 +2281,7 @@ PetscErrorCode OPFLOWComputeInequalityConstraintsHessian_PBPOL(OPFLOW opflow,
           val[2] = gen->apf * (lambda_gloc + lambda_gloc1);
 
           ierr = MatSetValues(H, 1, row, 3, col, val, ADD_VALUES);
+          CHKERRQ(ierr);
 
           //	  df1_ddelPg = -(Pg - gen->pt);
           //	  df2_ddelPg = gen->pb - Pg;
@@ -2510,7 +2515,7 @@ PetscErrorCode OPFLOWComputeInequalityConstraintsHessian_PBPOL(OPFLOW opflow,
     d2Pt_dthetat_dVmf = Vmt * (-Gtf * sin_thetatf + Btf * cos_thetatf);
 
     /* dPt_Vmt  = 2*Gtt*Vmt + Vmf*(Gtf*cos_thetatf + Btf*sin_thetatf); */
-    d2Pt_dVmt_dthetat = Vmf * (-Gtf * sin_thetatf + Bft * cos_thetatf);
+    d2Pt_dVmt_dthetat = Vmf * (-Gtf * sin_thetatf + Btf * cos_thetatf);
     d2Pt_dVmt_dVmt = 2 * Gtt;
     d2Pt_dVmt_dthetaf = Vmf * (Gtf * sin_thetatf - Btf * cos_thetatf);
     d2Pt_dVmt_dVmf = (Gtf * cos_thetatf + Btf * sin_thetatf);

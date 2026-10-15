@@ -35,7 +35,7 @@ static const RealType three = 3.0;
 // static const RealType eps = 10*std::numeric_limits<RealType>::epsilon();
 static const RealType eps = 1e-8;
 
-static const LocalOrdinalType SKIP_TEST = -1;
+static const LocalOrdinalType SKIP_TEST = 2;
 
 /**
   @brief Base class for all testing classes. Each child class will call the
