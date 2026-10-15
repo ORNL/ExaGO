@@ -15,10 +15,10 @@ from typing import Optional
 
 from agentigrid.backends import create_backend
 from agentigrid.config import load_config
-from agentigrid.engine.agent_loop import AgentLoopController, SearchSession
-from agentigrid.engine.goal_classifier import build_classification_prompts, parse_goal_classification
-from agentigrid.engine.journal import JournalEntry
-from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_engine.agent_loop import AgentLoopController, SearchSession
+from agentigrid.exago_engine.goal_classifier import build_classification_prompts, parse_goal_classification
+from agentigrid.exago_engine.journal import JournalEntry
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 try:
     from config_builder import get_default_config_path
@@ -381,7 +381,7 @@ class SessionManager:
 
         # If search is completed, save from the session object
         if self._session is not None:
-            from agentigrid.engine.session_io import save_session
+            from agentigrid.exago_engine.session_io import save_session
             return save_session(
                 save_dir=save_dir,
                 goal=self._session.goal,

@@ -6,7 +6,7 @@ import argparse
 import logging
 import sys
 import threading
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -202,6 +202,23 @@ def build_parser() -> argparse.ArgumentParser:
              "--set report.network_summary_max_generators=40 (repeatable)",
     )
     parser.add_argument(
+        "--tool",
+        choices=["exago", "gridkit"],
+        default="exago",
+        help="Simulation tool: exago (steady state, .m case) or gridkit "
+             "(transient stability, .case.json case). Default: exago",
+    )
+    parser.add_argument(
+        "--from-exago",
+        action="store_true",
+        default=False,
+        help="GridKit only: start from the most recent ExaGO steady state "
+             "(last simulation of the newest journal in workdir/exago) instead of "
+             "the case's own operating point, for every fault screen. Without it, "
+             "the LLM chooses per fault screen (start_from), e.g. when the goal "
+             "asks for the most recent steady state.",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -351,7 +368,8 @@ def _start_stdin_listener(controller) -> None:
                 controller.request_stop()
                 print("[Steering] Stop requested.")
             elif lower == "save":
-                save_dir = Path(f"workdir/saved_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+                stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                save_dir = controller._config.output.workdir / f"saved_session_{stamp}"
                 controller.save_session(save_dir)
                 print(f"[Steering] Session saved to: {save_dir}")
             elif lower == "status":
@@ -382,7 +400,7 @@ def _start_stdin_listener(controller) -> None:
 
 def run_search(cfg: AppConfig, goal: str, quiet: bool = False) -> None:
     """Run the LLM-driven search loop."""
-    from agentigrid.engine.agent_loop import AgentLoopController
+    from agentigrid.exago_engine.agent_loop import AgentLoopController
 
     controller = AgentLoopController(cfg, quiet=quiet)
 
@@ -393,6 +411,69 @@ def run_search(cfg: AppConfig, goal: str, quiet: bool = False) -> None:
     controller.run(cfg.search.base_case, goal)
 
 
+def exago_output(cfg: AppConfig) -> AppConfig:
+    """ExaGO runs write to an ``exago/`` subfolder of the output folders,
+    as GridKit runs write to ``gridkit/``."""
+    return replace(cfg, output=replace(
+        cfg.output,
+        workdir=Path(cfg.output.workdir) / "exago",
+        logs_dir=Path(cfg.output.logs_dir) / "exago",
+    ))
+
+
+def run_gridkit(cfg: AppConfig, args: argparse.Namespace) -> None:
+    """Run a GridKit transient-stability study (``--tool gridkit``)."""
+    from agentigrid.gridkit_engine.agent_loop import GridkitAgentLoop
+    from agentigrid.gridkit_engine.settings import GridkitSettings
+
+    if args.resume:
+        raise SystemExit("--resume is not available with --tool gridkit yet")
+    settings = GridkitSettings.from_config(cfg)
+    setup_logging(settings.logs_dir, verbose=cfg.output.verbose)
+    case_file = Path(args.base_case) if args.base_case else None
+    if case_file is None or args.goal is None:
+        raise SystemExit("base_case (GridKit .case.json) and goal are required")
+    if not case_file.exists():
+        logger.error("Case file does not exist: %s", case_file)
+        sys.exit(1)
+    from agentigrid.gridkit_engine.from_exago import (
+        SteadyStateError, find_latest_steady_state,
+    )
+
+    steady_state = None
+    if args.from_exago:
+        try:
+            steady_state = find_latest_steady_state(exago_output(cfg).output.workdir)
+        except SteadyStateError as exc:
+            logger.error("%s", exc)
+            sys.exit(1)
+    if args.dry_run:
+        print(f"GridKit settings: {settings}")
+        if steady_state:
+            print(f"Start from: {steady_state.describe()}")
+        return
+    quiet = getattr(args, "quiet", False) or False
+    if not quiet:
+        print("=" * 60)
+        print("  AgentiGrid — transient stability with GridKit")
+        print("=" * 60)
+        print(f"  Backend:        {cfg.llm.backend} ({cfg.llm.model})")
+        print(f"  Case:           {case_file}")
+        print(f"  Goal:           {args.goal}")
+        print(f"  Max iterations: {settings.max_iterations}")
+        print("=" * 60)
+    from agentigrid.gridkit_parsers.case_parser import CaseFileError
+
+    try:
+        session = GridkitAgentLoop(cfg, settings=settings, quiet=quiet).run(
+            case_file, args.goal, steady_state=steady_state)
+    except (FileNotFoundError, CaseFileError, SteadyStateError) as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
+    if session.termination_reason in ("llm_error", "base_case_failed", "parse_failures"):
+        sys.exit(1)
+
+
 def run_regenerate_report(argv: list[str] | None = None) -> None:
     """Offline `regenerate-report` subcommand: rebuild analysis+PDF from a journal.
 
@@ -401,7 +482,7 @@ def run_regenerate_report(argv: list[str] | None = None) -> None:
     renders from deterministic journal data only.
     """
     from agentigrid.backends import create_backend
-    from agentigrid.engine.regenerate_report import regenerate_from_journal
+    from agentigrid.exago_engine.regenerate_report import regenerate_from_journal
 
     sub = argparse.ArgumentParser(
         prog="agentigrid regenerate-report",
@@ -424,7 +505,7 @@ def run_regenerate_report(argv: list[str] | None = None) -> None:
         overrides["llm.backend"] = args.backend
     if args.model:
         overrides["llm.model"] = args.model
-    cfg = load_config(Path(args.config), cli_overrides=overrides)
+    cfg = exago_output(load_config(Path(args.config), cli_overrides=overrides))
     setup_logging(cfg.output.logs_dir, verbose=cfg.output.verbose)
 
     generate_analysis = not args.no_analysis
@@ -459,6 +540,11 @@ def main(argv: list[str] | None = None) -> None:
     overrides = _cli_overrides(args)
     cfg = load_config(Path(args.config), cli_overrides=overrides)
 
+    if args.tool == "gridkit":
+        run_gridkit(cfg, args)
+        return
+    cfg = exago_output(cfg)
+
     # Set up logging
     verbose = cfg.output.verbose
     setup_logging(cfg.output.logs_dir, verbose=verbose)
@@ -488,7 +574,7 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(1)
         if not quiet:
             print(f"Resuming session from: {resume_dir}")
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         controller = AgentLoopController(cfg, quiet=quiet)
         if sys.stdin.isatty():
             _start_stdin_listener(controller)

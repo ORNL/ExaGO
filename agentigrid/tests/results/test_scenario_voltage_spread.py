@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentigrid.parsers import compute_scenario_voltage_spread
+from agentigrid.exago_parsers import compute_scenario_voltage_spread
 
 # report_generator lives in the (non-package) launcher/ dir.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "launcher"))
@@ -197,7 +197,7 @@ def _controller(tmp_path, application="sopflow"):
     from agentigrid.config import (
         AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
     )
-    from agentigrid.engine.agent_loop import AgentLoopController
+    from agentigrid.exago_engine.agent_loop import AgentLoopController
 
     cfg = AppConfig(
         exago=ExagoConfig(binary_dir=tmp_path/"bin", opflow_binary=None, scopflow_binary=None,
@@ -211,13 +211,13 @@ def _controller(tmp_path, application="sopflow"):
         output=OutputConfig(workdir=tmp_path/"wd", logs_dir=tmp_path/"logs", save_journal=False,
             journal_format="json", save_modified_files=False, verbose=False),
     )
-    with patch("agentigrid.engine.agent_loop.create_backend", return_value=MagicMock()), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+    with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=MagicMock()), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
         return AgentLoopController(cfg)
 
 
 def _push_sim_entry(ctrl, cwd, iteration=1):
-    from agentigrid.engine.journal import JournalEntry
+    from agentigrid.exago_engine.journal import JournalEntry
     ctrl._journal._entries.append(JournalEntry(
         iteration=iteration, description="sopflow", commands=[], objective_value=1.0,
         feasible=True, convergence_status="CONVERGED", violations_count=0,

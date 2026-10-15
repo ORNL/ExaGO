@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from agentigrid.engine.journal import SearchJournal, is_solve_iteration
-from agentigrid.engine.goal_classifier import build_classification_prompts
-from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_engine.journal import SearchJournal, is_solve_iteration
+from agentigrid.exago_engine.goal_classifier import build_classification_prompts
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "launcher"))
 from charts import convergence_chart, voltage_range_chart  # noqa: E402

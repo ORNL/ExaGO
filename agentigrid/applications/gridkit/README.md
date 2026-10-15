@@ -2,8 +2,9 @@
 
 Place or symlink GridKit phasor-dynamics binaries in this directory.
 
-AgentiGrid does not run GridKit yet. These links prepare for transient
-studies that will be added later.
+AgentiGrid runs `DynamicSimulation` for transient-stability studies
+(`agentigrid --tool gridkit ...`). `ContingencyAnalysis` is linked for
+reference and is not called by AgentiGrid yet.
 
 ## Supported binaries
 

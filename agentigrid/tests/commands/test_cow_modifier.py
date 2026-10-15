@@ -21,11 +21,11 @@ import pytest
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine.agent_loop import AgentLoopController
-from agentigrid.engine.executor import SimulationResult
-from agentigrid.engine import modifier as M
-from agentigrid.engine.commands import parse_command
-from agentigrid.engine.modifier import (
+from agentigrid.exago_engine.agent_loop import AgentLoopController
+from agentigrid.exago_engine.executor import SimulationResult
+from agentigrid.exago_engine import modifier as M
+from agentigrid.exago_engine.commands import parse_command
+from agentigrid.exago_engine.modifier import (
     apply_modifications,
     build_index_maps,
     _build_index_maps,
@@ -33,9 +33,9 @@ from agentigrid.engine.modifier import (
     _gen_index_in_network,
     _branch_index_in_network,
 )
-from agentigrid.engine.validation import validate_command
-from agentigrid.parsers.matpower_parser import parse_matpower
-from agentigrid.parsers.matpower_writer import write_matpower
+from agentigrid.exago_engine.validation import validate_command
+from agentigrid.exago_parsers.matpower_parser import parse_matpower
+from agentigrid.exago_parsers.matpower_writer import write_matpower
 
 _DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 _IEEE118 = _DATA_DIR / "ieee_118_bus_v10.m"
@@ -235,8 +235,8 @@ def test_sweep_regression(tmp_path):
 
     captured = {"tasks": None}
 
-    with patch("agentigrid.engine.agent_loop.create_backend", return_value=MagicMock()), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+    with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=MagicMock()), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
         mock_executor = MagicMock()
         mock_executor.run.return_value = _sim()
 
@@ -424,8 +424,8 @@ def test_sweep_builds_maps_once(tmp_path):
     cfg = _make_config(tmp_path, _IEEE118)
     captured = {"tasks": None}
 
-    with patch("agentigrid.engine.agent_loop.create_backend", return_value=MagicMock()), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+    with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=MagicMock()), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
         mock_executor = MagicMock()
         mock_executor.run.return_value = _sim()
 

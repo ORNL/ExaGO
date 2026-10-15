@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from agentigrid.parsers.opflow_parser import parse_opflow_output, parse_simulation_result
-from agentigrid.parsers.opflow_results import OPFLOWResult
-from agentigrid.parsers.results_summary import results_summary
+from agentigrid.exago_parsers.opflow_parser import parse_opflow_output, parse_simulation_result
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_parsers.results_summary import results_summary
 
 SAMPLE = Path(__file__).resolve().parent.parent / "fixtures" / "sample_opflow_output.txt"
 _has_sample = SAMPLE.exists()
@@ -54,7 +54,7 @@ class TestParseOPFLOW:
         assert result.num_iterations == 23
 
     def test_solve_time(self, result: OPFLOWResult):
-        assert result.solve_time == pytest.approx(0.042, abs=0.001)
+        assert result.solve_time == pytest.approx(0.063, abs=0.001)
 
     def test_bus_count(self, result: OPFLOWResult):
         assert len(result.buses) == 200

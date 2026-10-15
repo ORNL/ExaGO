@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import pytest
 
-from agentigrid.engine.journal import (
+from agentigrid.exago_engine.journal import (
     JournalEntry, SearchJournal, ObjectiveEntry, ObjectiveRegistry,
 )
-from agentigrid.engine.metric_extractor import extract_metric, extract_all_metrics, available_metrics
-from agentigrid.engine.objective_parser import parse_objective_extraction
-from agentigrid.parsers.opflow_results import OPFLOWResult, BusResult, BranchResult, GenResult
+from agentigrid.exago_engine.metric_extractor import extract_metric, extract_all_metrics, available_metrics
+from agentigrid.exago_engine.objective_parser import parse_objective_extraction
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult, BusResult, BranchResult, GenResult
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

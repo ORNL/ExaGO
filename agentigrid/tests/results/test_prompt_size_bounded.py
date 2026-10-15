@@ -12,18 +12,18 @@ from pathlib import Path
 import pytest
 
 from agentigrid.config import load_config
-from agentigrid.parsers.matpower_model import (
+from agentigrid.exago_parsers.matpower_model import (
     Bus, Branch, Generator, GenCost, MATNetwork,
 )
-from agentigrid.parsers.network_summary import network_summary
-from agentigrid.parsers.opflow_results import (
+from agentigrid.exago_parsers.network_summary import network_summary
+from agentigrid.exago_parsers.opflow_results import (
     OPFLOWResult, BusResult, BranchResult, GenResult,
 )
-from agentigrid.parsers.results_summary import results_summary
-from agentigrid.parsers.pflow_summary import pflow_results_summary
-from agentigrid.parsers.scopflow_summary import scopflow_results_summary
-from agentigrid.parsers.dcopflow_summary import dcopflow_results_summary
-from agentigrid.parsers.tcopflow_summary import tcopflow_results_summary
+from agentigrid.exago_parsers.results_summary import results_summary
+from agentigrid.exago_parsers.pflow_summary import pflow_results_summary
+from agentigrid.exago_parsers.scopflow_summary import scopflow_results_summary
+from agentigrid.exago_parsers.dcopflow_summary import dcopflow_results_summary
+from agentigrid.exago_parsers.tcopflow_summary import tcopflow_results_summary
 
 
 # ---------------------------------------------------------------------------
