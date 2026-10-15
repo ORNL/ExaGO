@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentigrid.engine import reserve as R
+from agentigrid.exago_engine import reserve as R
 
 
 # ---------------------------------------------------------------------------
@@ -187,11 +187,11 @@ def test_determinism():
 from agentigrid.config import (  # noqa: E402
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine.agent_loop import AgentLoopController  # noqa: E402
-from agentigrid.engine.executor import SimulationResult  # noqa: E402
-from agentigrid.engine import contingency as C  # noqa: E402
-from agentigrid.parsers.matpower_parser import parse_matpower  # noqa: E402
-from agentigrid.parsers.opflow_results import GenResult, OPFLOWResult  # noqa: E402
+from agentigrid.exago_engine.agent_loop import AgentLoopController  # noqa: E402
+from agentigrid.exago_engine.executor import SimulationResult  # noqa: E402
+from agentigrid.exago_engine import contingency as C  # noqa: E402
+from agentigrid.exago_parsers.matpower_parser import parse_matpower  # noqa: E402
+from agentigrid.exago_parsers.opflow_results import GenResult, OPFLOWResult  # noqa: E402
 
 _DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 _IEEE118 = _DATA_DIR / "ieee_118_bus_v10.m"
@@ -250,8 +250,8 @@ def _opf(feasible=True, generators=None):
 def test_handler_minimize_maps_result_and_journals(tmp_path):
     cfg = _cfg(tmp_path)
     backend_mock = MagicMock()
-    with patch("agentigrid.engine.agent_loop.create_backend", return_value=backend_mock), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+    with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=backend_mock), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
         mock_executor = MagicMock()
         mock_executor.run.return_value = _sim()
         mock_executor.run_parallel.side_effect = (
@@ -281,9 +281,9 @@ def test_handler_minimize_maps_result_and_journals(tmp_path):
         n1_secure=True, solves_used=42, hit_budget=False,
     )
 
-    with patch("agentigrid.engine.agent_loop.contingency.all_generator_contingencies",
+    with patch("agentigrid.exago_engine.agent_loop.contingency.all_generator_contingencies",
                return_value=fake_ctgs), \
-         patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+         patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                side_effect=fake_parse), \
          patch.object(AgentLoopController, "_run_reserve_minimization",
                       return_value=canned) as mock_min:

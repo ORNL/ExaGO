@@ -21,7 +21,7 @@ import pytest
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine.agent_loop import (
+from agentigrid.exago_engine.agent_loop import (
     AgentLoopController,
     _ProbeOutcome,
     _bisect_boundary,
@@ -31,9 +31,9 @@ from agentigrid.engine.agent_loop import (
     _system_average_tan_phi,
     _tan_phi_from_pf_spec,
 )
-from agentigrid.engine.executor import SimulationExecutor, SimulationResult
-from agentigrid.parsers.matpower_parser import parse_matpower
-from agentigrid.parsers.opflow_results import (
+from agentigrid.exago_engine.executor import SimulationExecutor, SimulationResult
+from agentigrid.exago_parsers.matpower_parser import parse_matpower
+from agentigrid.exago_parsers.opflow_results import (
     OPFLOWResult, BranchResult, BusResult,
 )
 
@@ -410,8 +410,8 @@ class TestBoundaryHandlerIntegration:
 
     def _controller(self, tmp_path):
         cfg = _make_config(tmp_path)
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=MagicMock()), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=MagicMock()), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
             mock_executor = MagicMock()
             mock_executor.run.return_value = _sim_result()
             # map_callables runs the (patched) bisection callables synchronously
@@ -436,7 +436,7 @@ class TestBoundaryHandlerIntegration:
         controller._bisect_candidate = fake_bisect
 
         feasible_base = _opflow(converged=True)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=feasible_base):
             kind, ok = controller._handle_boundary_sweep(1, {
                 "entity": "load",
@@ -464,7 +464,7 @@ class TestBoundaryHandlerIntegration:
     def test_base_infeasible_aborts(self, tmp_path):
         controller = self._controller(tmp_path)
         infeasible_base = _opflow(converged=False)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=infeasible_base):
             kind, ok = controller._handle_boundary_sweep(1, {
                 "entity": "load",
@@ -488,7 +488,7 @@ class TestBoundaryHandlerIntegration:
 # C.1 correction — binding-constraint identification (duals + margin-vs-base)
 # ---------------------------------------------------------------------------
 
-from agentigrid.engine.agent_loop import _identify_binding, _bisect_boundary, _ProbeOutcome
+from agentigrid.exago_engine.agent_loop import _identify_binding, _bisect_boundary, _ProbeOutcome
 
 
 def _branch_ends(fb, tb, sf, st, slim, mult_sf=0.0, mult_st=0.0):

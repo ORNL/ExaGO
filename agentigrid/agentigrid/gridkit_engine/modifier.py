@@ -80,10 +80,16 @@ def apply_modifications(
 
 
 def prepare_fault_case(
-    case: dict, study: FaultStudy, element_map: dict,
+    case: dict, study: FaultStudy, element_map: dict, only_study_faults: bool = False,
 ) -> tuple[dict, dict, dict[int, int], ModificationReport]:
     """Case copy for a fault study: a fault device at every study bus and the
     variables the requested checks read.
+
+    With *only_study_faults*, fault devices at other buses (such as a demo
+    fault shipped with the case) are left out of the copy. ContingencyAnalysis
+    runs every fault device in the file, so they would add runs nobody asked
+    for. DynamicSimulation only switches on the fault its events name, so
+    other fault devices stay in the copy, inactive.
 
     Returns (case copy, its element map, {bus: GridKit element_id}, report).
     """
@@ -96,6 +102,15 @@ def prepare_fault_case(
     commands: list[CaseCommand] = [AddBusFault(bus=b, R=study.R, X=study.X) for b in buses]
     commands.append(record)
     work, report = apply_modifications(case, commands, element_map)
+    if only_study_faults:
+        keep = set(buses)
+        dropped = [d.get("id") for d in work["devices"]
+                   if d.get("class") == FAULT_CLASS and (d.get("ports") or {}).get("bus") not in keep]
+        if dropped:
+            work["devices"] = [d for d in work["devices"]
+                               if not (d.get("class") == FAULT_CLASS
+                                       and (d.get("ports") or {}).get("bus") not in keep)]
+            report.applied.append(f"fault devices at other buses left out: {', '.join(map(str, dropped))}")
     work_map = build_element_map(work)
     fault_ids = {f["bus"]: f["element_id"] for f in reversed(work_map["bus_faults"])}
     return work, work_map, {b: fault_ids[b] for b in buses if b in fault_ids}, report

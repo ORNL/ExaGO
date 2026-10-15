@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from agentigrid.engine import process_commands
-from agentigrid.engine.commands import (
+from agentigrid.exago_engine import process_commands
+from agentigrid.exago_engine.commands import (
     ScaleAllLoads,
     ScaleLoad,
     SetBranchStatus,
@@ -18,10 +18,10 @@ from agentigrid.engine.commands import (
     SetLoad,
     parse_command,
 )
-from agentigrid.engine.modifier import apply_modifications
-from agentigrid.engine.schema_description import command_schema_text
-from agentigrid.engine.validation import validate_command
-from agentigrid.parsers import parse_matpower
+from agentigrid.exago_engine.modifier import apply_modifications
+from agentigrid.exago_engine.schema_description import command_schema_text
+from agentigrid.exago_engine.validation import validate_command
+from agentigrid.exago_parsers import parse_matpower
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 ACTIVSG200 = DATA_DIR / "case_ACTIVSg200.m"

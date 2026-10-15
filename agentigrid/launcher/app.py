@@ -36,8 +36,8 @@ from charts import (
     reserve_trajectory_chart,
 )
 
-from agentigrid.engine.journal import describe_contingency_scope
-from agentigrid.parsers import parse_matpower, network_summary
+from agentigrid.exago_engine.journal import describe_contingency_scope
+from agentigrid.exago_parsers import parse_matpower, network_summary
 
 # ── Page Configuration ───────────────────────────────────────────────────────
 

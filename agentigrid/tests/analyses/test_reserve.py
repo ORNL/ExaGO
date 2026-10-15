@@ -19,12 +19,12 @@ import pytest
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine import contingency as C
-from agentigrid.engine import sweep_metrics
-from agentigrid.engine.agent_loop import AgentLoopController
-from agentigrid.engine.executor import SimulationResult
-from agentigrid.parsers.matpower_parser import parse_matpower
-from agentigrid.parsers.opflow_results import GenResult, OPFLOWResult
+from agentigrid.exago_engine import contingency as C
+from agentigrid.exago_engine import sweep_metrics
+from agentigrid.exago_engine.agent_loop import AgentLoopController
+from agentigrid.exago_engine.executor import SimulationResult
+from agentigrid.exago_parsers.matpower_parser import parse_matpower
+from agentigrid.exago_parsers.opflow_results import GenResult, OPFLOWResult
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 IEEE118 = DATA_DIR / "ieee_118_bus_v10.m"
@@ -188,8 +188,8 @@ class TestReserveHandler:
     def _controller(self, tmp_path):
         cfg = _make_config(tmp_path)
         backend_mock = MagicMock()
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=backend_mock), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=backend_mock), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
             mock_executor = MagicMock()
             mock_executor.run.return_value = _sim_result()
             mock_executor.run_parallel.side_effect = (
@@ -231,9 +231,9 @@ class TestReserveHandler:
             return _opflow(k != 2)
 
         calls_before = len(backend_mock.mock_calls)
-        with patch("agentigrid.engine.agent_loop.contingency.all_generator_contingencies",
+        with patch("agentigrid.exago_engine.agent_loop.contingency.all_generator_contingencies",
                    return_value=fake_ctgs), \
-             patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+             patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=fake_parse):
             kind, ok = controller._handle_reserve_screen(1, {
                 "mode": "reserve", "feasibility": {"Vmin": 0.9, "Vmax": 1.1},
@@ -279,9 +279,9 @@ class TestReserveHandler:
                 return _opflow(True, generators=base_gens)
             return _opflow(True)  # every unit loss feasible
 
-        with patch("agentigrid.engine.agent_loop.contingency.all_generator_contingencies",
+        with patch("agentigrid.exago_engine.agent_loop.contingency.all_generator_contingencies",
                    return_value=fake_ctgs), \
-             patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+             patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    side_effect=fake_parse):
             kind, ok = controller._handle_reserve_screen(1, {
                 "mode": "reserve", "feasibility": {"Vmin": 0.9, "Vmax": 1.1},
@@ -294,7 +294,7 @@ class TestReserveHandler:
 
     def test_base_infeasible_errors(self, tmp_path):
         controller, _ = self._controller(tmp_path)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(False)):
             kind, ok = controller._handle_reserve_screen(1, {
                 "mode": "reserve", "feasibility": {"Vmin": 0.9, "Vmax": 1.1},

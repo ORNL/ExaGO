@@ -18,11 +18,11 @@ from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
     load_config,
 )
-from agentigrid.parsers import all_scenarios_converged
-from agentigrid.parsers.opflow_results import OPFLOWResult
-import agentigrid.parsers.sopflow_parser as SP
-from agentigrid.parsers.sopflow_parser import parse_sopflow_simulation_result
-from agentigrid.parsers.sopflow_summary import sopflow_results_summary
+from agentigrid.exago_parsers import all_scenarios_converged
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
+import agentigrid.exago_parsers.sopflow_parser as SP
+from agentigrid.exago_parsers.sopflow_parser import parse_sopflow_simulation_result
+from agentigrid.exago_parsers.sopflow_summary import sopflow_results_summary
 
 _DATA = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 _ACTIVSG200 = _DATA / "case_ACTIVSg200.m"
@@ -237,7 +237,7 @@ def test_config_flag_override_false():
 
 
 def _controller(tmp_path, application="sopflow", flag=True):
-    from agentigrid.engine.agent_loop import AgentLoopController
+    from agentigrid.exago_engine.agent_loop import AgentLoopController
     cfg = AppConfig(
         exago=ExagoConfig(binary_dir=tmp_path/"bin", opflow_binary=None, scopflow_binary=None,
             tcopflow_binary=None, sopflow_binary=None, dcopflow_binary=None, pflow_binary=None,
@@ -250,14 +250,14 @@ def _controller(tmp_path, application="sopflow", flag=True):
         output=OutputConfig(workdir=tmp_path/"wd", logs_dir=tmp_path/"logs", save_journal=False,
             journal_format="json", save_modified_files=False, verbose=False),
     )
-    with patch("agentigrid.engine.agent_loop.create_backend", return_value=MagicMock()), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+    with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=MagicMock()), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
         return AgentLoopController(cfg)
 
 
 @pytest.mark.skipif(not _ACTIVSG200.exists(), reason="case_ACTIVSg200.m not available")
 def test_partb_lowers_wind_pmin_when_on(tmp_path):
-    from agentigrid.parsers.matpower_parser import parse_matpower
+    from agentigrid.exago_parsers.matpower_parser import parse_matpower
     ctrl = _controller(tmp_path, flag=True)
     ctrl._base_network = parse_matpower(_ACTIVSG200)
     ctrl._normalize_sopflow_wind_base()
@@ -270,7 +270,7 @@ def test_partb_lowers_wind_pmin_when_on(tmp_path):
 
 @pytest.mark.skipif(not _ACTIVSG200.exists(), reason="case_ACTIVSg200.m not available")
 def test_partb_noop_when_off(tmp_path):
-    from agentigrid.parsers.matpower_parser import parse_matpower
+    from agentigrid.exago_parsers.matpower_parser import parse_matpower
     ctrl = _controller(tmp_path, flag=False)
     ctrl._base_network = parse_matpower(_ACTIVSG200)
     before = {g.bus: g.Pmin for g in ctrl._base_network.generators}
@@ -281,7 +281,7 @@ def test_partb_noop_when_off(tmp_path):
 
 @pytest.mark.skipif(not _ACTIVSG200.exists(), reason="case_ACTIVSg200.m not available")
 def test_partb_noop_for_non_sopflow(tmp_path):
-    from agentigrid.parsers.matpower_parser import parse_matpower
+    from agentigrid.exago_parsers.matpower_parser import parse_matpower
     ctrl = _controller(tmp_path, application="opflow", flag=True)
     ctrl._base_network = parse_matpower(_ACTIVSG200)
     before = {id(g): g.Pmin for g in ctrl._base_network.generators}

@@ -6,8 +6,8 @@ import json
 import pytest
 from pathlib import Path
 
-from agentigrid.engine.session_io import save_session, load_session, SESSION_FORMAT_VERSION
-from agentigrid.engine.journal import (
+from agentigrid.exago_engine.session_io import save_session, load_session, SESSION_FORMAT_VERSION
+from agentigrid.exago_engine.journal import (
     JournalEntry, SearchJournal, ObjectiveEntry, ObjectiveRegistry,
 )
 

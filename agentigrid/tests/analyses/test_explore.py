@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from agentigrid.config import AppConfig, SearchConfig, ExagoConfig, OutputConfig, LLMConfig, DataConfig
-from agentigrid.engine.explore import (
+from agentigrid.exago_engine.explore import (
     ExploreCache,
     VariantResult,
     annotate_cost_equivalent_siblings,
@@ -12,8 +12,8 @@ from agentigrid.engine.explore import (
     compute_pareto_labels,
     format_variant_results,
 )
-from agentigrid.engine.journal import ObjectiveEntry
-from agentigrid.engine.pareto import ParetoCandidate
+from agentigrid.exago_engine.journal import ObjectiveEntry
+from agentigrid.exago_engine.pareto import ParetoCandidate
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ def _make_config(**overrides):
 
 def _make_opflow_result(**kwargs):
     """Build a minimal OPFLOWResult for testing."""
-    from agentigrid.parsers.opflow_results import (
+    from agentigrid.exago_parsers.opflow_results import (
         OPFLOWResult, BusResult, BranchResult, GenResult,
     )
     defaults = dict(
@@ -93,8 +93,8 @@ def _make_opflow_result(**kwargs):
 class TestFormatVariantResults:
 
     def _minimal_variant(self, label, feasible=True, cost=10000.0, **kwargs):
-        from agentigrid.engine.executor import SimulationResult
-        from agentigrid.parsers.matpower_model import MATNetwork
+        from agentigrid.exago_engine.executor import SimulationResult
+        from agentigrid.exago_parsers.matpower_model import MATNetwork
         # Minimal mock network
         net = MagicMock(spec=MATNetwork)
         net.gencost = []
@@ -158,7 +158,7 @@ class TestFormatVariantResults:
         assert "Pareto-optimal" in result
 
     def test_skipped_commands_displayed(self):
-        from agentigrid.engine.commands import SetGenDispatch
+        from agentigrid.exago_engine.commands import SetGenDispatch
         v = self._minimal_variant("A", feasible=True)
         v.skipped_commands = [
             (SetGenDispatch(bus=189, Pg=500.0), ["Bus 189 is the reference/slack bus"]),
@@ -258,13 +258,13 @@ class TestAllNoOpRejection:
 
     @pytest.fixture
     def net(self):
-        from agentigrid.parsers.matpower_parser import parse_matpower
+        from agentigrid.exago_parsers.matpower_parser import parse_matpower
         return parse_matpower("data/exago/examples/case_ACTIVSg200.m")
 
     def test_all_slack_dispatch_yields_zero_applied(self, net):
         """apply_modifications against slack-only commands → applied is empty."""
-        from agentigrid.engine.commands import SetGenDispatch
-        from agentigrid.engine.modifier import apply_modifications
+        from agentigrid.exago_engine.commands import SetGenDispatch
+        from agentigrid.exago_engine.modifier import apply_modifications
 
         slack_buses = [b.bus_i for b in net.buses if b.type == 3]
         assert slack_buses, "ACTIVSg200 must have a slack bus"
@@ -275,8 +275,8 @@ class TestAllNoOpRejection:
 
     def test_mixed_effective_and_noop_yields_some_applied(self, net):
         """A variant with one effective command should NOT be rejected."""
-        from agentigrid.engine.commands import SetGenDispatch
-        from agentigrid.engine.modifier import apply_modifications
+        from agentigrid.exago_engine.commands import SetGenDispatch
+        from agentigrid.exago_engine.modifier import apply_modifications
 
         slack_buses = [b.bus_i for b in net.buses if b.type == 3]
         non_slack_gen = next(
@@ -294,8 +294,8 @@ class TestAllNoOpRejection:
 
     def test_variant_result_default_not_rejected(self):
         """VariantResult.rejected defaults to False."""
-        from agentigrid.engine.executor import SimulationResult
-        from agentigrid.parsers.matpower_model import MATNetwork
+        from agentigrid.exago_engine.executor import SimulationResult
+        from agentigrid.exago_parsers.matpower_model import MATNetwork
         v = VariantResult(
             label="A",
             description="x",
@@ -309,9 +309,9 @@ class TestAllNoOpRejection:
 
     def test_rejected_variant_renders_REJECTED_in_table(self):
         """format_variant_results displays REJECTED for rejected variants."""
-        from agentigrid.engine.commands import SetGenDispatch
-        from agentigrid.engine.executor import SimulationResult
-        from agentigrid.parsers.matpower_model import MATNetwork
+        from agentigrid.exago_engine.commands import SetGenDispatch
+        from agentigrid.exago_engine.executor import SimulationResult
+        from agentigrid.exago_parsers.matpower_model import MATNetwork
 
         net = MagicMock(spec=MATNetwork)
         net.gencost = []
@@ -340,15 +340,15 @@ class TestAllNoOpRejection:
 class TestBuildVariantDescription:
 
     def _cmd(self, bus, pg):
-        from agentigrid.engine.commands import SetGenDispatch
+        from agentigrid.exago_engine.commands import SetGenDispatch
         return SetGenDispatch(bus=bus, Pg=pg)
 
     def _vlim(self, vmin, vmax):
-        from agentigrid.engine.commands import SetAllBusVLimits
+        from agentigrid.exago_engine.commands import SetAllBusVLimits
         return SetAllBusVLimits(Vmin=vmin, Vmax=vmax)
 
     def _scale(self, factor):
-        from agentigrid.engine.commands import ScaleAllLoads
+        from agentigrid.exago_engine.commands import ScaleAllLoads
         return ScaleAllLoads(factor=factor)
 
     def test_all_applied_contains_bus_numbers(self):
@@ -421,9 +421,9 @@ class TestBuildVariantDescription:
 class TestAnnotateCostEquivalentSiblings:
 
     def _variant(self, label, cost=None, feasible=True, n_commands=1, *, rejected=False):
-        from agentigrid.engine.executor import SimulationResult
-        from agentigrid.parsers.matpower_model import MATNetwork
-        from agentigrid.engine.commands import SetGenDispatch
+        from agentigrid.exago_engine.executor import SimulationResult
+        from agentigrid.exago_parsers.matpower_model import MATNetwork
+        from agentigrid.exago_engine.commands import SetGenDispatch
         net = MagicMock(spec=MATNetwork)
         net.gencost = []
         if feasible and cost is not None:
@@ -623,7 +623,7 @@ class TestUserPromptExploreText:
 class TestJournalExploredVariants:
 
     def test_add_from_results_with_explored_variants(self):
-        from agentigrid.engine.journal import SearchJournal
+        from agentigrid.exago_engine.journal import SearchJournal
         journal = SearchJournal()
         opf = _make_opflow_result()
         entry = journal.add_from_results(
@@ -646,7 +646,7 @@ class TestJournalExploredVariants:
         assert entry.explored_variants[2]["feasible"] is False
 
     def test_add_from_results_without_explored_variants(self):
-        from agentigrid.engine.journal import SearchJournal
+        from agentigrid.exago_engine.journal import SearchJournal
         journal = SearchJournal()
         opf = _make_opflow_result()
         entry = journal.add_from_results(
@@ -668,8 +668,8 @@ class TestJournalExploredVariants:
 class TestSessionExplorePersistence:
 
     def test_save_with_explore_cache_info(self, tmp_path):
-        from agentigrid.engine.session_io import save_session, load_session
-        from agentigrid.engine.journal import SearchJournal
+        from agentigrid.exago_engine.session_io import save_session, load_session
+        from agentigrid.exago_engine.journal import SearchJournal
 
         journal = SearchJournal()
         save_dir = tmp_path / "test_session"
@@ -702,8 +702,8 @@ class TestSessionExplorePersistence:
         assert loaded["explore_cache_info"]["variant_labels"] == ["A", "B", "C"]
 
     def test_save_without_explore_cache_info(self, tmp_path):
-        from agentigrid.engine.session_io import save_session, load_session
-        from agentigrid.engine.journal import SearchJournal
+        from agentigrid.exago_engine.session_io import save_session, load_session
+        from agentigrid.exago_engine.journal import SearchJournal
 
         journal = SearchJournal()
         save_dir = tmp_path / "test_session2"
@@ -728,7 +728,7 @@ class TestSessionExplorePersistence:
 
     def test_load_v1_0_session_without_explore(self, tmp_path):
         import json
-        from agentigrid.engine.session_io import load_session
+        from agentigrid.exago_engine.session_io import load_session
 
         session_data = {
             "format_version": "1.0",
@@ -782,12 +782,12 @@ class TestExploreHandlerValidation:
         )
 
     def test_explore_requires_concurrent_pflow(self, tmp_path):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         from unittest.mock import MagicMock, patch
 
         cfg = self._make_pflow_config(tmp_path, concurrent_pflow=False)
-        with patch("agentigrid.engine.agent_loop.create_backend") as mock_create, \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+        with patch("agentigrid.exago_engine.agent_loop.create_backend") as mock_create, \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
             mock_create.return_value = MagicMock()
             controller = AgentLoopController(cfg, quiet=True)
             result_type, should_continue = controller._handle_explore(1, {
@@ -804,12 +804,12 @@ class TestExploreHandlerValidation:
         assert should_continue is True
 
     def test_explore_requires_at_least_2_variants(self, tmp_path):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         from unittest.mock import MagicMock, patch
 
         cfg = self._make_pflow_config(tmp_path, concurrent_pflow=True)
-        with patch("agentigrid.engine.agent_loop.create_backend") as mock_create, \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+        with patch("agentigrid.exago_engine.agent_loop.create_backend") as mock_create, \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
             mock_create.return_value = MagicMock()
             controller = AgentLoopController(cfg, quiet=True)
             result_type, should_continue = controller._handle_explore(1, {
@@ -824,12 +824,12 @@ class TestExploreHandlerValidation:
         assert result_type == "error"
 
     def test_select_without_explore_returns_error(self, tmp_path):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         from unittest.mock import MagicMock, patch
 
         cfg = self._make_pflow_config(tmp_path, concurrent_pflow=True)
-        with patch("agentigrid.engine.agent_loop.create_backend") as mock_create, \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+        with patch("agentigrid.exago_engine.agent_loop.create_backend") as mock_create, \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
             mock_create.return_value = MagicMock()
             controller = AgentLoopController(cfg, quiet=True)
             result_type, should_continue = controller._handle_select(1, {
@@ -840,13 +840,13 @@ class TestExploreHandlerValidation:
         assert result_type == "error"
 
     def test_select_invalid_label_returns_error(self, tmp_path):
-        from agentigrid.engine.explore import ExploreCache, VariantResult
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.explore import ExploreCache, VariantResult
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         from unittest.mock import MagicMock, patch
 
         cfg = self._make_pflow_config(tmp_path, concurrent_pflow=True)
-        with patch("agentigrid.engine.agent_loop.create_backend") as mock_create, \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+        with patch("agentigrid.exago_engine.agent_loop.create_backend") as mock_create, \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
             mock_create.return_value = MagicMock()
             controller = AgentLoopController(cfg, quiet=True)
             controller._explore_cache = ExploreCache(
@@ -862,13 +862,13 @@ class TestExploreHandlerValidation:
         assert result_type == "error"
 
     def test_modify_clears_explore_cache(self, tmp_path):
-        from agentigrid.engine.explore import ExploreCache
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.explore import ExploreCache
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         from unittest.mock import MagicMock, patch
 
         cfg = self._make_pflow_config(tmp_path, concurrent_pflow=True)
-        with patch("agentigrid.engine.agent_loop.create_backend") as mock_create, \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+        with patch("agentigrid.exago_engine.agent_loop.create_backend") as mock_create, \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
             mock_create.return_value = MagicMock()
             controller = AgentLoopController(cfg, quiet=True)
             controller._explore_cache = ExploreCache(description="test", iteration=1)
@@ -885,7 +885,7 @@ class TestRunParallel:
 
     def test_run_parallel_basic(self, tmp_path):
         from agentigrid.config import ExagoConfig, OutputConfig
-        from agentigrid.engine.executor import SimulationExecutor, SimulationResult
+        from agentigrid.exago_engine.executor import SimulationExecutor, SimulationResult
 
         exago_config = ExagoConfig(
             binary_dir=tmp_path / "bin", opflow_binary=None,
@@ -904,7 +904,7 @@ class TestRunParallel:
         assert result == {}
 
     def test_run_parallel_sigature(self):
-        from agentigrid.engine.executor import SimulationExecutor
+        from agentigrid.exago_engine.executor import SimulationExecutor
         import inspect
         sig = inspect.signature(SimulationExecutor.run_parallel)
         params = list(sig.parameters.keys())
@@ -1000,7 +1000,7 @@ class TestExploreJournalEntry:
     """Bug fix: explore actions must create a journal entry."""
 
     def test_add_explore_creates_entry(self):
-        from agentigrid.engine.journal import SearchJournal
+        from agentigrid.exago_engine.journal import SearchJournal
         journal = SearchJournal()
         entry = journal.add_explore(
             iteration=3,
@@ -1023,7 +1023,7 @@ class TestExploreJournalEntry:
         assert len(journal.entries) == 1
 
     def test_add_explore_appears_in_format_for_prompt(self):
-        from agentigrid.engine.journal import SearchJournal
+        from agentigrid.exago_engine.journal import SearchJournal
         journal = SearchJournal()
         journal.add_explore(
             iteration=2,
@@ -1037,7 +1037,7 @@ class TestExploreJournalEntry:
         assert "EXPLORE" in text
 
     def test_add_explore_appears_in_format_detailed(self):
-        from agentigrid.engine.journal import SearchJournal
+        from agentigrid.exago_engine.journal import SearchJournal
         journal = SearchJournal()
         journal.add_explore(
             iteration=5,
@@ -1056,7 +1056,7 @@ class TestExploredVariantsDescriptions:
     """Bug fix: explored_variants must include description, commands, and is_pareto."""
 
     def test_select_entry_has_variant_descriptions(self):
-        from agentigrid.engine.journal import SearchJournal
+        from agentigrid.exago_engine.journal import SearchJournal
         journal = SearchJournal()
         opf = _make_opflow_result()
         entry = journal.add_from_results(
@@ -1096,7 +1096,7 @@ class TestAutoInjectVlimits:
     """Bug fix: auto-inject set_all_bus_vlimits into variants missing it."""
 
     def test_current_bus_vlimits_uniform(self):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         net = MagicMock()
         bus1 = MagicMock()
         bus1.Vmin = 0.95
@@ -1109,7 +1109,7 @@ class TestAutoInjectVlimits:
         assert result == (0.95, 1.05)
 
     def test_current_bus_vlimits_mixed(self):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         net = MagicMock()
         bus1 = MagicMock()
         bus1.Vmin = 0.95
@@ -1122,7 +1122,7 @@ class TestAutoInjectVlimits:
         assert result is None
 
     def test_variant_has_vlimits(self):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         cmds = [
             {"action": "set_all_bus_vlimits", "Vmin": 0.95, "Vmax": 1.05},
             {"action": "scale_all_loads", "factor": 1.05},
@@ -1130,12 +1130,12 @@ class TestAutoInjectVlimits:
         assert AgentLoopController._variant_has_vlimits(cmds) is True
 
     def test_variant_no_vlimits(self):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         cmds = [{"action": "scale_all_loads", "factor": 1.05}]
         assert AgentLoopController._variant_has_vlimits(cmds) is False
 
     def test_variant_per_bus_vlimits(self):
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
         cmds = [{"action": "set_bus_vlimits", "bus": 1, "Vmin": 0.95}]
         assert AgentLoopController._variant_has_vlimits(cmds) is True
 

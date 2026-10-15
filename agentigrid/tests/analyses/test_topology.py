@@ -1,4 +1,4 @@
-"""Tests for agentigrid.engine.topology and the structured topology analyze queries.
+"""Tests for agentigrid.exago_engine.topology and the structured topology analyze queries.
 
 Covers:
 - incident_branches: stable file order, parallel circuits preserved, out-of-service exclusion
@@ -17,10 +17,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentigrid.engine import contingency as C
-from agentigrid.engine.topology import format_incident_branches_view, incident_branches
-from agentigrid.parsers.matpower_model import Branch, Bus, MATNetwork
-from agentigrid.parsers.matpower_parser import parse_matpower
+from agentigrid.exago_engine import contingency as C
+from agentigrid.exago_engine.topology import format_incident_branches_view, incident_branches
+from agentigrid.exago_parsers.matpower_model import Branch, Bus, MATNetwork
+from agentigrid.exago_parsers.matpower_parser import parse_matpower
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 IEEE118 = DATA_DIR / "ieee_118_bus_v10.m"
@@ -151,7 +151,7 @@ class TestHandlerLevel:
 
     def _make_controller(self, net118):
         """Minimal stub that exposes only the attributes _handle_topology_analyze reads."""
-        from agentigrid.engine.agent_loop import AgentLoopController
+        from agentigrid.exago_engine.agent_loop import AgentLoopController
 
         ctrl = AgentLoopController.__new__(AgentLoopController)
         ctrl._config = MagicMock()
@@ -246,7 +246,7 @@ class TestHandlerLevel:
     def test_no_backend_call_made(self, net118):
         """Structured topology query must not invoke any backend."""
         ctrl = self._make_controller(net118)
-        with patch("agentigrid.engine.agent_loop.create_backend") as mock_backend:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend") as mock_backend:
             self._affected(ctrl)
             mock_backend.assert_not_called()
 

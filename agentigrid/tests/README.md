@@ -5,13 +5,13 @@ Tests are grouped by the part of AgentiGrid they cover:
 | Folder | Covers |
 |---|---|
 | `llm/` | LLM backends and JSON extraction (`agentigrid/backends/`) |
-| `grid_files/` | MATPOWER reader, writer and network summary (`parsers/matpower_*`, `network_*`) |
-| `commands/` | Grid-change commands, validation and the modifier (`engine/commands.py`, `modifier.py`) |
-| `runner/` | Running simulation binaries and logging their invocations (`engine/executor.py`) |
-| `results/` | Result readers and summaries for the LLM (`parsers/*_parser.py`, `*_summary.py`) |
+| `grid_files/` | MATPOWER reader, writer and network summary (`exago_parsers/matpower_*`, `network_*`) |
+| `commands/` | Grid-change commands, validation and the modifier (`exago_engine/commands.py`, `modifier.py`) |
+| `runner/` | Running simulation binaries and logging their invocations (`exago_engine/executor.py`) |
+| `results/` | Result readers and summaries for the LLM (`exago_parsers/*_parser.py`, `*_summary.py`) |
 | `exago/` | Support for individual ExaGO applications (DCOPFLOW, PFLOW, SCOPFLOW, TCOPFLOW, SOPFLOW) |
 | `gridkit/` | GridKit readers (`gridkit_parsers/`), PJM checks and helpers (`gridkit_engine/`) |
-| `agent_loop/` | Agent loop controller and interactive steering (`engine/agent_loop.py`) |
+| `agent_loop/` | Agent loop controller and interactive steering (`exago_engine/agent_loop.py`) |
 | `journal/` | Search journal, objectives, Pareto front, session save and report regeneration |
 | `analyses/` | Explore, sweeps, boundary search, contingency, relief, reserve and topology |
 | `e2e/` | End-to-end runs through the agent loop |

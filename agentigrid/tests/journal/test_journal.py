@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agentigrid.engine.journal import JournalEntry, SearchJournal
-from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_engine.journal import JournalEntry, SearchJournal
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 
 def _make_entry(iteration: int, obj: float = 1000.0, feasible: bool = True, **kw) -> JournalEntry:
@@ -248,7 +248,7 @@ class TestAddFromResultsPFLOWCost:
     rather than the misleading 0.0 sentinel."""
 
     def _pflow_result(self, gen_pgs: list[float]) -> OPFLOWResult:
-        from agentigrid.parsers.opflow_results import GenResult
+        from agentigrid.exago_parsers.opflow_results import GenResult
         gens = [
             GenResult(
                 bus=i + 1, status=1, fuel="COAL", Pg=pg, Qg=0.0,
@@ -265,7 +265,7 @@ class TestAddFromResultsPFLOWCost:
         )
 
     def _gencost(self, tuples: list[tuple[float, float, float]]):
-        from agentigrid.parsers.matpower_model import GenCost
+        from agentigrid.exago_parsers.matpower_model import GenCost
         return [
             GenCost(model=2, startup=0.0, shutdown=0.0, ncost=3, coeffs=list(t))
             for t in tuples
@@ -330,7 +330,7 @@ class TestAddFromResultsPFLOWCost:
 
     def test_pflow_offline_generators_yield_none(self):
         """If all generators are offline, computed cost is 0.0 → entry sees None."""
-        from agentigrid.parsers.opflow_results import GenResult
+        from agentigrid.exago_parsers.opflow_results import GenResult
         opf = _make_opflow_result(
             objective_value=0.0,
             solver="POWER_FLOW",

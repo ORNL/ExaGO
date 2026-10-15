@@ -48,6 +48,12 @@ class TestSolved:
         assert s.stderr_empty and not s.errors
         assert s.reason == "solved: reached t = 2 s in 1.33 s"
 
+    def test_contingency_analysis_complete_line(self, tmp_path):
+        # ContingencyAnalysis prints the duration as "<s>s", not "<s> seconds".
+        s = parse_run_status(0, _WARN + "\n\nComplete in 1.91939s\n", "",
+                             _csv(tmp_path / "o.csv", [0.0, 2.0]), tmax=2.0)
+        assert s.solved and s.runtime_s == pytest.approx(1.91939)
+
     def test_warnings_kept_once(self, tmp_path):
         s = parse_run_status(0, OK_STDOUT, "", _csv(tmp_path / "o.csv", [2.0]), tmax=2.0)
         assert s.warnings == [

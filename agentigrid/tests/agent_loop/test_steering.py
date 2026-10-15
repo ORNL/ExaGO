@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentigrid.engine.agent_loop import AgentLoopController
+from agentigrid.exago_engine.agent_loop import AgentLoopController
 from agentigrid.prompts.exago.user_prompt import build_user_prompt
 
 
@@ -20,8 +20,8 @@ def _make_controller() -> AgentLoopController:
     cfg = MagicMock()
     cfg.llm.backend = "openai"
     cfg.llm.model = "gpt-4o"
-    with patch("agentigrid.engine.agent_loop.create_backend"), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+    with patch("agentigrid.exago_engine.agent_loop.create_backend"), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
         ctrl = AgentLoopController(cfg)
     return ctrl
 

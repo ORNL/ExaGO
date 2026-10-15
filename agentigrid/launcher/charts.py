@@ -11,8 +11,8 @@ from typing import Optional
 
 import plotly.graph_objects as go
 
-from agentigrid.engine.journal import SearchJournal, is_solve_iteration
-from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_engine.journal import SearchJournal, is_solve_iteration
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 # ── Color Palette ────────────────────────────────────────────────────────────
 

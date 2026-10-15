@@ -24,7 +24,8 @@ from typing import Optional
 logger = logging.getLogger("agentigrid.gridkit_parsers.status")
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-_COMPLETE_RE = re.compile(r"Complete in\s+([\d.eE+-]+)\s+seconds")
+# DynamicSimulation: "Complete in 2.57 seconds"; ContingencyAnalysis: "Complete in 1.91939s"
+_COMPLETE_RE = re.compile(r"Complete in\s+([\d.]+(?:[eE][+-]?\d+)?)\s*(?:seconds|s)\b")
 _FLAG_RE = re.compile(r"Function\s+(\w+)\s+failed with flag\s+(\w+)")
 _FAILED_AT_RE = re.compile(r"\bAt t\s*=\s*([\d.eE+-]+)")
 _ERROR_TAG = "[ERROR]"

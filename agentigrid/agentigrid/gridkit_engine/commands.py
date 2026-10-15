@@ -71,6 +71,10 @@ def parse_command(raw: dict) -> CaseCommand:
 # Fault study request
 # ---------------------------------------------------------------------------
 
+START_FROM = ("case", "latest_steady_state")
+APPLICATIONS = ("DynamicSimulation", "ContingencyAnalysis")
+
+
 @dataclass
 class FaultStudy:
     """One bus short circuit to ground per listed bus, each in its own run.
@@ -80,6 +84,11 @@ class FaultStudy:
       all_buses    every bus in the case
       poi + hops   the POI bus and every bus up to *hops* branches away
                    (PJM M-14B G.3.2: at least the POI and one bus away)
+
+    start_from   "case": the GridKit case's own operating point;
+                 "latest_steady_state": the most recent ExaGO solution
+    application  GridKit application: DynamicSimulation (one process per
+                 fault) or ContingencyAnalysis (one process for the screen)
     """
 
     buses: Optional[list[int]] = None
@@ -96,6 +105,8 @@ class FaultStudy:
     checks: list[str] = field(default_factory=lambda: [
         "angle_stability", "voltage_recovery", "damping", "final_voltage",
     ])
+    start_from: str = "case"
+    application: str = "DynamicSimulation"
 
     def duration_s(self, freq_hz: float = 60.0) -> float:
         return criteria.clearing_time_s(self.clearing_cycles, self.margin_cycles, freq_hz)
@@ -107,14 +118,20 @@ class FaultStudy:
 _STUDY_FIELDS = set(FaultStudy.__dataclass_fields__)
 
 
-def parse_fault_study(raw: dict) -> FaultStudy:
-    """Parse the LLM's fault-study request (the action dict minus bookkeeping keys)."""
+def parse_fault_study(raw: dict, defaults: Optional[dict] = None) -> FaultStudy:
+    """Parse the LLM's fault-study request (the action dict minus bookkeeping keys).
+    *defaults* (from the gridkit config) fill fields the LLM did not give."""
     ignored = {"action", "description", "reasoning"}
     unknown = set(raw) - _STUDY_FIELDS - ignored
     if unknown:
         raise ValueError(f"Unknown fault-study fields: {sorted(unknown)}. Valid: {sorted(_STUDY_FIELDS)}")
-    kwargs = {k: v for k, v in raw.items() if k in _STUDY_FIELDS}
+    kwargs = {**(defaults or {}), **{k: v for k, v in raw.items() if k in _STUDY_FIELDS}}
     try:
-        return FaultStudy(**kwargs)
+        study = FaultStudy(**kwargs)
     except TypeError as exc:
         raise ValueError(f"Invalid fault-study fields: {exc}") from exc
+    if study.start_from not in START_FROM:
+        raise ValueError(f"start_from must be one of {list(START_FROM)}, not {study.start_from!r}")
+    if study.application not in APPLICATIONS:
+        raise ValueError(f"application must be one of {list(APPLICATIONS)}, not {study.application!r}")
+    return study

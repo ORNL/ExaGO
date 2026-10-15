@@ -23,8 +23,8 @@ import pytest
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine.journal import SearchJournal
-from agentigrid.engine.regenerate_report import (
+from agentigrid.exago_engine.journal import SearchJournal
+from agentigrid.exago_engine.regenerate_report import (
     load_journal_export,
     build_session_stub,
     regenerate_from_journal,
@@ -123,7 +123,7 @@ def test_classification_digest_keeps_best_and_worst():
 
 @pytest.mark.skipif(not _IEEE118.exists(), reason="ieee_118_bus_v10.m not available")
 def test_finalize_uses_digest(tmp_path):
-    from agentigrid.engine.agent_loop import AgentLoopController, SearchSession
+    from agentigrid.exago_engine.agent_loop import AgentLoopController, SearchSession
 
     cfg = _cfg(tmp_path, base_case=_IEEE118)
     backend_mock = MagicMock()
@@ -132,8 +132,8 @@ def test_finalize_uses_digest(tmp_path):
         raw_text='```json\n{"goal_type": "cost_minimization", '
                  '"best_iteration": 1, "best_iteration_rationale": "r"}\n```'
     )
-    with patch("agentigrid.engine.agent_loop.create_backend", return_value=backend_mock), \
-         patch("agentigrid.engine.agent_loop.SimulationExecutor"):
+    with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=backend_mock), \
+         patch("agentigrid.exago_engine.agent_loop.SimulationExecutor"):
         controller = AgentLoopController(cfg)
 
     controller._journal = _big_sweep_journal(50, best_bus=10)
@@ -168,7 +168,7 @@ def test_finalize_uses_digest(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_load_session_preserves_sweep_fields(tmp_path):
-    from agentigrid.engine.session_io import save_session, load_session
+    from agentigrid.exago_engine.session_io import save_session, load_session
 
     journal = SearchJournal()
     journal.add_sweep(
@@ -312,7 +312,7 @@ def test_regenerate_with_mock_backend(tmp_path):
             captured["session"] = session
             return b"%PDF-1.4\nfake pdf bytes\n%%EOF"
 
-    with patch("agentigrid.engine.regenerate_report._import_report_generator",
+    with patch("agentigrid.exago_engine.regenerate_report._import_report_generator",
                return_value=_SpyGenerator):
         pdf_path = regenerate_from_journal(
             journal_json_path=export_path, config=cfg, backend=backend,

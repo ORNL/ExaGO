@@ -2,8 +2,8 @@
 
 import pytest
 
-from agentigrid.engine.journal import ObjectiveEntry
-from agentigrid.engine.pareto import ParetoCandidate, _dominates, pareto_filter
+from agentigrid.exago_engine.journal import ObjectiveEntry
+from agentigrid.exago_engine.pareto import ParetoCandidate, _dominates, pareto_filter
 
 
 # ---------------------------------------------------------------------------

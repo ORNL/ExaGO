@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from agentigrid.parsers.opflow_parser import parse_opflow_output, parse_simulation_result
-from agentigrid.parsers.opflow_results import OPFLOWResult
-from agentigrid.parsers.results_summary import results_summary
+from agentigrid.exago_parsers.opflow_parser import parse_opflow_output, parse_simulation_result
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_parsers.results_summary import results_summary
 
 SAMPLE = Path(__file__).resolve().parent.parent / "fixtures" / "sample_opflow_output.txt"
 _has_sample = SAMPLE.exists()

@@ -25,15 +25,15 @@ import pytest
 from agentigrid.config import (
     AppConfig, ExagoConfig, DataConfig, LLMConfig, SearchConfig, OutputConfig,
 )
-from agentigrid.engine import contingency as C
-from agentigrid.engine import topology as T
-from agentigrid.engine.commands import parse_command
-from agentigrid.engine.modifier import apply_modifications
-from agentigrid.engine.agent_loop import AgentLoopController
-from agentigrid.engine.executor import SimulationResult
-from agentigrid.parsers.matpower_model import Branch, Bus, Generator, MATNetwork
-from agentigrid.parsers.matpower_parser import parse_matpower
-from agentigrid.parsers.opflow_results import OPFLOWResult
+from agentigrid.exago_engine import contingency as C
+from agentigrid.exago_engine import topology as T
+from agentigrid.exago_engine.commands import parse_command
+from agentigrid.exago_engine.modifier import apply_modifications
+from agentigrid.exago_engine.agent_loop import AgentLoopController
+from agentigrid.exago_engine.executor import SimulationResult
+from agentigrid.exago_parsers.matpower_model import Branch, Bus, Generator, MATNetwork
+from agentigrid.exago_parsers.matpower_parser import parse_matpower
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 IEEE118 = DATA_DIR / "ieee_118_bus_v10.m"
@@ -431,8 +431,8 @@ class TestContingencyHandler:
     def _controller(self, tmp_path):
         cfg = _make_config(tmp_path)
         backend_mock = MagicMock()
-        with patch("agentigrid.engine.agent_loop.create_backend", return_value=backend_mock), \
-             patch("agentigrid.engine.agent_loop.SimulationExecutor") as mock_exec_cls:
+        with patch("agentigrid.exago_engine.agent_loop.create_backend", return_value=backend_mock), \
+             patch("agentigrid.exago_engine.agent_loop.SimulationExecutor") as mock_exec_cls:
             mock_executor = MagicMock()
             mock_executor.run.return_value = _sim_result()
             mock_executor.run_parallel.side_effect = (
@@ -454,7 +454,7 @@ class TestContingencyHandler:
         controller, backend_mock = self._controller(tmp_path)
         n = self._n_expected(1, 1)
         calls_before = len(backend_mock.mock_calls)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(feasible=True)):
             kind, ok = controller._handle_contingency_sweep(1, {
                 "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
@@ -489,7 +489,7 @@ class TestContingencyHandler:
     def test_n1_screen_all_fail_when_infeasible(self, tmp_path):
         controller, _ = self._controller(tmp_path)
         n = self._n_expected(1, 1)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(feasible=False)):
             kind, ok = controller._handle_contingency_sweep(1, {
                 "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
@@ -512,7 +512,7 @@ class TestContingencyHandler:
     def test_n2_screen_count(self, tmp_path):
         controller, _ = self._controller(tmp_path)
         n = self._n_expected(1, 2)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(feasible=True)):
             kind, ok = controller._handle_contingency_sweep(1, {
                 "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
@@ -527,7 +527,7 @@ class TestContingencyHandler:
 
     def test_n2_failures_counted_per_element(self, tmp_path):
         controller, _ = self._controller(tmp_path)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(feasible=False)):
             controller._handle_contingency_sweep(1, {
                 "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
@@ -563,7 +563,7 @@ class TestContingencyHandler:
 
     def test_default_depth_is_3(self, tmp_path):
         controller, _ = self._controller(tmp_path)
-        with patch("agentigrid.engine.agent_loop.parse_simulation_result_for_app",
+        with patch("agentigrid.exago_engine.agent_loop.parse_simulation_result_for_app",
                    return_value=_opflow(feasible=True)):
             kind, ok = controller._handle_contingency_sweep(1, {
                 "mode": "contingency", "mutation": {"action": "add_load_at_bus", "bus": 77, "Pd": 50.0},
@@ -712,7 +712,7 @@ class TestDescribeScope:
     """The one-line scope text shown in the launcher and PDF report."""
 
     def test_new_meta(self, grid):
-        from agentigrid.engine.journal import describe_contingency_scope
+        from agentigrid.exago_engine.journal import describe_contingency_scope
         a = C.find_affected_elements(grid, LOAD_AT_1, 2)
         text = describe_contingency_scope({
             "changed_element": LOAD_AT_1.to_dict(), "substation_depth": 2, "affected": a.to_dict(),
@@ -723,6 +723,6 @@ class TestDescribeScope:
         )
 
     def test_meta_without_affected_record(self):
-        from agentigrid.engine.journal import describe_contingency_scope
+        from agentigrid.exago_engine.journal import describe_contingency_scope
         text = describe_contingency_scope({"order": 1})
         assert text.startswith("study scope not recorded")

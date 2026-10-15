@@ -18,10 +18,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agentigrid.config import ExagoConfig, OutputConfig
-from agentigrid.engine.agent_loop import _single_call_record, _multi_call_record
-from agentigrid.engine.executor import SimulationExecutor, SimulationResult
-from agentigrid.engine.journal import SearchJournal
-from agentigrid.parsers import parse_matpower
+from agentigrid.exago_engine.agent_loop import _single_call_record, _multi_call_record
+from agentigrid.exago_engine.executor import SimulationExecutor, SimulationResult
+from agentigrid.exago_engine.journal import SearchJournal
+from agentigrid.exago_parsers import parse_matpower
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "exago" / "examples"
 ACTIVSG200 = DATA_DIR / "case_ACTIVSg200.m"
@@ -64,7 +64,7 @@ class TestExecutorCapture:
         exago, output = _make_config(tmp_path, tmp_path / "bin")
         ex = SimulationExecutor(exago, output)
         net = parse_matpower(ACTIVSG200)
-        with patch("agentigrid.engine.executor.subprocess.run") as mock_sub:
+        with patch("agentigrid.exago_engine.executor.subprocess.run") as mock_sub:
             mock_sub.return_value = MagicMock(stdout="OK", stderr="", returncode=0)
             res = ex.run(net, application="opflow", iteration=0)
         assert res.argv and res.argv[0].endswith("opflow")
@@ -79,7 +79,7 @@ class TestExecutorCapture:
         exago, output = _make_config(tmp_path, tmp_path / "bin")
         ex = SimulationExecutor(exago, output)
         net = parse_matpower(ACTIVSG200)
-        with patch("agentigrid.engine.executor.subprocess.run") as mock_sub:
+        with patch("agentigrid.exago_engine.executor.subprocess.run") as mock_sub:
             mock_sub.return_value = MagicMock(stdout="OK", stderr="", returncode=0)
             res = ex.run(net, application="opflow", iteration=1, thread_limit=1)
         assert res.env_overrides is not None
@@ -90,7 +90,7 @@ class TestExecutorCapture:
         exago, output = _make_config(tmp_path, tmp_path / "bin", mpi_np=4)
         ex = SimulationExecutor(exago, output)
         net = parse_matpower(ACTIVSG200)
-        with patch("agentigrid.engine.executor.subprocess.run") as mock_sub:
+        with patch("agentigrid.exago_engine.executor.subprocess.run") as mock_sub:
             mock_sub.return_value = MagicMock(stdout="OK", stderr="", returncode=0)
             res = ex.run(net, application="scopflow", iteration=0)
         assert res.argv[:3] == ["mpirun", "-np", "4"]
@@ -102,7 +102,7 @@ class TestExecutorCapture:
         exago, output = _make_config(tmp_path, tmp_path / "bin", env_script=env_script)
         ex = SimulationExecutor(exago, output)
         net = parse_matpower(ACTIVSG200)
-        with patch("agentigrid.engine.executor.subprocess.run") as mock_sub:
+        with patch("agentigrid.exago_engine.executor.subprocess.run") as mock_sub:
             mock_sub.return_value = MagicMock(stdout="OK", stderr="", returncode=0)
             res = ex.run(net, application="opflow", iteration=2, thread_limit=1)
         assert res.shell_command is not None

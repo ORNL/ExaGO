@@ -6,23 +6,23 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from agentigrid.parsers.pflow_parser import parse_pflow_output, parse_pflow_simulation_result
-from agentigrid.parsers.pflow_summary import pflow_results_summary
-from agentigrid.parsers import (
+from agentigrid.exago_parsers.pflow_parser import parse_pflow_output, parse_pflow_simulation_result
+from agentigrid.exago_parsers.pflow_summary import pflow_results_summary
+from agentigrid.exago_parsers import (
     results_summary_for_app,
     parse_simulation_result_for_app,
     parse_pflow_metadata,
 )
-from agentigrid.parsers.opflow_results import OPFLOWResult, BusResult, GenResult
-from agentigrid.parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
-from agentigrid.engine.commands import (
+from agentigrid.exago_parsers.opflow_results import OPFLOWResult, BusResult, GenResult
+from agentigrid.exago_parsers.matpower_model import MATNetwork, Bus, Generator, Branch, GenCost
+from agentigrid.exago_engine.commands import (
     SetTapRatio, SetShuntSusceptance, SetPhaseShiftAngle,
     SetGenVoltage, ScaleAllLoads, SetAllBusVLimits,
 )
-from agentigrid.engine.modifier import apply_modifications
-from agentigrid.engine.validation import validate_command
-from agentigrid.engine.metric_extractor import available_metrics_for_app
-from agentigrid.engine.goal_classifier import build_classification_prompts
+from agentigrid.exago_engine.modifier import apply_modifications
+from agentigrid.exago_engine.validation import validate_command
+from agentigrid.exago_engine.metric_extractor import available_metrics_for_app
+from agentigrid.exago_engine.goal_classifier import build_classification_prompts
 from agentigrid.prompts.exago.system_prompt import build_system_prompt, _app_section
 
 
@@ -433,7 +433,7 @@ class TestPFLOWCommands:
     """Test new PFLOW-specific commands: SetTapRatio, SetShuntSusceptance, SetPhaseShiftAngle."""
 
     def test_parse_set_tap_ratio(self):
-        from agentigrid.engine.commands import parse_command, SetTapRatio
+        from agentigrid.exago_engine.commands import parse_command, SetTapRatio
         cmd = parse_command({"action": "set_tap_ratio", "fbus": 1, "tbus": 3, "ratio": 1.05})
         assert isinstance(cmd, SetTapRatio)
         assert cmd.fbus == 1
@@ -441,14 +441,14 @@ class TestPFLOWCommands:
         assert cmd.ratio == 1.05
 
     def test_parse_set_shunt_susceptance(self):
-        from agentigrid.engine.commands import parse_command, SetShuntSusceptance
+        from agentigrid.exago_engine.commands import parse_command, SetShuntSusceptance
         cmd = parse_command({"action": "set_shunt_susceptance", "bus": 2, "Bs": 0.5})
         assert isinstance(cmd, SetShuntSusceptance)
         assert cmd.bus == 2
         assert cmd.Bs == 0.5
 
     def test_parse_set_phase_shift_angle(self):
-        from agentigrid.engine.commands import parse_command, SetPhaseShiftAngle
+        from agentigrid.exago_engine.commands import parse_command, SetPhaseShiftAngle
         cmd = parse_command({"action": "set_phase_shift_angle", "fbus": 2, "tbus": 3, "angle": 5.0})
         assert isinstance(cmd, SetPhaseShiftAngle)
         assert cmd.fbus == 2
@@ -456,12 +456,12 @@ class TestPFLOWCommands:
         assert cmd.angle == 5.0
 
     def test_parse_set_tap_ratio_with_ckt(self):
-        from agentigrid.engine.commands import parse_command
+        from agentigrid.exago_engine.commands import parse_command
         cmd = parse_command({"action": "set_tap_ratio", "fbus": 1, "tbus": 3, "ratio": 1.05, "ckt": 0})
         assert cmd.ckt == 0
 
     def test_command_map_has_pflow_commands(self):
-        from agentigrid.engine.commands import _COMMAND_MAP
+        from agentigrid.exago_engine.commands import _COMMAND_MAP
         assert "set_tap_ratio" in _COMMAND_MAP
         assert "set_shunt_susceptance" in _COMMAND_MAP
         assert "set_phase_shift_angle" in _COMMAND_MAP
@@ -719,14 +719,14 @@ class TestPFLOWSchemaDescription:
     """Test that the command schema includes PFLOW-specific commands."""
 
     def test_schema_has_pflow_commands(self):
-        from agentigrid.engine.schema_description import command_schema_text
+        from agentigrid.exago_engine.schema_description import command_schema_text
         schema = command_schema_text()
         assert "set_tap_ratio" in schema
         assert "set_shunt_susceptance" in schema
         assert "set_phase_shift_angle" in schema
 
     def test_schema_set_gen_voltage_mentions_pflow(self):
-        from agentigrid.engine.schema_description import command_schema_text
+        from agentigrid.exago_engine.schema_description import command_schema_text
         schema = command_schema_text()
         assert "PFLOW" in schema
         assert "set_gen_voltage" in schema
