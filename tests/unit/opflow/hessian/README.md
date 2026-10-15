@@ -9,7 +9,7 @@ See the explicit derivatives documented [here](/docs/opflow/pbpol.md).
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
-A 5-bus system **CICJ-unittestx1.m** will be used as a basis for this test. In addition, an artifical solution vector will be also generated as an input for the test.
+A 5-bus system **CICJ_unittestx1.m** will be used as a basis for this test. In addition, an artifical solution vector will be also generated as an input for the test.
 
 ### Hessian sparsity structure:
 
