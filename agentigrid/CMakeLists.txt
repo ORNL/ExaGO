@@ -1,20 +1,33 @@
 set(app_dest "${EXAGO_INSTALL_LIBEXECDIR}/agentigrid")
-install(DIRECTORY agentigrid launcher tests DESTINATION "${app_dest}"
-        PATTERN "__pycache__" EXCLUDE PATTERN "*.pyc" EXCLUDE
-        PATTERN ".pytest_cache" EXCLUDE)
+install(
+  DIRECTORY agentigrid launcher tests
+  DESTINATION "${app_dest}"
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE
+  PATTERN ".pytest_cache" EXCLUDE
+)
 install(FILES pytest.ini DESTINATION "${app_dest}")
-install(DIRECTORY configs DESTINATION "${EXAGO_INSTALL_DATADIR}/agentigrid"
-        PATTERN "env_setup.sh" EXCLUDE PATTERN "local_config.yaml" EXCLUDE
-        PATTERN "logs" EXCLUDE PATTERN "*.in" EXCLUDE)
+install(
+  DIRECTORY configs
+  DESTINATION "${EXAGO_INSTALL_DATADIR}/agentigrid"
+  PATTERN "env_setup.sh" EXCLUDE
+  PATTERN "local_config.yaml" EXCLUDE
+  PATTERN "logs" EXCLUDE
+  PATTERN "*.in" EXCLUDE
+)
 install(FILES README.md agentigrid_architecture.md
-        DESTINATION "${CMAKE_INSTALL_DOCDIR}/agentigrid")
+        DESTINATION "${CMAKE_INSTALL_DOCDIR}/agentigrid"
+)
 install(FILES applications/gridkit/README.md
-        DESTINATION "${app_dest}/applications/gridkit")
+        DESTINATION "${app_dest}/applications/gridkit"
+)
 install(FILES data/gridkit/README.md
-        DESTINATION "${EXAGO_INSTALL_DATADIR}/datafiles/gridkit")
-exago_install_python_app(agentigrid
-  "${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt"
-  "${CMAKE_CURRENT_SOURCE_DIR}/launcher/requirements.txt")
+        DESTINATION "${EXAGO_INSTALL_DATADIR}/datafiles/gridkit"
+)
+exago_install_python_app(
+  agentigrid "${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt"
+  "${CMAKE_CURRENT_SOURCE_DIR}/launcher/requirements.txt"
+)
 
 # ── CTest integration ──────────────────────────────────────────────────────
 
@@ -28,12 +41,14 @@ if(EXAGO_RUN_TESTS)
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   )
   set_tests_properties(
-    agentigrid_pytest PROPERTIES LABELS "agentigrid;python" TIMEOUT 300
-    ENVIRONMENT "EXAGO_TEST_BINARY_DIR=${PROJECT_BINARY_DIR}/applications"
+    agentigrid_pytest
+    PROPERTIES LABELS "agentigrid;python" TIMEOUT 300 ENVIRONMENT
+               "EXAGO_TEST_BINARY_DIR=${PROJECT_BINARY_DIR}/applications"
   )
 endif()
 
-install(CODE [=[
+install(
+  CODE [=[
 set(AGENTIGRID_BINARY_DIR "${EXAGO_BINDIR}")
 set(AGENTIGRID_DATA_DIR "${EXAGO_DATADIR}/datafiles")
 exago_configure_install("${EXAGO_PYTHON_APP_SOURCE}/configs/installed_config.yaml.in"
@@ -61,4 +76,5 @@ foreach(example IN LISTS examples)
   file(CREATE_LINK "${target}" "$ENV{DESTDIR}${examples_dir}/${alias}" SYMBOLIC)
   list(APPEND CMAKE_INSTALL_MANIFEST_FILES "${examples_dir}/${alias}")
 endforeach()
-]=])
+]=]
+)

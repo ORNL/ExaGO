@@ -319,7 +319,9 @@ if(EXAGO_ENABLE_IPOPT)
 endif()
 
 # Install options files
-install(FILES ${EXAGO_OPTIONS_FILES} DESTINATION ${EXAGO_INSTALL_DATADIR}/options)
+install(FILES ${EXAGO_OPTIONS_FILES}
+        DESTINATION ${EXAGO_INSTALL_DATADIR}/options
+)
 
 # Install shared input data
 include(ExaGOInstallData)

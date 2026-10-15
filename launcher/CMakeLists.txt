@@ -12,16 +12,30 @@ set(LAUNCH_CONFIG "${CMAKE_CURRENT_BINARY_DIR}/config.yaml")
 set(LAUNCH_PYTHON "${Python_EXECUTABLE}")
 set(LAUNCH_VENV_DIR "")
 configure_file(config.yaml.in config.yaml @ONLY)
-configure_file(run.sh.in run.sh @ONLY
-               FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
-                                GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+configure_file(
+  run.sh.in
+  run.sh
+  @ONLY
+  FILE_PERMISSIONS
+  OWNER_READ
+  OWNER_WRITE
+  OWNER_EXECUTE
+  GROUP_READ
+  GROUP_EXECUTE
+  WORLD_READ
+  WORLD_EXECUTE
+)
 
 install(FILES app.py viz_process.py viz_files.py
-        DESTINATION "${EXAGO_INSTALL_LIBEXECDIR}/launcher")
+        DESTINATION "${EXAGO_INSTALL_LIBEXECDIR}/launcher"
+)
 install(DIRECTORY figs DESTINATION "${EXAGO_INSTALL_DATADIR}/launcher")
-exago_install_python_app(launcher "${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt")
+exago_install_python_app(
+  launcher "${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt"
+)
 
-install(CODE [=[
+install(
+  CODE [=[
 set(LAUNCH_EXAGO_DIR "${CMAKE_INSTALL_PREFIX}")
 set(LAUNCH_BIN_DIR "${EXAGO_BINDIR}")
 set(LAUNCH_DATAFILES_DIR "${EXAGO_DATADIR}/datafiles")
@@ -37,4 +51,5 @@ set(LAUNCH_VENV_DIR "${EXAGO_VENV_DIR}")
 set(LAUNCH_PYTHON "${EXAGO_VENV_DIR}/bin/python")
 exago_configure_install("${EXAGO_PYTHON_APP_SOURCE}/config.yaml.in" "${LAUNCH_CONFIG}")
 exago_install_launcher("run.sh.in" "exago_launcher")
-]=])
+]=]
+)
