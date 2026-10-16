@@ -7,7 +7,7 @@ add_executable(app_pflow ${PFLOW_SRC})
 # Link libraries
 target_link_libraries(app_pflow ExaGO::PFLOW)
 set_target_properties(app_pflow PROPERTIES OUTPUT_NAME pflow)
-install(TARGETS app_pflow RUNTIME DESTINATION bin)
+install(TARGETS app_pflow RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(EXAGO_ENABLE_IPOPT OR EXAGO_ENABLE_HIOP)
 
@@ -21,14 +21,14 @@ if(EXAGO_ENABLE_IPOPT OR EXAGO_ENABLE_HIOP)
   add_executable(app_opflow ${OPFLOW_SRC})
   target_link_libraries(app_opflow ExaGO::OPFLOW)
   set_target_properties(app_opflow PROPERTIES OUTPUT_NAME opflow)
-  install(TARGETS app_opflow RUNTIME DESTINATION bin)
+  install(TARGETS app_opflow RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   # DCOPFLOW
   set(DCOPFLOW_SRC dcopflow_main.cpp)
   add_executable(app_dcopflow ${DCOPFLOW_SRC})
   target_link_libraries(app_dcopflow ExaGO::OPFLOW)
   set_target_properties(app_dcopflow PROPERTIES OUTPUT_NAME dcopflow)
-  install(TARGETS app_dcopflow RUNTIME DESTINATION bin)
+  install(TARGETS app_dcopflow RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   if(EXAGO_ENABLE_IPOPT)
 
@@ -37,21 +37,21 @@ if(EXAGO_ENABLE_IPOPT OR EXAGO_ENABLE_HIOP)
     add_executable(app_scopflow ${SCOPFLOW_SRC})
     target_link_libraries(app_scopflow ExaGO::SCOPFLOW)
     set_target_properties(app_scopflow PROPERTIES OUTPUT_NAME scopflow)
-    install(TARGETS app_scopflow RUNTIME DESTINATION bin)
+    install(TARGETS app_scopflow RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
     # SOPFLOW
     set(SOPFLOW_SRC sopflow_main.cpp)
     add_executable(app_sopflow ${SOPFLOW_SRC})
     target_link_libraries(app_sopflow ExaGO::SOPFLOW)
     set_target_properties(app_sopflow PROPERTIES OUTPUT_NAME sopflow)
-    install(TARGETS app_sopflow RUNTIME DESTINATION bin)
+    install(TARGETS app_sopflow RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
     # TCOPFLOW
     set(TCOPFLOW_SRC tcopflow_main.cpp)
     add_executable(app_tcopflow ${TCOPFLOW_SRC})
     target_link_libraries(app_tcopflow ExaGO::TCOPFLOW)
     set_target_properties(app_tcopflow PROPERTIES OUTPUT_NAME tcopflow)
-    install(TARGETS app_tcopflow RUNTIME DESTINATION bin)
+    install(TARGETS app_tcopflow RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   endif()
 endif()

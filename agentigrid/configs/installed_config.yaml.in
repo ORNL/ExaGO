@@ -1,0 +1,8 @@
+exago:
+  binary_dir: "@AGENTIGRID_BINARY_DIR@"
+  env_script: null
+data:
+  data_dir: "@AGENTIGRID_DATA_DIR@"
+output:
+  workdir: "${EXAGO_STATE_DIR}/agentigrid/workdir"
+  logs_dir: "${EXAGO_STATE_DIR}/agentigrid/logs"

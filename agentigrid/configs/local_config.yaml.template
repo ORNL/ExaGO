@@ -20,7 +20,7 @@ llm:
   api_key_env: "ANTHROPIC_API_KEY"     # env var name (unused for local Ollama)
   ollama_host: "http://localhost:11434"
   # ollama_cloud_host: null            # set for Ollama Cloud
-  temperature: 0.3
+  temperature: null            # omitted unless set
   max_tokens: 4096
 
 # Search settings

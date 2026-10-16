@@ -403,12 +403,20 @@ python -m agentigrid ./data/exago/examples/case_ACTIVSg200.m "test goal" --dry-r
 
 ## Installation
 
+When installed with ExaGO (`-DEXAGO_ENABLE_AGENTIGRID=ON`), run `agentigrid`
+for the CLI or `agentigrid_launcher` for the GUI from the installation's `bin/`
+directory. Both will use a private virtual environment automatically.
+See [the installation layout](../INSTALL.md) for more information.
+
+When developing from a source checkout:
+
 ```bash
 cd /path/to/agentigrid
 pip install -e .
 ```
 
-Copy or symlink ExaGO binaries into `applications/exago/` (see [applications/exago/README.md](applications/exago/README.md)) and place your own network data files in `data/exago/datafiles/`; ExaGO's example data is linked into `data/exago/examples/` (see [data/exago/README.md](data/exago/README.md)).
+Set `exago.binary_dir` in your config to your build's `applications/`
+directory.
 
 ## Configuration
 

@@ -69,9 +69,10 @@ class OpenAIBackend(LLMBackend):
             kwargs: dict = {
                 "model": self._config.model,
                 "messages": messages,
-                "temperature": temp,
                 "max_completion_tokens": self._config.max_tokens,
             }
+            if temp is not None:
+                kwargs["temperature"] = temp
             if use_json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
 

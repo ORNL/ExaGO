@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from agentigrid import __version__
-from agentigrid.config import AppConfig, load_config
+from agentigrid.config import AppConfig, get_default_config_path, load_config
 from agentigrid.logging_setup import setup_logging
 
 logger = logging.getLogger("agentigrid.cli")
@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--config",
-        default="configs/default_config.yaml",
+        default=str(get_default_config_path()),
         help="Path to config YAML file (default: configs/default_config.yaml)",
     )
     parser.add_argument(

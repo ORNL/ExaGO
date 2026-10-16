@@ -214,10 +214,16 @@ def render_sidebar() -> dict:
             key=model_key,
             disabled=disabled,
         )
-        temperature = st.slider(
-            "Temperature", 0.0, 1.0, 0.3, step=0.05,
-            disabled=disabled,
+        set_temperature = st.checkbox(
+            "Set temperature", value=False, disabled=disabled,
+            help="Leave off to use the model's default. Some models do not support temperature.",
         )
+        temperature = None
+        if set_temperature:
+            temperature = st.slider(
+                "Temperature", 0.0, 1.0, 0.3, step=0.05,
+                disabled=disabled,
+            )
 
         # ── Search Parameters ────────────────────────────────────────────
         st.header("⚙️ Search Parameters")

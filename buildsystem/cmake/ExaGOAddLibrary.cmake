@@ -122,14 +122,16 @@ macro(exago_add_library target)
 
     install(
       TARGETS ${_actual_target_name}
-      DESTINATION lib
+      DESTINATION ${CMAKE_INSTALL_LIBDIR}
       EXPORT exago-targets
     )
 
     # Install header files
     if(exago_add_library_HEADERS)
-      install(FILES ${exago_add_library_HEADERS}
-              DESTINATION "include/${exago_add_library_INCLUDE_SUBDIR}"
+      install(
+        FILES ${exago_add_library_HEADERS}
+        DESTINATION
+          "${CMAKE_INSTALL_INCLUDEDIR}/${exago_add_library_INCLUDE_SUBDIR}"
       )
     endif()
 

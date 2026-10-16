@@ -1,4 +1,4 @@
-from check_preconditions import check_preconditions
+from check_preconditions import check_preconditions, datafile
 import tempfile
 import os
 import shutil
@@ -30,19 +30,16 @@ def run_multicontingency(solver, nscen, ncont):
 
     sopf.set_tolerance(1.0E-03)
 
-    sopf.set_network_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod_gen3_wind.m'))
+    sopf.set_network_data(datafile('case9', 'case9mod_gen3_wind.m'))
 
     sopf.set_num_scenarios(nscen)
-    sopf.set_scenario_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', '10_scenarios_9bus.csv'),
+    sopf.set_scenario_data(datafile('case9', '10_scenarios_9bus.csv'),
         exago.ScenarioFileInputFormat.NATIVE_SINGLEPERIOD,
         exago.ScenarioUncertaintyType.WIND
     )
 
     sopf.enable_multi_contingency(True)
-    sopf.set_contingency_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9.cont'),
+    sopf.set_contingency_data(datafile('case9', 'case9.cont'),
         exago.ContingencyFileInputFormat.NATIVE
     )
     sopf.set_num_contingencies(ncont)
@@ -128,19 +125,16 @@ def test_multicontingency_7():
 @pytest.mark.MPI
 def test_multicontingency_8():
     sopf = exago.SOPFLOW()
-    path = exago.prefix()
 
     nscen = 3
     ncont = 6
 
     sopf.set_tolerance(1.0E-03)
 
-    sopf.set_network_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod_gen3_wind.m'))
+    sopf.set_network_data(datafile('case9', 'case9mod_gen3_wind.m'))
 
     sopf.set_num_scenarios(nscen)
-    sopf.set_scenario_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', '10_scenarios_9bus.csv'),
+    sopf.set_scenario_data(datafile('case9', '10_scenarios_9bus.csv'),
         exago.ScenarioFileInputFormat.NATIVE_SINGLEPERIOD,
         exago.ScenarioUncertaintyType.WIND
     )
@@ -150,8 +144,7 @@ def test_multicontingency_8():
     sopf.set_gen_bus_voltage_type('VARIABLE_WITHIN_BOUNDS')
 
     sopf.enable_multi_contingency(True)
-    sopf.set_contingency_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9.cont'),
+    sopf.set_contingency_data(datafile('case9', 'case9.cont'),
         exago.ContingencyFileInputFormat.NATIVE
     )
     sopf.set_num_contingencies(ncont)

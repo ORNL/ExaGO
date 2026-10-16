@@ -6,5 +6,4 @@ langchain-openai>=1.0.0
 langchain-ollama>=1.0.0
 shapely==2.1.2
 pandas==3.0.0
-geopandas==1.1.1
 duckdb>=1.0.0

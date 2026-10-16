@@ -19,35 +19,32 @@ The launcher supports six ExaGO applications:
 
 ## Quick Start
 
+After installing ExaGO with Python enabled, run `<prefix>/bin/exago_launcher`.
+
+For development from a checkout:
+
 ### Prerequisites
 
 - Python 3.10+
 - ExaGO compiled and installed (binaries available in `build/applications/`)
-    - Building ExaGO will generate `launcher/config.yaml` file.
 - Required Python packages: `streamlit`, `pyyaml`
 
 ### Install and Run
 
 ```bash
-cd launcher/
-pip install -r requirements.txt
-./run.sh
+pip install -r launcher/requirements.txt
+<build-directory>/launcher/run.sh
 ```
 
 Or manually:
 
 ```bash
-streamlit run app.py -- --config config.yaml
+streamlit run launcher/app.py -- --config <build-directory>/launcher/config.yaml
 ```
 
 The application opens in your browser at `http://localhost:8501`.
 
 ## Configuration
-
-All paths are loaded from a single **`config.yaml`** file. No paths are
-hardcoded in the application code, making it portable across machines.
-Configuration file `launcher/config.yaml` is generated during ExaGO build.
-Edit it only if you know what you are doing.
 
 ### Config File Location
 
@@ -60,7 +57,7 @@ The app resolves the config file path in this order:
 ### Config File Structure
 
 ```yaml
-# Root ExaGO directory — all other paths can reference this via ${exago_dir}
+# Root ExaGO directory
 exago_dir: /path/to/ExaGO
 
 # Path to compiled application binaries (opflow, pflow, scopflow, etc.)
@@ -135,10 +132,11 @@ Generates JSON output from OPFLOW and feeds it to the ExaGO visualization fronte
 
 Two modes:
 
-- **Run OPFLOW & Visualize**: Upload a network file (and optionally a GIC file), run OPFLOW with JSON output, copy the result to `viz/data/`, then launch the viz server.
-- **Use Existing JSON**: Upload a previously generated JSON file and configure the viz engine directly.
+- **Run OPFLOW & Visualize**: Upload a network file (and optionally a GIC file), run OPFLOW with JSON output, then launch the viz server.
+- **Use Existing JSON**: Upload a previously generated JSON file and click **Configure Viz with Selected File**.
 
-The visualization server runs on `http://localhost:5173` (Vite dev server). Use the Launch/Stop buttons to control it.
+The visualization server runs on port 8085. Use the Launch/Stop buttons to
+control it. Open or refresh the visualization link after changing the input.
 
 ### Tab 3: Python API
 

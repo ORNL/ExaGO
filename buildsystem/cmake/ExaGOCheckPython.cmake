@@ -11,7 +11,7 @@ if(${Python_VERSION} VERSION_LESS ${EXAGO_MIN_PYTHON_VERSION})
   set(EXAGO_ENABLE_PYTHON OFF)
 else()
   set(EXAGO_PYTHON_SITELIB
-      "lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
+      "${CMAKE_INSTALL_LIBDIR}/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
   )
   message(STATUS "Found Python interpreter: ${Python_EXECUTABLE}")
   message(STATUS "Using Python site library prefix: ${EXAGO_PYTHON_SITELIB}")

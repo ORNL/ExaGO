@@ -1,7 +1,6 @@
 #!/usr/bin/env perl
-$argc = @ARGV;
-if (argc > 0) {
-  $directory = $ARGV[0];
-  $cmd = "rm $directory/*.warning";
-  system($cmd);
-}
+use strict;
+use warnings;
+use File::Glob qw(bsd_glob);
+
+unlink bsd_glob("$ARGV[0]/*.warning") if @ARGV;

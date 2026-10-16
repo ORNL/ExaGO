@@ -1,4 +1,4 @@
-from check_preconditions import check_preconditions
+from check_preconditions import check_preconditions, datafile
 import tempfile
 import os
 import shutil
@@ -103,10 +103,8 @@ def test_set_time_step_and_duration():
 def test_set_network():
     '''Test reading network data'''
     scopf = exago.SCOPFLOW()
-    path = exago.prefix()
     scopf.set_network_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'case9mod.m'))
+        datafile('case9', 'case9mod.m'))
 
 
 @pytest.mark.nocomm
@@ -114,13 +112,10 @@ def test_set_network():
 def test_set_contingency_data():
     '''Test reading contingency data'''
     scopf = exago.SCOPFLOW()
-    path = exago.prefix()
     scopf.set_network_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'case9mod.m'))
+        datafile('case9', 'case9mod.m'))
     scopf.set_contingency_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'case9.cont'),
+        datafile('case9', 'case9.cont'),
         exago.ContingencyFileInputFormat.NATIVE
     )
 
@@ -130,22 +125,17 @@ def test_set_contingency_data():
 def test_set_load_data():
     '''Test reading load data'''
     scopf = exago.SCOPFLOW()
-    path = exago.prefix()
     scopf.set_network_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'case9mod.m'))
+        datafile('case9', 'case9mod.m'))
     scopf.set_contingency_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'case9.cont'),
+        datafile('case9', 'case9.cont'),
         exago.ContingencyFileInputFormat.NATIVE
     )
     scopf.set_pload_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'load_P.csv')
+        datafile('case9', 'load_P.csv')
     )
     scopf.set_qload_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'load_Q.csv')
+        datafile('case9', 'load_Q.csv')
     )
 
 
@@ -154,20 +144,15 @@ def test_set_load_data():
 def test_set_load_profiles():
     '''Test reading load profiles'''
     scopf = exago.SCOPFLOW()
-    path = exago.prefix()
     scopf.set_network_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'case9mod.m'))
+        datafile('case9', 'case9mod.m'))
     scopf.set_contingency_data(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'case9.cont'),
+        datafile('case9', 'case9.cont'),
         exago.ContingencyFileInputFormat.NATIVE
     )
     scopf.set_load_profiles(
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'load_P.csv'),
-        os.path.join(path, 'share', 'exago',
-                     'datafiles', 'case9', 'load_Q.csv')
+        datafile('case9', 'load_P.csv'),
+        datafile('case9', 'load_Q.csv')
     )
 
 
@@ -177,10 +162,8 @@ def test_complete_scopflow_solve():
     '''Testing scopflow solve'''
     scopf = exago.SCOPFLOW()
     path = exago.prefix()
-    scopf.set_network_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
-    scopf.set_contingency_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9.cont'),
+    scopf.set_network_data(datafile('case9', 'case9mod.m'))
+    scopf.set_contingency_data(datafile('case9', 'case9.cont'),
         exago.ContingencyFileInputFormat.NATIVE
     )
     scopf.set_tolerance(1.0E-03)

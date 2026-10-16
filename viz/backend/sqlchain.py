@@ -1,5 +1,9 @@
 import json
+import os
 import re
+import runpy
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import duckdb
@@ -7,7 +11,14 @@ from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
-import backend.config as config
+config_path = os.environ.get("EXAGO_VIZ_CONFIG")
+if not config_path:
+    config_home = os.environ.get("XDG_CONFIG_HOME")
+    if not config_home or not Path(config_home).is_absolute():
+        config_home = Path.home() / ".config"
+    config_path = str(Path(config_home) / "exago" / "viz" / "config.py")
+
+config = SimpleNamespace(**runpy.run_path(config_path))
 
 
 SQL_SYSTEM_PROMPT = """You are a DuckDB expert. Generate exactly one SQL query that answers the user's question.
@@ -68,12 +79,11 @@ def _build_llm():
     if provider == "openai":
         return ChatOpenAI(
             api_key=config.openai_key,
-            model=getattr(config, "openai_model", "gpt-5.6-luna"),
+            model=getattr(config, "openai_model", "gpt-6-luna"),
             reasoning={
                 "effort": "low",
                 "summary": "concise",
             },
-            temperature=0,
         )
 
     if provider == "ollama":
@@ -84,6 +94,11 @@ def _build_llm():
         )
 
     raise ValueError(f"Unsupported llm_provider: {provider!r}")
+
+
+def validate_config():
+    """Validate the configuration by attempting to build it."""
+    _build_llm()
 
 
 def _generate_sql(llm, question: str, table_info: str) -> str:
@@ -122,19 +137,19 @@ def _answer_question(llm, question: str, sql: str, rows: list[dict[str, Any]]) -
     )
     return _message_text(response).strip()
 
-def _retrieve_table_schema() -> str:
-    return duckdb.sql("SHOW ALL TABLES").fetchall()
+def _retrieve_table_schema(connection=duckdb) -> str:
+    return connection.sql("SHOW ALL TABLES").fetchall()
 
 
-def sqlchain(input_text: str) -> dict[str, Any]:
+def sqlchain(input_text: str, connection=duckdb) -> dict[str, Any]:
     llm = _build_llm()
 
     sql_cmd = ""
     try:
-        table_info = _retrieve_table_schema()
+        table_info = _retrieve_table_schema(connection)
         sql_cmd = _generate_sql(llm, input_text, table_info)
 
-        result = duckdb.sql(sql_cmd)
+        result = connection.sql(sql_cmd)
         columns = [desc[0] for desc in result.description]
         query_dict = [dict(zip(columns, row)) for row in result.fetchall()]
 

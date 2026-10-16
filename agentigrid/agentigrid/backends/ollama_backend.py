@@ -69,9 +69,10 @@ class OllamaBackend(LLMBackend):
         ]
 
         options: dict = {
-            "temperature": temp,
             "num_predict": self._config.max_tokens,
         }
+        if temp is not None:
+            options["temperature"] = temp
 
         kwargs: dict = {
             "model": self._config.model,

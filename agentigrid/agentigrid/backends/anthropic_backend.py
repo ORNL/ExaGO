@@ -54,13 +54,15 @@ class AnthropicBackend(LLMBackend):
         temp = temperature if temperature is not None else self._config.temperature
 
         try:
-            response = self._client.messages.create(
-                model=self._config.model,
-                max_tokens=self._config.max_tokens,
-                temperature=temp,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
+            kwargs: dict = {
+                "model": self._config.model,
+                "max_tokens": self._config.max_tokens,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            }
+            if temp is not None:
+                kwargs["temperature"] = temp
+            response = self._client.messages.create(**kwargs)
 
             raw_text = ""
             for block in response.content:

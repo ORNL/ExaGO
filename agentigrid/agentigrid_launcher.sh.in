@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+source "@EXAGO_VENV_DIR@/bin/activate"
+export PYTHONPATH="@EXAGO_APP_DIR@${PYTHONPATH:+:$PYTHONPATH}"
+export AGENTIGRID_CONFIG_DIR="${AGENTIGRID_CONFIG_DIR:-@EXAGO_APP_DATA_DIR@/configs}"
+export EXAGO_STATE_DIR="${EXAGO_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/exago}"
+mkdir -p "$EXAGO_STATE_DIR/agentigrid"
+cd "$EXAGO_STATE_DIR/agentigrid"
+exec "@EXAGO_VENV_DIR@/bin/python" -m streamlit run "@EXAGO_APP_DIR@/launcher/app.py" "$@"

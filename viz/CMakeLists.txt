@@ -1,35 +1,38 @@
-set(__install_dest share/exago/viz)
-
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
-set(EXAGO_VIZ_SUBDIRS backend data assets)
+set(VENV_PYTHON "${Python_EXECUTABLE}")
+set(INSTALL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+set(INSTALL_CODE "${CMAKE_CURRENT_SOURCE_DIR}")
+set(INSTALL_DATA "${CMAKE_CURRENT_SOURCE_DIR}/data")
+configure_file(
+  server.py.in
+  server.py
+  @ONLY
+  FILE_PERMISSIONS
+  OWNER_READ
+  OWNER_WRITE
+  OWNER_EXECUTE
+  GROUP_READ
+  GROUP_EXECUTE
+  WORLD_READ
+  WORLD_EXECUTE
+)
 
 install(
-  CODE "
-  set(VENV_DIR \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${__install_dest}/venv\")
-  execute_process(
-    COMMAND \"${Python3_EXECUTABLE}\" -m venv \"\${VENV_DIR}\"
-    COMMAND_ERROR_IS_FATAL ANY
-  )
-  if(WIN32)
-    set(VENV_PYTHON \"\${VENV_DIR}/Scripts/python.exe\")
-  else()
-    set(VENV_PYTHON \"\${VENV_DIR}/bin/python\")
-  endif()
-
-  set(INSTALL_ROOT \"\${CMAKE_INSTALL_PREFIX}/${__install_dest}\")
-
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/server.py.in
-    \${CMAKE_INSTALL_PREFIX}/${__install_dest}/server.py @ONLY
-  )
-
-  execute_process(
-    COMMAND \"\${VENV_PYTHON}\" -m pip install
-            --ignore-installed
-            -r \"${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt\"
-    COMMAND_ERROR_IS_FATAL ANY
-  )
-"
+  DIRECTORY backend
+  DESTINATION "${EXAGO_INSTALL_LIBEXECDIR}/viz"
+  PATTERN "config.py" EXCLUDE
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE
 )
-install(DIRECTORY ${EXAGO_VIZ_SUBDIRS} DESTINATION ${__install_dest})
+install(DIRECTORY assets DESTINATION "${EXAGO_INSTALL_DATADIR}/viz")
+exago_install_python_app(viz "${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt")
+
+install(
+  CODE [=[
+set(VENV_PYTHON "${EXAGO_VENV_DIR}/bin/python")
+set(INSTALL_ROOT "${EXAGO_APP_DATA_DIR}")
+set(INSTALL_CODE "${EXAGO_APP_DIR}")
+set(INSTALL_DATA "${EXAGO_DATADIR}/datafiles/viz")
+exago_configure_install("${EXAGO_PYTHON_APP_SOURCE}/server.py.in" "${EXAGO_APP_DIR}/server.py")
+exago_install_launcher("run.sh.in" "exago_viz")
+]=]
+)

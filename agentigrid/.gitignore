@@ -50,7 +50,7 @@ configs/logs/
 # =============================================================================
 # Local binaries and data (large, machine-specific)
 # Available via the ExaGO build and datafiles/ at the ExaGO root.
-# Only the README explaining what goes here is tracked.
+# READMEs and portable example symlinks are tracked.
 # =============================================================================
 applications/*
 !applications/README.md
@@ -65,6 +65,7 @@ data/*
 !data/exago/
 !data/gridkit/
 data/exago/*
+!data/exago/examples/
 data/gridkit/*
 !data/exago/README.md
 !data/gridkit/README.md

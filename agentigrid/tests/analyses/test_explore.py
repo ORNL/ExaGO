@@ -1,5 +1,7 @@
 """Tests for explore/select actions and concurrent PFLOW support."""
 
+from pathlib import Path
+
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -259,7 +261,7 @@ class TestAllNoOpRejection:
     @pytest.fixture
     def net(self):
         from agentigrid.parsers.matpower_parser import parse_matpower
-        return parse_matpower("data/exago/examples/case_ACTIVSg200.m")
+        return parse_matpower(Path(__file__).resolve().parents[2] / "data/exago/examples/case_ACTIVSg200.m")
 
     def test_all_slack_dispatch_yields_zero_applied(self, net):
         """apply_modifications against slack-only commands → applied is empty."""

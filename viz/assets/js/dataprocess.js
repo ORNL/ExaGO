@@ -1,65 +1,47 @@
-import { center, convex, bbox } from "@turf/turf";
+import { convex, bbox, booleanPointInPolygon } from "@turf/turf";
 import us from "us";
 
 const countydata = await fetch("/assets/data/counties.json").then(r => r.json());
 const codeDict = us.mapping("fips", "abbr");
 
 function getCountyNodes(data) {
-  var ncounties = countydata.features.length;
-  var countygeojson = { type: "FeatureCollection", features: [], maxPd: 0.0 };
-  for (var j = 0; j < ncounties; j++) {
-    //    if(countydata.features[j].properties.STATE !== "13" & countydata.features[j].properties.STATE !== "25")
-    //        continue;
-    var polygon = countydata.features[j];
-    var box = bbox(polygon);
-
-    countydata.features[j].properties.Pd = 0.0;
-    countydata.features[j].properties.Vm_avg = 0.0;
-    countydata.features[j].properties.KVlevels = [];
-    countydata.features[j].properties.countyname = countydata.features[j].properties.NAME + ", " + codeDict[countydata.features[j].properties.STATE];
-    var countyhassubst = false;
-    var nbuscounty = 0;
-    for (var i = 0; i < data.features.length; i++) {
-      if (data.features[i].geometry.type == "Point") {
-        var lng = data.features[i].geometry.coordinates[0];
-        var lat = data.features[i].geometry.coordinates[1];
-
-        if ((box[0] <= lng) & (box[2] >= lng) & (box[1] <= lat) & (box[3] >= lat)) {
-          //update data with county name, similar to spatial join
-          data.features[i].properties.countyname = countydata.features[j].properties.NAME + ", " + codeDict[countydata.features[j].properties.STATE];
-
-          countyhassubst = true;
-          var subst = data.features[i].properties;
-          var nbus = subst.nbus;
-
-          countydata.features[j].properties.KVlevels = [...countydata.features[j].properties.KVlevels, ...data.features[i].properties.KVlevels];
-          for (var k = 0; k < nbus; k++) {
-            var bus = subst.bus[k];
-            countydata.features[j].properties.Pd += bus.PDloss;
-            countydata.features[j].properties.Vm_avg += bus.VM;
-            nbuscounty++;
-          }
-        }
-      } else {
-        // add source and target info to linestring
-        if (data.features[i].properties.PF > 0) {
-          const [src, trg] = data.features[i].properties.NAME.split(" -- ");
-          data.features[i].properties.source = src;
-          data.features[i].properties.target = trg;
-        } else {
-          const [trg, src] = data.features[i].properties.NAME.split(" -- ");
-          data.features[i].properties.source = src;
-          data.features[i].properties.target = trg;
+  const points = data.features.filter((f) => f.geometry.type === "Point");
+  for (const point of points) {
+    const buses = point.properties.bus;
+    point.properties.Vm = buses.reduce((sum, bus) => sum + bus.VM, 0) / buses.length;
+    point.properties.Va = buses[0].VA;
+    point.properties.Pd = buses.reduce((sum, bus) => sum + (bus.PD ?? 0), 0);
+    point.properties.Qd = buses.reduce((sum, bus) => sum + (bus.QD ?? 0), 0);
+    point.properties.bus_type = buses[0].BUS_TYPE;
+    point.properties.countyname = "";
+  }
+  const counties = [];
+  let maxPd = 0;
+  for (const polygon of countydata.features) {
+    const box = bbox(polygon);
+    const properties = { ...polygon.properties, Pd: 0, Vm_avg: 0, KVlevels: [] };
+    properties.countyname = `${properties.NAME}, ${codeDict[properties.STATE] ?? properties.STATE}`;
+    let busCount = 0;
+    for (const point of points) {
+      const [lng, lat] = point.geometry.coordinates;
+      if (box[0] <= lng && lng <= box[2] && box[1] <= lat && lat <= box[3]
+          && booleanPointInPolygon(point, polygon)) {
+        point.properties.countyname = properties.countyname;
+        properties.KVlevels.push(...point.properties.KVlevels);
+        for (const bus of point.properties.bus) {
+          properties.Pd += bus.PDloss ?? 0;
+          properties.Vm_avg += bus.VM;
+          busCount++;
         }
       }
     }
-    if (countyhassubst) {
-      countydata.features[j].properties.Vm_avg /= nbuscounty;
-      if (countydata.features[j].properties.Pd > countygeojson.maxPd) countygeojson.maxPd = countydata.features[j].properties.Pd;
-      countygeojson.features.push(countydata.features[j]);
+    if (busCount) {
+      properties.Vm_avg /= busCount;
+      maxPd = Math.max(maxPd, properties.Pd);
+      counties.push({ ...polygon, properties });
     }
   }
-  return { maxPd: countygeojson.maxPd, data: countygeojson, updatedata: data };
+  return { maxPd, data: { type: "FeatureCollection", features: counties }, updatedata: data };
 }
 
 // Extract data for first time-slice
@@ -71,100 +53,44 @@ function ExtractFirstTimeSlice(data) {
   return gdata;
 }
 
-function ExtractFlowData(data) {
-  // name is the unique id
-  const locations = [];
-  const flows = [];
-  const reactive_flows = [];
-  // const locationDict = {}
-  data.features.forEach((feature) => {
-    if (feature.geometry.type === "Point") {
-      locations.push({
-        id: feature.properties.NAME,
-        name: feature.properties.NAME,
-        lon: feature.geometry.coordinates[0],
-        lat: feature.geometry.coordinates[1],
-      });
-    } else if (feature.geometry.type === "LineString") {
-      var RATE_A;
-      if (feature.properties.RATE_A == 0) {
-        RATE_A = 10000;
-      } else {
-        RATE_A = feature.properties.RATE_A;
-      }
-      var loading = Math.abs(feature.properties.PF / RATE_A) * 100;
-
-      var var_loading = Math.abs(feature.properties.QF / RATE_A) * 100;
-      var mva_loading = (Math.sqrt(feature.properties.PF * feature.properties.PF + feature.properties.QF * feature.properties.QF) / RATE_A) * 100;
-
-      if (feature.properties.PF > 0 && feature.properties.QF < 0) {
-        // console.log("Line " + feature.properties.NAME + " has PF>0 and QF<0");
-
-        if (feature.properties.PF > 0) {
-          const [origin, dest] = feature.properties.NAME.split(" -- ");
-          flows.push({
-            origin: origin,
-            dest: dest,
-            count: feature.properties.KV,
-            loading: loading,
-          });
-        } else {
-          const [dest, origin] = feature.properties.NAME.split(" -- ");
-          flows.push({
-            origin: origin,
-            dest: dest,
-            count: feature.properties.KV,
-            loading: loading,
-          });
-        }
-
-        if (feature.properties.QF > 0) {
-          const [origin, dest] = feature.properties.NAME.split(" -- ");
-          reactive_flows.push({
-            origin: origin,
-            dest: dest,
-            count: feature.properties.KV,
-            loading: var_loading,
-          });
-        } else {
-          const [dest, origin] = feature.properties.NAME.split(" -- ");
-          reactive_flows.push({
-            origin: origin,
-            dest: dest,
-            count: feature.properties.KV,
-            loading: var_loading,
-          });
-        }
-      }
+function ExtractFlowData(data, {
+  voltageRange = [0, Infinity], activeRange = [0, Infinity], reactiveRange = [0, Infinity],
+  lineNames = [], busNames = [],
+} = {}) {
+  const locations = data.features.filter((f) => f.geometry.type === "Point").map((f) => ({
+    id: f.properties.NAME, name: f.properties.NAME,
+    lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1],
+  }));
+  const locationIds = new Set(locations.map((location) => location.id));
+  const flows = [], reactiveFlows = [];
+  for (const feature of data.features) {
+    if (feature.geometry.type !== "LineString") continue;
+    const p = feature.properties;
+    const [a, b] = p.NAME.split(" -- ");
+    if (!locationIds.has(a) || !locationIds.has(b)) continue;
+    if (p.KV < voltageRange[0] || p.KV > voltageRange[1]) continue;
+    if (lineNames.length && !lineNames.includes(p.NAME)) continue;
+    if (!lineNames.length && busNames.length && !busNames.includes(a) && !busNames.includes(b)) continue;
+    const rating = p.RATE_A > 0 ? p.RATE_A : 10000;
+    const loading = Math.abs(p.PF / rating) * 100;
+    const reactiveLoading = Math.abs(p.QF / rating) * 100;
+    if (Number.isFinite(loading) && activeRange[0] <= loading && loading <= activeRange[1]) {
+      flows.push({ origin: p.PF >= 0 ? a : b, dest: p.PF >= 0 ? b : a, count: p.KV, loading });
     }
-  });
-
-  // remove duplicated flows
-  const uniq = new Set(flows.map((e) => JSON.stringify(e)));
-  const res = Array.from(uniq).map((e) => JSON.parse(e));
-
-  const uniq2 = new Set(reactive_flows.map((e) => JSON.stringify(e)));
-  const res2 = Array.from(uniq2).map((e) => JSON.parse(e));
-
+    if (Number.isFinite(reactiveLoading) && reactiveRange[0] <= reactiveLoading && reactiveLoading <= reactiveRange[1]) {
+      reactiveFlows.push({ origin: p.QF >= 0 ? a : b, dest: p.QF >= 0 ? b : a, count: p.KV, loading: reactiveLoading });
+    }
+  }
+  const unique = (items) => [...new Map(items.map((item) => [JSON.stringify(item), item])).values()];
   return [
-    {
-      locations: locations,
-      flows: res,
-      maxloading: 120,
-    },
-    {
-      locations: locations,
-      flows: res2,
-      maxloading: 120,
-    },
+    { locations, flows: unique(flows), maxloading: 120 },
+    { locations, flows: unique(reactiveFlows), maxloading: 120 },
   ];
 }
 
-//get net data for bar
+// get net data for bar
 function getBarNet(data) {
-  const netBarValue = data.foreach((line) => {
-    line.properties.KV;
-  });
+  const netBarValue = data.features.map((line) => line.properties.KV);
   return netBarValue;
 }
 
@@ -188,7 +114,7 @@ function getPoints(data) {
 function getGeneration(data) {
   var Geni;
   var Gens = [];
-  var minPg = 1000.0;
+  var minPg = Infinity;
   var maxPg = 0.0;
   var elev;
   var i, j, k;
@@ -209,7 +135,7 @@ function getGeneration(data) {
   for (i = 0; i < data.features.length; i++) {
     if (data.features[i].geometry.type == "Point") {
       var subst = data.features[i].properties;
-      var nbus = subst.nbus;
+      var nbus = subst.bus.length;
       var Pg = 0.0;
       var Pcap = 0.0;
       var gen_fuel;
@@ -220,11 +146,11 @@ function getGeneration(data) {
       for (j = 0; j < nbus; j++) {
         var bus = subst.bus[j];
         KV.push(bus.BASE_KV);
-        for (k = 0; k < bus.ngen; k++) {
+        for (k = 0; k < (bus.gen?.length ?? 0); k++) {
           var gen = bus.gen[k];
           Pg += gen.GEN_STATUS * gen.PG;
           Pcap += gen.GEN_STATUS * gen.PMAX;
-          gen_fuel = gen.GEN_FUEL.toLowerCase();
+          gen_fuel = (gen.GEN_FUEL ?? "other").toLowerCase();
 
           if (gen_fuel == "wind") {
             Pgwind += gen.GEN_STATUS * gen.PG;
@@ -268,6 +194,7 @@ function getGeneration(data) {
     }
   }
 
+  if (!Gens.length) minPg = 0;
   return { minPg: minPg, maxPg: maxPg, Gens: Gens, Pgwind: Pgwind, Pgsolar: Pgsolar, Pgnuclear: Pgnuclear, Pghydro: Pghydro, Pgng: Pgng, Pgcoal: Pgcoal, Pgother: Pgother, Pgwindcap: Pgwindcap, Pgsolarcap: Pgsolarcap, Pgnuclearcap: Pgnuclearcap, Pghydrocap: Pghydrocap, Pgngcap: Pgngcap, Pgcoalcap: Pgcoalcap, Pgothercap: Pgothercap };
 }
 
@@ -282,7 +209,7 @@ function getLoad(data) {
   for (i = 0; i < data.features.length; i++) {
     if (data.features[i].geometry.type == "Point") {
       var subst = data.features[i].properties;
-      var nbus = subst.nbus;
+      var nbus = subst.bus.length;
       var Pd = 0.0;
       var Qd = 0.0;
       for (j = 0; j < nbus; j++) {
@@ -334,7 +261,7 @@ function getArea(data, area_num) {
 function getAreas(sysdata) {
   var areas = [];
 
-  for (var i = 0; i < sysdata.nareas; i++) {
+  for (var i = 0; i < (sysdata.areas?.length ?? 0); i++) {
     var area = getArea(sysdata.geojsondata, sysdata.areas[i]);
     if (area) {
       areas.push(area);
@@ -365,7 +292,7 @@ function getZone(data, zone_num) {
 function getZones(sysdata) {
   var zones = [];
 
-  for (var i = 0; i < sysdata.nzones; i++) {
+  for (var i = 0; i < (sysdata.zones?.length ?? 0); i++) {
     var zone = getZone(sysdata.geojsondata, sysdata.zones[i]);
     if (zone) {
       zones.push(zone);

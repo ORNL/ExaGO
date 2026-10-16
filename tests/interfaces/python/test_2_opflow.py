@@ -1,4 +1,4 @@
-from check_preconditions import check_preconditions
+from check_preconditions import check_preconditions, datafile
 import os
 import pytest
 import mpi4py.rc
@@ -134,9 +134,7 @@ def test_set_has_gensetpoint():
 def test_read_mat_power_data():
     '''Test mat power data read'''
     opf = exago.OPFLOW()
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
 
 
 @pytest.mark.nocomm
@@ -150,9 +148,7 @@ def test_set_model_and_solver():
     opf.set_model("POWER_BALANCE_HIOP")
     model = opf.get_model()
     assert model == "POWER_BALANCE_HIOP"
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
 
 
 @pytest.mark.nocomm
@@ -198,9 +194,7 @@ def test_solve_opflow():
     opf.set_model("POWER_BALANCE_HIOP")
     opf.set_hiop_mem_space("DEFAULT")
     opf.set_hiop_compute_mode("CPU")
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
     opf.solve()
 
 
@@ -213,9 +207,7 @@ def test_obj_func():
     opf.set_model("POWER_BALANCE_HIOP")
     opf.set_hiop_mem_space("DEFAULT")
     opf.set_hiop_compute_mode("CPU")
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
     opf.set_model('POWER_BALANCE_HIOP')
     opf.set_solver('HIOP')
     opf.set_hiop_compute_mode("CPU")
@@ -235,9 +227,7 @@ def test_convergence_status():
     opf.set_model("POWER_BALANCE_HIOP")
     opf.set_hiop_mem_space("DEFAULT")
     opf.set_hiop_compute_mode("CPU")
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
     opf.set_model('POWER_BALANCE_HIOP')
     opf.set_solver('HIOP')
     opf.set_hiop_compute_mode("CPU")
@@ -368,9 +358,7 @@ def test_skip_options():
 def test_ps():
     '''Testing ps set up'''
     opf = exago.OPFLOW()
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
     opf.set_up_ps()
 
 
@@ -383,9 +371,7 @@ def test_ps_set_gen_power_limits():
     opf.set_model("POWER_BALANCE_HIOP")
     opf.set_hiop_mem_space("DEFAULT")
     opf.set_hiop_compute_mode("CPU")
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
     opf.set_up_ps()
     opf.ps_set_gen_power_limits(3, "1 ", 65, 0, exago_ignore, exago_ignore)
     opf.solve()
@@ -400,9 +386,7 @@ def test_solution_to_ps():
     opf.set_model("POWER_BALANCE_HIOP")
     opf.set_hiop_mem_space("DEFAULT")
     opf.set_hiop_compute_mode("CPU")
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
     opf.set_up_ps()
     opf.ps_set_gen_power_limits(3, "1 ", 65, 0, exago_ignore, exago_ignore)
     opf.solve()
@@ -419,9 +403,7 @@ def test_get_gen_dispatch():
     opf.set_hiop_mem_space("DEFAULT")
     opf.set_hiop_compute_mode("CPU")
     opf.set_hiop_verbosity_level(3)
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
     opf.set_up_ps()
     opf.ps_set_gen_power_limits(3, "1 ", 65, 0, exago_ignore, exago_ignore)
     opf.solve()
@@ -433,16 +415,14 @@ def test_get_gen_dispatch():
 
 @pytest.mark.nocomm
 @pytest.mark.MPI
-def test_save_solution():
+def test_save_solution(tmp_path):
     '''Testing opflow saving solve to file'''
     opf = exago.OPFLOW()
     opf.set_solver("HIOP")
     opf.set_model("POWER_BALANCE_HIOP")
     opf.set_hiop_mem_space("DEFAULT")
     opf.set_hiop_compute_mode("CPU")
-    path = exago.prefix()
-    opf.read_mat_power_data(os.path.join(
-        path, 'share', 'exago', 'datafiles', 'case9', 'case9mod.m'))
+    opf.read_mat_power_data(datafile('case9', 'case9mod.m'))
     opf.solve()
-    filepath = os.path.join(path, '..', 'tmp.output')
+    filepath = str(tmp_path / "tmp.output")
     opf.save_solution(exago.CSV, filepath)

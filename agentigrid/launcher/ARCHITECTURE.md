@@ -224,8 +224,8 @@ Always visible. Contains all search parameters.
 
 **Section: LLM Backend**
 - Backend selector: `anthropic` | `openai` | `ollama` | `ollama-cloud`
-- Model name text input (pre-filled with defaults per backend: `claude-sonnet-4-20250514` for Anthropic, `gpt-4o` for OpenAI, etc.)
-- Temperature slider (0.0 – 1.0, default 0.3)
+- Model name text input (pre-filled with defaults per backend: `claude-sonnet-4-20250514` for Anthropic, `gpt-6-luna` for OpenAI, etc.)
+- Optional temperature slider (0.0 – 1.0). This is disabled by default so the request uses the model's defaults
 
 **Section: Search Parameters**
 - Application selector: `opflow` (initially only, grayed-out placeholders for others)
@@ -646,7 +646,7 @@ def build_config_overrides(
     base_case: str,
     backend: str,
     model: str,
-    temperature: float,
+    temperature: float | None,
     application: str,
     default_mode: str,
     max_iterations: int,
