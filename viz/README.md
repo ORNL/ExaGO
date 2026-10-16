@@ -165,12 +165,31 @@ flow chart shows the architecture design of ChatGrid.
 ### Configuration
 
 Behind the scenes, an LLM translates natural language questions into SQL
-queries. It may be set up by editing the configuration file.
+queries. Configure it with a Python file loaded when the server starts:
 
-Within `viz/backend`, copy `config.example.py` to `config.py`. Set
-`llm_provider` to the desired provider and configure its key and model
-as described in that file. Rebuild/reinstall ExaGO after configuring the
-source tree, or set `EXAGO_VIZ_CONFIG` to a configuration file at runtime.
+1. If `EXAGO_VIZ_CONFIG` is set, its value is the path to the configuration
+   file.
+2. Otherwise, the server loads `$XDG_CONFIG_HOME/exago/viz/config.py` when
+   `XDG_CONFIG_HOME` is a nonempty, absolute directory path. If it is unset,
+   empty, or relative, the server uses `$HOME/.config/exago/viz/config.py`.
 
-If ChatGrid configuration is unavailable, the server logs a configuration
-message and continues serving the visualization.
+For the default location, run these commands from the repository root:
+
+```sh
+mkdir -p "$HOME/.config/exago/viz"
+cp viz/backend/config.example.py "$HOME/.config/exago/viz/config.py"
+```
+
+Edit the copied file to select `llm_provider` (`"anthropic"`, `"openai"`, or
+`"ollama"`) and set that provider's key, model, and other settings as described
+in the example.
+
+Alternatively, copy the example to a location of your choice and pass its
+path explicitly when starting the server:
+
+```sh
+EXAGO_VIZ_CONFIG=/absolute/path/to/config.py "$EXAGO_INSTALL/bin/exago_viz"
+```
+
+If configuration is unavailable or invalid, the server logs a message and
+continues serving the visualization with ChatGrid disabled.

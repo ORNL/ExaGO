@@ -56,8 +56,10 @@ try:
 
 except Exception as error:
     app.logger.warning(
-        "ChatGrid is unavailable (%s). Configure backend/config.py or "
-        "EXAGO_VIZ_CONFIG to enable it; visualization will continue.", error,
+        "ChatGrid is unavailable (%s). Configure exago/viz/config.py under "
+        "XDG_CONFIG_HOME (default: ~/.config), or set EXAGO_VIZ_CONFIG to a "
+        "configuration file.",
+        error,
     )
 
 

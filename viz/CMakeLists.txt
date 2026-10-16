@@ -19,6 +19,7 @@ configure_file(
 install(
   DIRECTORY backend
   DESTINATION "${EXAGO_INSTALL_LIBEXECDIR}/viz"
+  PATTERN "config.py" EXCLUDE
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE
 )

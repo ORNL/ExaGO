@@ -2,6 +2,7 @@ import json
 import os
 import re
 import runpy
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -10,10 +11,14 @@ from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
-if config_path := os.environ.get("EXAGO_VIZ_CONFIG"):
-    config = SimpleNamespace(**runpy.run_path(config_path))
-else:
-    from backend import config
+config_path = os.environ.get("EXAGO_VIZ_CONFIG")
+if not config_path:
+    config_home = os.environ.get("XDG_CONFIG_HOME")
+    if not config_home or not Path(config_home).is_absolute():
+        config_home = Path.home() / ".config"
+    config_path = str(Path(config_home) / "exago" / "viz" / "config.py")
+
+config = SimpleNamespace(**runpy.run_path(config_path))
 
 
 SQL_SYSTEM_PROMPT = """You are a DuckDB expert. Generate exactly one SQL query that answers the user's question.
