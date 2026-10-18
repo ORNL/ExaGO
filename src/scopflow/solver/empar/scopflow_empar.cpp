@@ -28,7 +28,7 @@ PetscErrorCode SCOPFLOWSolverSolve_EMPAR(SCOPFLOW scopflow) {
     }
   }
 
-  /* EMPAR is non-iterative, so keep the default scopflow->number_iterations = 0 */
+  /* EMPAR is non-iterative, so keep the default number_iterations = 0 */
 
   PetscFunctionReturn(ierr);
 }

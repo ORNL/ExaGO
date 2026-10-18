@@ -257,11 +257,11 @@ struct OpflowFunctionalityTests
                    params.warning_tolerance, params.error)) {
         obj_failed = true;
 #ifdef EXAGO_ENABLE_LOGGING
-        params.reasons_for_failure.push_back(
-            fmt::format("expected objective value = {}, actual objective value = {}, "
-                        "tol = {}, err = {}",
-                        params.expected_obj_value, params.obj_value,
-                        params.tolerance, params.error));
+        params.reasons_for_failure.push_back(fmt::format(
+            "expected objective value = {}, actual objective value = {}, "
+            "tol = {}, err = {}",
+            params.expected_obj_value, params.obj_value, params.tolerance,
+            params.error));
 #else
         char sbuf[256];
         sprintf(sbuf,
