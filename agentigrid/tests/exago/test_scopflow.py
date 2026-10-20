@@ -6,14 +6,14 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from agentigrid.parsers.scopflow_parser import parse_scopflow_output, parse_scopflow_simulation_result
-from agentigrid.parsers.scopflow_summary import scopflow_results_summary
-from agentigrid.parsers import (
+from agentigrid.exago_parsers.scopflow_parser import parse_scopflow_output, parse_scopflow_simulation_result
+from agentigrid.exago_parsers.scopflow_summary import scopflow_results_summary
+from agentigrid.exago_parsers import (
     results_summary_for_app,
     parse_simulation_result_for_app,
     parse_scopflow_metadata,
 )
-from agentigrid.parsers.opflow_parser import parse_opflow_output
+from agentigrid.exago_parsers.opflow_parser import parse_opflow_output
 from agentigrid.config import SearchConfig
 
 
