@@ -92,9 +92,9 @@ struct _p_TCOPFLOW {
 
   PetscBool setupcalled; /* TCOPFLOWSetUp called? */
 
-  PetscBool converged; /* Convergence status */
-  PetscInt numiter;    /* Number of iterations */
-  PetscReal tolerance; /* Tolerance for TCOPFLOW */
+  PetscBool converged;        /* Convergence status */
+  PetscInt number_iterations; /* Number of iterations */
+  PetscReal tolerance;        /* Tolerance for TCOPFLOW */
 
   char netfile[PETSC_MAX_PATH_LEN]; /* Network data file */
 
