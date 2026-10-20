@@ -1,0 +1,9 @@
+# Optional dependencies for retrieval grounding (RAG). Not needed when RAG is off
+# (the default). Install with:  pip install -r requirements-rag.txt
+# Also needs a running Ollama server with the embedding model:
+#   ollama pull nomic-embed-text
+chromadb>=0.4
+requests>=2
+
+# Optional: local cross-encoder grader for corrective mode (AGENTIGRID_CRAG_GRADER=reranker)
+# sentence-transformers>=3
