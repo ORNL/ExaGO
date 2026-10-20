@@ -23,7 +23,11 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 from agentigrid.exago_engine.agent_loop import SearchSession
-from agentigrid.exago_engine.journal import describe_contingency_scope, is_solve_iteration
+from agentigrid.exago_engine.journal import (
+    describe_contingency_scope,
+    format_iteration_count,
+    is_solve_iteration,
+)
 from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 try:
@@ -599,7 +603,7 @@ class ReportGenerator:
                     "is not deliverable for these losses (required reserve is mis-located)."
                 )
             res_lines.extend([
-                f"Total iterations: {stats['total_iterations']}",
+                f"Iterations: {format_iteration_count(stats)}",
                 f"Duration: {duration.total_seconds():.0f}s",
                 f"Termination: {session.termination_reason}",
                 (f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A"),
@@ -645,7 +649,7 @@ class ReportGenerator:
                 relief_line += f"; {unresolved_count} unresolved."
                 cont_lines.append(relief_line)
             cont_lines.extend([
-                f"Total iterations: {stats['total_iterations']}",
+                f"Iterations: {format_iteration_count(stats)}",
                 f"Duration: {duration.total_seconds():.0f}s",
                 f"Termination: {session.termination_reason}",
                 (f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A"),
@@ -683,7 +687,7 @@ class ReportGenerator:
                 _headline = f"Sweep complete: {n_feas} of {n_cand} candidate buses are feasible."
             sweep_lines = [
                 _headline,
-                f"Total iterations: {stats['total_iterations']}",
+                f"Iterations: {format_iteration_count(stats)}",
                 f"Duration: {duration.total_seconds():.0f}s",
                 f"Termination: {session.termination_reason}",
                 f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A",
@@ -707,7 +711,7 @@ class ReportGenerator:
             1 for e in solve_entries if e.feasibility_detail == "marginal"
         )
         lines = [
-            f"Total iterations: {stats['total_iterations']}",
+            f"Iterations: {format_iteration_count(stats)}",
             f"Feasible solutions: {solve_feasible}",
             f"Infeasible: {solve_infeasible}",
         ]
@@ -1520,8 +1524,9 @@ class ReportGenerator:
         )
 
         # Auto-generated text
-        n = stats["total_iterations"]
-        text = f"The search ran for {n} iterations."
+        n = stats.get("llm_iterations", stats["total_iterations"])
+        text = (f"The search ran for {n} iteration(s) after the base case."
+                if stats.get("has_base_case") else f"The search ran for {n} iteration(s).")
         if stats["best_objective"] is not None:
             base_entry = session.journal.entries[0] if session.journal.entries else None
             if base_entry and base_entry.objective_value and base_entry.objective_value != 0:

@@ -233,7 +233,7 @@ class TestAnthropicLive:
     def test_simple_prompt(self):
         cfg = _dummy_config(
             backend="anthropic",
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             api_key_env="ANTHROPIC_API_KEY",
         )
         backend = create_backend(cfg)
