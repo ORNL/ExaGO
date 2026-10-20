@@ -149,6 +149,10 @@ def sqlchain(input_text: str, connection=duckdb) -> dict[str, Any]:
         table_info = _retrieve_table_schema(connection)
         sql_cmd = _generate_sql(llm, input_text, table_info)
 
+        statements = connection.extract_statements(sql_cmd)
+        if len(statements) != 1 or statements[0].type != duckdb.StatementType.SELECT:
+            raise ValueError("ChatGrid requires one read-only SELECT query.")
+
         result = connection.sql(sql_cmd)
         columns = [desc[0] for desc in result.description]
         query_dict = [dict(zip(columns, row)) for row in result.fetchall()]

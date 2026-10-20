@@ -1,59 +1,40 @@
 #!@VENV_PYTHON@
 
+import atexit
 import json
 import os
 import sys
-from pathlib import Path
 
-import duckdb
 from flask import Flask, jsonify, send_from_directory
 from flask.globals import request
 from flask_cors import CORS
+from werkzeug.utils import safe_join
 
 sys.path.insert(0, "@INSTALL_CODE@")
+
+from backend.cache import CaseCache
 
 # TODO: there are probably better ways of doing this, but this works to set a
 #       default for now
 install_root = os.environ.get("EXAGO_VIZ_ROOT", default="@INSTALL_ROOT@")
 data_path = os.environ.get("EXAGO_VIZ_DATA", default="@INSTALL_DATA@")
-reference_data_path = os.environ.get("EXAGO_VIZ_REFERENCE_DATA", default="@INSTALL_DATA@")
+reference_data_path = os.environ.get(
+    "EXAGO_VIZ_REFERENCE_DATA", default="@INSTALL_DATA@"
+)
 assets_path = os.environ.get("EXAGO_VIZ_ASSETS", default=f"{install_root}/assets")
 viz_host = os.environ.get("EXAGO_VIZ_HOST", default="localhost")
 viz_port = os.environ.get("EXAGO_VIZ_PORT", default="8080")
 
 app = Flask(__name__)
 CORS(app)
+sqlchain = None
 
 try:
-    from backend.data import load_case, reference_tables
-    from backend.sqlchain import sqlchain, validate_config
+    from backend.sqlchain import sqlchain as configured_sqlchain
+    from backend.sqlchain import validate_config
 
     validate_config()
-
-    @app.route("/query", methods=["POST"])
-    def post_data():
-        """Perform a query against the database using natural language."""
-
-        payload = request.get_json(force=True)
-        if not isinstance(payload, dict) or not isinstance(payload.get("inputText"), str):
-            return jsonify(error="Provide inputText with your ChatGrid question."), 400
-        try:
-            data = payload.get("caseData")
-            if data is None:
-                with (Path(data_path) / "opflowout.json").open() as casefile:
-                    data = json.load(casefile)
-            if not isinstance(data, dict):
-                raise TypeError("Provide an ExaGO JSON case as caseData.")
-            references = reference_tables(data_path, reference_data_path)
-
-            with duckdb.connect(":memory:") as connection:
-                load_case(connection, data, references)
-                connection.execute("INSTALL spatial")
-                connection.execute("LOAD spatial")
-                return jsonify(sqlchain(payload["inputText"], connection))
-        except (KeyError, TypeError, ValueError, FileNotFoundError) as error:
-            return jsonify(error=f"Could not prepare ChatGrid data: {error}"), 400
-
+    sqlchain = configured_sqlchain
 except Exception as error:
     app.logger.warning(
         "ChatGrid is unavailable (%s). Configure exago/viz/config.py under "
@@ -61,6 +42,95 @@ except Exception as error:
         "configuration file.",
         error,
     )
+
+case_cache = CaseCache(
+    data_path, reference_data_path, assets_path, chatgrid=sqlchain is not None
+)
+atexit.register(case_cache.close)
+
+
+def named_case(filename):
+    if not isinstance(filename, str) or not filename.lower().endswith(".json"):
+        raise ValueError("Provide a JSON dataset filename.")
+    path = safe_join(data_path, filename)
+    if path is None:
+        raise ValueError("Choose a dataset inside the visualization data directory.")
+    with open(path) as source:
+        return case_cache.prepare(json.load(source))
+
+
+@app.errorhandler(ValueError)
+@app.errorhandler(TypeError)
+@app.errorhandler(KeyError)
+def invalid_case(error):
+    return jsonify(error=f"Could not prepare case: {error}"), 400
+
+
+@app.errorhandler(FileNotFoundError)
+def missing_case(error):
+    return jsonify(error=f"Dataset or reference file not found: {error}"), 404
+
+
+@app.route("/health")
+def health():
+    return jsonify(instance=os.environ.get("EXAGO_VIZ_INSTANCE"), status="running")
+
+
+@app.route("/cases/<path:filename>/prepared")
+def prepared_case(filename):
+    entry = named_case(filename)
+    return app.response_class(
+        entry.response,
+        mimetype="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.route("/cases/prepare", methods=["POST"])
+def prepare_upload():
+    entry = case_cache.prepare(request.get_json(force=True))
+    return app.response_class(
+        entry.response,
+        mimetype="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.route("/cache/warm", methods=["POST"])
+def warm_cache():
+    payload = request.get_json(force=True)
+    if not isinstance(payload, dict):
+        raise TypeError("Provide a dataset filename to warm.")
+    entry = named_case(payload.get("filename"))
+    chatgrid = case_cache.chatgrid_status(entry)
+    ready = chatgrid["status"] != "failed"
+    return jsonify(
+        case_id=entry.case_id, ready=ready, map="ready", chatgrid=chatgrid
+    ), 200 if ready else 503
+
+
+@app.route("/query", methods=["POST"])
+def post_data():
+    """Reuse the selected case's database for natural-language questions."""
+    if sqlchain is None:
+        return jsonify(
+            error="ChatGrid is disabled. Configure the visualization's LLM provider."
+        ), 503
+    payload = request.get_json(force=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("inputText"), str):
+        raise TypeError("Provide inputText with your ChatGrid question.")
+    if "case_id" in payload:
+        entry = case_cache.get(payload["case_id"])
+    elif payload.get("caseData") is not None:
+        entry = case_cache.prepare(payload["caseData"])
+    else:
+        entry = named_case("opflowout.json")
+    if entry.chatgrid_error is not None:
+        return jsonify(
+            error=f"Could not prepare ChatGrid data: {entry.chatgrid_error}"
+        ), 503
+    with entry.query_lock:
+        return jsonify(sqlchain(payload["inputText"], entry.connection))
 
 
 @app.route("/")
@@ -82,9 +152,14 @@ def list_datasets():
     """List available JSON cases for the visualization selector."""
     if not os.path.isdir(data_path):
         return jsonify([])
-    return jsonify(sorted(name for name in os.listdir(data_path)
-                          if name.lower().endswith(".json")
-                          and os.path.isfile(os.path.join(data_path, name))))
+    return jsonify(
+        sorted(
+            name
+            for name in os.listdir(data_path)
+            if name.lower().endswith(".json")
+            and os.path.isfile(os.path.join(data_path, name))
+        )
+    )
 
 
 @app.route("/assets/<path:filename>")

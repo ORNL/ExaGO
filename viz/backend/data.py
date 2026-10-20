@@ -58,7 +58,7 @@ def reference_tables(data_path, reference_data_path):
     return tables
 
 
-def network_tables(data, counties):
+def network_tables(data, counties, county_index=None):
     """Construct DuckDB tables from case data."""
     features = data.get("geojsondata", {}).get("features")
     if not isinstance(features, list) or not features:
@@ -66,7 +66,8 @@ def network_tables(data, counties):
             "Choose an ExaGO JSON case containing geojsondata and network features."
         )
 
-    county_index = STRtree(from_wkt(counties["WKT"].to_numpy()))
+    if county_index is None:
+        county_index = STRtree(from_wkt(counties["WKT"].to_numpy()))
     rows = {table: [] for table in TABLE_COLUMNS}
     colors = {
         "wind": "green",
@@ -100,11 +101,11 @@ def network_tables(data, counties):
                     "state": state,
                 }
             )
-            generators = [gen for bus in buses for gen in bus["gen"]]
+            generators = [gen for bus in buses for gen in bus.get("gen", [])]
             if generators:
                 power = sum(gen["GEN_STATUS"] * gen["PG"] for gen in generators)
                 capacity = sum(gen["GEN_STATUS"] * gen["PMAX"] for gen in generators)
-                fuel = generators[-1]["GEN_FUEL"].lower()
+                fuel = (generators[-1].get("GEN_FUEL") or "other").lower()
                 rows["generators"].append(
                     {
                         "coordinates": geometry.wkt,
@@ -149,9 +150,9 @@ def network_tables(data, counties):
     }
 
 
-def load_case(connection, data, references):
+def load_case(connection, data, references, county_index=None):
     """Populate a DuckDB database with case information."""
-    tables = {**references, **network_tables(data, references["counties"])}
+    tables = {**references, **network_tables(data, references["counties"], county_index)}
     for table, frame in tables.items():
         connection.register("case_data", frame)
         connection.execute(f'CREATE TABLE "{table}" AS SELECT * FROM case_data')

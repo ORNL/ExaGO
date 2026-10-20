@@ -6,14 +6,15 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 import zipfile
 from pathlib import Path
 from urllib.parse import urlparse
 
 import streamlit as st
 import yaml
-from viz_process import start_viz_server
 from viz_files import stage_viz_input
+from viz_process import start_viz_server, warm_viz_cache
 
 # ── Configuration Loading ────────────────────────────────────────────────────
 
@@ -492,6 +493,20 @@ with tab_viz:
     viz_data_dir.mkdir(parents=True, exist_ok=True)
     gic_data_dir_v = cfg.get("gic_data_dir", "")
 
+    def prepare_visualization():
+        st.session_state.viz_ready = False
+        process = st.session_state.get("viz_process")
+        if process is None or process.poll() is not None:
+            return
+        with st.spinner("Preparing visualization data and filling its cache..."):
+            try:
+                result = warm_viz_cache(process, st.session_state.viz_url, st.session_state.viz_instance)
+                st.session_state.viz_ready = True
+                st.session_state.viz_case_id = result["case_id"]
+                st.success("Visualization ready. The selected case is cached.")
+            except (OSError, RuntimeError, ValueError) as error:
+                st.error(str(error))
+
     mode = st.radio("Mode", ["Run OPFLOW & Visualize", "Use Existing JSON"], horizontal=True, key="viz_mode")
 
     if mode == "Run OPFLOW & Visualize":
@@ -558,6 +573,7 @@ with tab_viz:
                     latest_json = max(json_outputs, key=lambda p: p.stat().st_mtime)
                     st.info(f"JSON output: `{latest_json.name}`")
                     stage_viz_input(latest_json, viz_data_dir)
+                    prepare_visualization()
                 else:
                     st.warning("No JSON output found. Run OPFLOW first.")
 
@@ -570,7 +586,8 @@ with tab_viz:
         if st.button("Configure Viz with Selected File", key="viz_existing_btn",
                      disabled=json_path is None):
             stage_viz_input(json_path, viz_data_dir)
-            st.success("JSON loaded. Open or refresh the visualization to view it.")
+            prepare_visualization()
+            st.success("JSON loaded. Launch the server, or refresh its visualization if it is already running.")
 
     # Launch viz server
     st.divider()
@@ -587,6 +604,8 @@ with tab_viz:
                 env["EXAGO_VIZ_HOST"] = used_hostname
                 env["EXAGO_VIZ_PORT"] = "8085"
                 env["EXAGO_VIZ_DATA"] = str(viz_data_dir.resolve())
+                instance = uuid.uuid4().hex
+                env["EXAGO_VIZ_INSTANCE"] = instance
 
                 # NOTE: this may not be the best way of doing this but 0.0.0.0
                 #       is probably a bad idea for this specifically
@@ -597,7 +616,9 @@ with tab_viz:
                 )
                 st.session_state.viz_process = proc
                 st.session_state.viz_pid = proc.pid
-                st.success(f"Viz server started (PID: {proc.pid})")
+                st.session_state.viz_instance = instance
+                st.session_state.viz_url = f"http://{used_hostname}:8085"
+                prepare_visualization()
             except FileNotFoundError:
                 st.error("The visualization server.py was not found. Double check that `viz_dir` is set correctly and that no other services are occupying port 8085.")
 
@@ -611,8 +632,17 @@ with tab_viz:
                     del st.session_state.viz_process
                 st.success("Server stopped")
                 del st.session_state.viz_pid
+                st.session_state.viz_ready = False
 
-    st.markdown(f"**Open visualization:** <http://{used_hostname}:8085>")
+    viz_process = st.session_state.get("viz_process")
+    viz_running = viz_process is not None and viz_process.poll() is None
+    if viz_running and not st.session_state.get("viz_ready"):
+        st.info("The server is running, but preparation has not completed successfully. Stage a JSON case or retry preparation.")
+        if st.button("Retry preparation", key="viz_prepare_btn"):
+            prepare_visualization()
+
+    if viz_running:
+        st.markdown(f"**Open visualization:** <{st.session_state.viz_url}>")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3: Python API

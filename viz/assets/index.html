@@ -135,20 +135,9 @@
   <body>
     <div id="root"></div>
     <script type="text/jsx">
-      import { validateNetworkData } from "exago/validate";
       import { createRoot } from "react-dom/client";
       import { StrictMode, useMemo, useRef, useState, useCallback, useEffect } from "react";
-      import {
-        getCountyNodes,
-        ExtractFirstTimeSlice,
-        ExtractFlowData,
-        getPoints,
-        getGeneration,
-        getLoad,
-        getContours,
-        getAreas,
-        getZones,
-      } from "exago/dataprocess";
+      import { filterFlows } from "exago/dataprocess";
 
       import { FlowmapLayer, PickingType } from "@flowmap.gl/layers";
 
@@ -173,7 +162,7 @@
       import { DataFilterExtension } from "@deck.gl/extensions";
       import { LinearInterpolator, FlyToInterpolator } from "@deck.gl/core";
 
-      import { center, convex, bbox } from "@turf/turf";
+      import { bbox } from "@turf/turf";
 
       import ChatBot from "react-chatbotify";
       import MarkdownRenderer from "@rcb-plugins/markdown-renderer";
@@ -616,10 +605,10 @@
 
       // ─── App ─────────────────────────────────────────────────────────────────────
       function App({
+        caseId,
         refdata,
         refflowdata,
         refflowdata_reactive,
-        ggdata,
         gendata,
         generation,
         areas,
@@ -718,13 +707,13 @@
         // ── Screenshot state ────────────────────────────────────────────────────
         const [screenshotUrl, setScreenshotUrl] = useState(null);
 
-        const [flowdata, reactiveflowdata] = useMemo(() => ExtractFlowData(refdata, {
-          voltageRange: netfiltervalue,
-          activeRange: flowfiltervalue,
-          reactiveRange: flowfilterreactivevalue,
-          lineNames: lineNameSelectItems,
-          busNames: busNameSelectItems,
-        }), [refdata, netfiltervalue, flowfiltervalue, flowfilterreactivevalue, lineNameSelectItems, busNameSelectItems]);
+        const [flowdata, reactiveflowdata] = useMemo(() => {
+          const filters = { voltageRange: netfiltervalue, lineNames: lineNameSelectItems, busNames: busNameSelectItems };
+          return [
+            filterFlows(refflowdata, { ...filters, loadingRange: flowfiltervalue }),
+            filterFlows(refflowdata_reactive, { ...filters, loadingRange: flowfilterreactivevalue }),
+          ];
+        }, [refflowdata, refflowdata_reactive, netfiltervalue, flowfiltervalue, flowfilterreactivevalue, lineNameSelectItems, busNameSelectItems]);
 
         const [chartVersion, setChartVersion] = useState(0);
         useEffect(() => {
@@ -1040,7 +1029,7 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 inputText: params.userInput,
-                caseData: { geojsondata: gridData },
+                case_id: caseId,
               }),
             });
             if (!response.ok) throw new Error(`ChatGrid request failed (HTTP ${response.status}).`);
@@ -2074,6 +2063,12 @@
       };
 
       // ─── AppContainer ─────────────────────────────────────────────────────────────
+      async function readPreparedResponse(response) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? `Could not prepare dataset (HTTP ${response.status}).`);
+        return result;
+      }
+
       function AppContainer() {
         const urlFile = new URLSearchParams(window.location.search).get("file");
         const [selected, setSelected] = useState(urlFile ?? DEFAULT_JSON_FILENAME);
@@ -2100,9 +2095,8 @@
             setLoading(true);
             setErr(null);
             try {
-              const res = await fetch(`/data/${encodeURIComponent(selected)}`, { signal: controller.signal, cache: "no-store" });
-              if (!res.ok) throw new Error(`Could not load ${selected} (HTTP ${res.status}). Upload an ExaGO JSON file to continue.`);
-              const json = validateNetworkData(await res.json());
+              const res = await fetch(`/cases/${encodeURIComponent(selected)}/prepared`, { signal: controller.signal, cache: "no-store" });
+              const json = await readPreparedResponse(res);
               if (version === requestVersion.current) setCasedata(json);
             } catch (error) {
               if (!controller.signal.aborted && version === requestVersion.current) setErr(error);
@@ -2116,25 +2110,7 @@
         const derived = useMemo(() => {
           if (!casedata) return null;
 
-          const geodata = casedata["geojsondata"];
-          let grid_data = ExtractFirstTimeSlice(geodata);
-
-          const countyloaddata = getCountyNodes(grid_data);
-          grid_data = countyloaddata.updatedata;
-
-          const areas = getAreas(casedata);
-          const zones = getZones(casedata);
-
-          const [grid_flowdata, grid_flowdata_reactive] = ExtractFlowData(grid_data);
-
-          const Points = getPoints(grid_data);
-          const Vcontour = getContours();
-          const gendata = getGeneration(grid_data);
-          const generation = gendata.Gens;
-          const loaddata = getLoad(grid_data);
-
-          const bboxArray = bbox(grid_data);
-          const mapcenter = center(grid_data);
+          const bboxArray = casedata.prepared.bounds;
 
           // Compute a view state that fits the full extent of the loaded dataset.
           // Subtract the right-side control panel (300 px) so the data isn't hidden.
@@ -2158,13 +2134,7 @@
           };
 
           return {
-            geodata, grid_data, areas, zones,
-            grid_flowdata, grid_flowdata_reactive,
-            Points, Vcontour, gendata, generation,
-            loaddata,
-            countymaxPd: countyloaddata.maxPd,
-            countyload: countyloaddata.data,
-            mapcenter, countyloaddata, homeViewState,
+            ...casedata.prepared, caseId: casedata.case_id, homeViewState,
           };
         }, [casedata]);
 
@@ -2236,10 +2206,10 @@
               const d = derived ?? EMPTY_DERIVED;
               return (
                 <App
+                  caseId={d.caseId}
                   refdata={d.grid_data}
                   refflowdata={d.grid_flowdata}
                   refflowdata_reactive={d.grid_flowdata_reactive}
-                  ggdata={d.geodata}
                   gendata={d.gendata}
                   generation={d.generation}
                   areas={d.areas}
@@ -2253,29 +2223,24 @@
                   onSelectCase={(filename) => { setUploadedName(null); setSelected(filename); setReloadVersion((v) => v + 1); }}
                   caseFiles={caseFiles}
                   uploadedName={uploadedName}
-                  onFileUpload={(file) => {
+                  onFileUpload={async (file) => {
                     const version = ++requestVersion.current;
                     setLoading(true);
                     setErr(null);
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      if (version !== requestVersion.current) return;
-                      try {
-                        const data = validateNetworkData(JSON.parse(reader.result));
+                    try {
+                      const response = await fetch("/cases/prepare", {
+                        method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text(),
+                      });
+                      const data = await readPreparedResponse(response);
+                      if (version === requestVersion.current) {
                         setCasedata(data);
                         setUploadedName(file.name);
-                      } catch (e) {
-                        setErr(e);
-                      } finally {
-                        setLoading(false);
                       }
-                    };
-                    reader.onerror = () => {
-                      if (version !== requestVersion.current) return;
-                      setErr(new Error("Failed to read file"));
-                      setLoading(false);
-                    };
-                    reader.readAsText(file);
+                    } catch (error) {
+                      if (version === requestVersion.current) setErr(error);
+                    } finally {
+                      if (version === requestVersion.current) setLoading(false);
+                    }
                   }}
                 />
               );

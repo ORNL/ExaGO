@@ -135,8 +135,11 @@ Two modes:
 - **Run OPFLOW & Visualize**: Upload a network file (and optionally a GIC file), run OPFLOW with JSON output, then launch the viz server.
 - **Use Existing JSON**: Upload a previously generated JSON file and click **Configure Viz with Selected File**.
 
-The visualization server runs on port 8085. Use the Launch/Stop buttons to
-control it. Open or refresh the visualization link after changing the input.
+The visualization server runs on port 8085. Use the Launch/Stop buttons
+to control it. Launching waits for the server and fills its cache for the
+selected JSON case before displaying **Visualization ready**. Preparing new
+OPFLOW output or an uploaded JSON case while the server is running also warms
+that case.  Open or refresh the visualization link after changing the input.
 
 ### Tab 3: Python API
 
@@ -219,6 +222,9 @@ Uploaded input files are temporarily saved to `output/staging/`. This directory 
 
 **Solver failures**: Some solvers (HIOP, HIOPSPARSE) require ExaGO to be compiled with HiOp support. Fall back to IPOPT if unsure.
 
-**"npm not found"** (Visualization tab): The viz server requires Node.js. Install Node.js and run `npm install` in the `viz/` directory first.
+**Visualization preparation errors**: Stage an ExaGO JSON case containing
+network geometry, and confirm that the configured visualization server and
+reference data are installed. If port 8085 is occupied by another server,
+stop that server before launching a new one.
 
 **Missing libraries at runtime**: Add any required shared library paths to the `environment.ld_library_path` list in `config.yaml`.
