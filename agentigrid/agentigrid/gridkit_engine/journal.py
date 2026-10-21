@@ -34,7 +34,8 @@ def outcome_row(o: FaultOutcome, run_dir: Path | None = None) -> dict:
         "solved": o.run.solved,
         "run": o.run.reason,
         "checks": {
-            c.name: {"status": c.status, "value": c.value, "limit": c.limit, "detail": c.detail}
+            c.name: {"status": c.status, "value": c.value, "limit": c.limit, "detail": c.detail,
+                     "data": c.data}
             for c in o.checks
         },
         "run_dir": str(run_dir) if run_dir else None,
