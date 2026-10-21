@@ -213,6 +213,7 @@ class GridkitAgentLoop:
                      dt_monitor_s=self._settings.dt_monitor_s)
         self._print(f"[Iter {iteration}] Base case: {what}, {self._settings.tmax_s:g} s ...")
         res = run_one(job, self._settings)
+        rows = []
         if res.status.solved:
             series = read_results(res.csv_path, emap)
             steady = criteria.check_steady_state(
@@ -220,6 +221,11 @@ class GridkitAgentLoop:
             )
             ok = steady.status == "pass"
             text = f"GridKit {res.status.reason}. Steady state: {steady.status} - {steady.detail}."
+            rows = [{"bus": None, "status": steady.status, "solved": True, "run": res.status.reason,
+                     "checks": {steady.name: {"status": steady.status, "value": steady.value,
+                                              "limit": steady.limit, "detail": steady.detail,
+                                              "data": steady.data}},
+                     "run_dir": str(run_dir)}]
         else:
             ok = False
             text = f"GridKit base case did not solve: {res.status.reason}."
@@ -227,7 +233,7 @@ class GridkitAgentLoop:
             text += " Fault screens are not meaningful until the base case solves and stays steady."
         self._print(f"[Iter {iteration}] {text}")
         self._journal.add(JournalEntry(
-            iteration, "base_case", what, verdict=text, result_text=text,
+            iteration, "base_case", what, verdict=text, result_text=text, rows=rows,
             elapsed_s=res.elapsed_s, run_dir=str(run_dir),
         ))
         return text, ok
@@ -347,7 +353,7 @@ class GridkitAgentLoop:
 
         cycles = study.clearing_cycles + study.margin_cycles
         note = (f"bus short circuit to ground at {study.start_s:g} s, cleared after {cycles:g} cycles "
-                f"({study.duration_s():.3f} s), R = {study.R:g} pu, X = {study.X:g} pu, "
+                f"({criteria.num(study.duration_s(), '.3f', ' s')}), R = {study.R:g} pu, X = {study.X:g} pu, "
                 f"{study.tmax_s:g} s simulated, GridKit {study.application}, "
                 f"starting from {start.label}")
         text = screen_verdict(self._subject(study), outcomes, note)
@@ -420,18 +426,18 @@ def _exago_label(source: SteadyStateSource) -> str:
 
 def _outcome_table(outcomes: list[FaultOutcome]) -> str:
     """Every fault, one row: result and the main check values."""
-    def val(o: FaultOutcome, name: str, fmt: str) -> str:
+    def val(o: FaultOutcome, name: str, fmt: str, unit: str = "", scale: float = 1.0) -> str:
         c = next((c for c in o.checks if c.name == name), None)
         if c is None or c.value is None:
             return "-" if c is None else c.status
-        return fmt.format(c.value)
+        return criteria.num(scale * c.value, fmt, unit)
 
-    lines = ["ALL BUS FAULTS:",
-             f"{'Bus':>6} | {'Result':<10} | {'Angle spread':>12} | {'Vmin 2.5s':>9} | {'Damping':>8}",
-             "-" * 58]
+    lines = ["ALL BUS FAULTS (rounded value, full value in brackets):",
+             f"{'Bus':>6} | {'Result':<10} | {'Angle spread':>32} | {'Vmin 2.5s':>28} | {'Damping':>28}",
+             "-" * 116]
     for o in sorted(outcomes, key=lambda o: o.bus):
         lines.append(
-            f"{o.bus:>6} | {o.status:<10} | {val(o, 'angle_stability', '{:.1f} deg'):>12} | "
-            f"{val(o, 'voltage_recovery', '{:.3f}'):>9} | {val(o, 'damping', '{:.1%}'):>8}"
+            f"{o.bus:>6} | {o.status:<10} | {val(o, 'angle_stability', '.1f', ' deg'):>32} | "
+            f"{val(o, 'voltage_recovery', '.3f', ' pu'):>28} | {val(o, 'damping', '.1f', '%', 100):>28}"
         )
     return "\n".join(lines)
