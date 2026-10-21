@@ -10,7 +10,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.ref }}
-    - uses: actions/setup-python@v3
+    - uses: actions/setup-python@v3.13
     - uses: pre-commit/action@v3.0.0
     - uses: EndBug/add-and-commit@v9.1.3
       # Only need to try and commit if the action failed
