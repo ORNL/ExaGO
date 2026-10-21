@@ -17,6 +17,12 @@ Tests are grouped by the part of AgentiGrid they cover:
 | `e2e/` | End-to-end runs through the agent loop |
 | `fixtures/` | Shared sample files (e.g. `sample_opflow_output.txt`) |
 
+`fixtures/sample_opflow_output.txt` is OPFLOW output for `case_ACTIVSg200.m` as
+rewritten by AgentiGrid; `results/test_opflow_parser.py` checks values from it.
+If you regenerate it, write the case with the current MATPOWER writer (so the
+fuel types survive) and update the expected values in `results/test_opflow_parser.py`;
+`test_fuel_mix_matches_case_file` fails if the fuel mix is lost again.
+
 Run the fast tests from the AgentiGrid root:
 
 ```bash
