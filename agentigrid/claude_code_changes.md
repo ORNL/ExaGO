@@ -4,6 +4,36 @@ This document records significant changes made by Claude Code, grouped by the pr
 
 ---
 
+## MATPOWER reader/writer hardening — no silent misreads, stable round trips (2026-10-05)
+
+Found while writing an independent spec for the parser and writer (round-trip, error and syntax rules). Every real case in ExaGO's `datafiles/` (29 case files, `case5` to `case_ACTIVSg10k`, including CRLF ones) still parses and round-trips to an equivalent network; the files are already accepted by the stricter rules.
+
+| # | Defect | Fix |
+|---|---|---|
+| 1 | A row with a non-numeric value was skipped with only a log warning, so a bus, generator or branch could silently vanish. Too-short rows crashed with `IndexError`. | `_parse_rows()` raises `ValueError` naming the section and 1-based row for non-numeric values, column counts outside the section's limits (bus 13–17; gen ≥ 10; branch ≥ 13; gencost ≥ 4) and non-integral/Inf/NaN values in integer columns. |
+| 2 | Valid MATLAB syntax was misread: two rows on one line became one garbage row; comma-separated rows were all dropped; `...` continuations crashed. | These raise `ValueError` with a clear message. An unterminated `[`/`{` block and a missing `mpc.bus` raise as well. |
+| 3 | The writer crashed on `Inf`/`NaN` (`OverflowError`/`ValueError`), which the reader accepts. | Written as `Inf`, `-Inf`, `NaN`. Bus solution columns (`lam_*`, `mu_*`) use the same 10-significant-digit format instead of `.4f`. |
+| 4 | Every read/write round trip added another `%% MATPOWER Case Format` line, and blank lines accumulated before raw sections. | The format comment is written only if the header lacks it; collected section comments drop surrounding blank lines. Writing is idempotent. |
+| 5 | MATPOWER case version `'1'` was accepted although ExaGO reads version 2. | Raises `ValueError`; a missing version still means `'2'`. |
+
+Also: CRLF input is normalised on read and the writer always emits LF; the `function mpc = …` line always carries `network.casename` (renamed if the header has another name, added first if missing). Unknown numeric sections (`areas`, `dcline`, …) stay opaque raw text and are not validated.
+
+| File | Change |
+|---|---|
+| `agentigrid/exago_parsers/matpower_parser.py` | Fixes 1, 2, 4 (comments), 5; CRLF normalisation |
+| `agentigrid/exago_parsers/matpower_writer.py` | Fixes 3, 4 (header); casename/function line; LF output |
+| `tests/grid_files/test_matpower_hardening.py` | New (29 tests; 22 fail without the fix) |
+
+**Follow-up (property-based testing).** Randomised round-trip tests then found three more defects:
+
+- A finite value near the float maximum was written with 10 significant digits that round past it, and read back as `Inf`. The writer now falls back to the exact representation.
+- A value that rounds to an integer (for example `9999999999.5`) was written as `1e+10` the first time and `10000000000` the second, so writing was not idempotent. The integer form is now decided on the rounded value.
+- `mpc.baseMVA` was read with a digits-and-dots pattern. `1e2` (or `1e+15`, which the writer itself emits) was silently read as `1`, and negative values were "not found". It now accepts any numeric literal (sign, exponent, `Inf`/`NaN`) on an `mpc.baseMVA` line, ignores the text in comments, and raises `ValueError` for a non-numeric value.
+
+18 more tests; 12 of them fail without these fixes.
+
+---
+
 ## MATPOWER cell arrays keep "};" — ExaGO reads genfuel again (2026-10-03)
 
 **Symptom.** SCOPFLOW reported local infeasibility on AgentiGrid-rewritten ACTIVSg200 at base load, while the original file converged. The rewritten file had `mpc.genfuel = { ... }` with a bare `}`.
