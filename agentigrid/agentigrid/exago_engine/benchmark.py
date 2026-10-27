@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.exago_engine.executor import SimulationExecutor, SimulationResult
 from agentigrid.exago_engine.journal import SearchJournal
 from agentigrid.exago_parsers import parse_simulation_result_for_app
@@ -50,6 +51,7 @@ class BenchmarkResult:
     error: str | None = None
 
 
+@log_scope(logger, "OPFLOW baseline benchmark")
 def _run_opflow_on_base_case(
     base_case_path: Path,
     config: AppConfig,
@@ -84,6 +86,7 @@ def _run_opflow_on_base_case(
     return parsed
 
 
+@log_scope(logger, "PFLOW versus OPFLOW benchmark")
 def run_pflow_vs_opflow_benchmark(
     base_case_path: Path,
     pflow_journal: SearchJournal,

@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.backends import create_backend
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.config import AppConfig
@@ -990,6 +991,7 @@ class AgentLoopController:
     # Main entry point
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "ExaGO session")
     def run(self, base_case: Path, goal: str) -> SearchSession:
         """Execute the full search loop."""
         session_start = time.monotonic()
@@ -1004,18 +1006,19 @@ class AgentLoopController:
 
         # 1. Parse base case
         logger.info("Parsing base case: %s", base_case)
-        self._base_network = parse_matpower(base_case)
-        self._current_network = self._base_network
-        # REVIEW: model base-case wind as curtailable for SOPFLOW
-        # so scenarios with sub-nameplate wind are feasible (see the method + the
-        # search.sopflow_curtailable_wind_base flag). No-op for non-SOPFLOW / disabled.
-        self._normalize_sopflow_wind_base()
-        net_summary_text = network_summary(
-            self._base_network,
-            max_generators=self._config.report.network_summary_max_generators,
-        )
-        net_metadata_text = network_metadata(self._base_network)
-        self._network_metadata_text = net_metadata_text
+        with log_scope(logger, "ExaGO case preparation", case_file=base_case):
+            self._base_network = parse_matpower(base_case)
+            self._current_network = self._base_network
+            # REVIEW: model base-case wind as curtailable for SOPFLOW
+            # so scenarios with sub-nameplate wind are feasible (see the method + the
+            # search.sopflow_curtailable_wind_base flag). No-op for non-SOPFLOW / disabled.
+            self._normalize_sopflow_wind_base()
+            net_summary_text = network_summary(
+                self._base_network,
+                max_generators=self._config.report.network_summary_max_generators,
+            )
+            net_metadata_text = network_metadata(self._base_network)
+            self._network_metadata_text = net_metadata_text
 
         # 1b. Run OPFLOW benchmark at session start (if enabled)
         benchmark_text: Optional[str] = None
@@ -1228,7 +1231,8 @@ class AgentLoopController:
                 session.termination_reason = "user_stopped"
                 self._print("\nSearch stopped by user.")
                 break
-            action_type, should_continue = self._iteration(iteration, goal)
+            with log_scope(logger, "ExaGO iteration", iteration=iteration):
+                action_type, should_continue = self._iteration(iteration, goal)
             # Notify callback after each iteration
             if self._on_iteration:
                 latest_entry = self._journal.latest
@@ -1369,7 +1373,8 @@ class AgentLoopController:
         self._batch_best = None
         self._executor.begin_batch()
         try:
-            return self._dispatch_action(action, iteration, data)
+            with log_scope(logger, "ExaGO action", iteration=iteration, action=action):
+                return self._dispatch_action(action, iteration, data)
         finally:
             self._prune_saved_solutions(action, self._executor.end_batch())
 
@@ -1695,6 +1700,7 @@ class AgentLoopController:
                 return True
         return False
 
+    @log_scope(logger, "ExaGO variant exploration")
     def _handle_explore(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -2693,6 +2699,7 @@ class AgentLoopController:
             result["pf_tan_phi"] = tan_phi
         return result
 
+    @log_scope(logger, "ExaGO boundary sweep")
     def _handle_boundary_sweep(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -2901,6 +2908,7 @@ class AgentLoopController:
 
         return "sweep", True
 
+    @log_scope(logger, "ExaGO contingency screen")
     def _run_contingency_screen(
         self,
         net: MATNetwork,
@@ -3346,6 +3354,7 @@ class AgentLoopController:
         self._print(f"[Iter {iteration}] {verdict}")
         return "sweep", True
 
+    @log_scope(logger, "ExaGO reserve screen")
     def _handle_reserve_screen(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -3544,6 +3553,7 @@ class AgentLoopController:
         )
         return "sweep", True
 
+    @log_scope(logger, "ExaGO reserve minimization")
     def _run_reserve_minimization(
         self, iteration: int, net: MATNetwork, vmin: float, vmax: float,
     ) -> "reserve_search.ReserveMinResult":
@@ -3722,6 +3732,7 @@ class AgentLoopController:
             )
         return "\n".join(lines)
 
+    @log_scope(logger, "ExaGO relief phase")
     def _run_relief_phase(
         self,
         iteration: int,
@@ -4698,6 +4709,7 @@ class AgentLoopController:
     # Multi-objective helpers
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "Initial objective extraction")
     def _extract_initial_objectives(self, goal: str) -> None:
         """Use the LLM to extract tracked objectives from the initial goal."""
         try:
@@ -4730,6 +4742,7 @@ class AgentLoopController:
         except Exception as exc:
             logger.warning("Failed to extract initial objectives: %s", exc)
 
+    @log_scope(logger, "Steering objective extraction")
     def _extract_objectives_from_steering(self, directive: str, iteration: int) -> None:
         """Extract any new objectives from a steering directive."""
         try:
@@ -4777,6 +4790,7 @@ class AgentLoopController:
     # Prompt assembly
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "ExaGO prompt assembly")
     def _assemble_prompt(
         self,
         goal: str,
@@ -4825,6 +4839,7 @@ class AgentLoopController:
     # Finalization
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "ExaGO finalization")
     def _finalize(self, session: SearchSession, elapsed_seconds: float) -> None:
         """Print summary and save journal."""
         total_tokens = self._total_prompt_tokens + self._total_completion_tokens
@@ -5024,6 +5039,7 @@ class AgentLoopController:
     # Session save/resume
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "ExaGO session resume")
     def resume_from(self, save_dir: Path) -> SearchSession:
         """Resume a search from a saved session checkpoint.
 
@@ -5089,16 +5105,17 @@ class AgentLoopController:
         goal = saved["goal"]
         self._current_goal = goal
 
-        self._base_network = parse_matpower(base_case)
-        self._current_network = saved["current_network"] or self._base_network
+        with log_scope(logger, "ExaGO case preparation", case_file=base_case):
+            self._base_network = parse_matpower(base_case)
+            self._current_network = saved["current_network"] or self._base_network
 
-        # Rebuild system prompt
-        net_summary_text = network_summary(
-            self._base_network,
-            max_generators=self._config.report.network_summary_max_generators,
-        )
-        net_metadata_text = network_metadata(self._base_network)
-        self._network_metadata_text = net_metadata_text
+            # Rebuild system prompt
+            net_summary_text = network_summary(
+                self._base_network,
+                max_generators=self._config.report.network_summary_max_generators,
+            )
+            net_metadata_text = network_metadata(self._base_network)
+            self._network_metadata_text = net_metadata_text
         # Restore load_factor from journal if saved
         if self._journal.load_factor is not None:
             self._session_load_factor = self._journal.load_factor
@@ -5163,7 +5180,8 @@ class AgentLoopController:
                 session.termination_reason = "user_stopped"
                 self._print("\nSearch stopped by user.")
                 break
-            action_type, should_continue = self._iteration(iteration, goal)
+            with log_scope(logger, "ExaGO iteration", iteration=iteration):
+                action_type, should_continue = self._iteration(iteration, goal)
             if self._on_iteration:
                 latest_entry = self._journal.latest
                 if latest_entry:

@@ -6,6 +6,7 @@ import logging
 import os
 from typing import Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.backends.json_extract import extract_json
 from agentigrid.config import LLMConfig
@@ -75,13 +76,15 @@ class OpenAIBackend(LLMBackend):
             if use_json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
 
-            response = self._client.chat.completions.create(**kwargs)
+            with log_scope(logger, "LLM API request", backend=self.name(), model=self._config.model):
+                response = self._client.chat.completions.create(**kwargs)
 
-            raw_text = response.choices[0].message.content or ""
-            prompt_tokens = getattr(response.usage, "prompt_tokens", None)
-            completion_tokens = getattr(response.usage, "completion_tokens", None)
+            with log_scope(logger, "LLM response parsing", backend=self.name(), model=self._config.model):
+                raw_text = response.choices[0].message.content or ""
+                prompt_tokens = getattr(response.usage, "prompt_tokens", None)
+                completion_tokens = getattr(response.usage, "completion_tokens", None)
 
-            json_data, json_error = extract_json(raw_text)
+                json_data, json_error = extract_json(raw_text)
 
             return LLMResponse(
                 raw_text=raw_text,

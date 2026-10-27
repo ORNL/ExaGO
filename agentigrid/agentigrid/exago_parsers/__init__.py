@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.exago_parsers.matpower_model import (
     Branch,
     Bus,
@@ -68,38 +69,43 @@ def parse_simulation_result_for_app(sim_result, application: str, bus_limits=Non
       Returns the OPFLOWResult portion of the tuple (metadata available separately).
     Falls back to OPFLOW parser for unknown applications with a warning.
     """
-    if application in _OPFLOW_COMPATIBLE_APPS:
+    with log_scope(
+        _logger, "ExaGO result parsing",
+        application=application,
+        run_dir=getattr(sim_result, "workdir", None),
+    ):
+        if application in _OPFLOW_COMPATIBLE_APPS:
+            return parse_simulation_result(sim_result, bus_limits=bus_limits)
+        if application == "scopflow":
+            parsed = parse_scopflow_simulation_result(sim_result, bus_limits=bus_limits)
+            if parsed is None:
+                return None
+            opflow_result, _metadata = parsed
+            return opflow_result
+        if application == "tcopflow":
+            parsed = parse_tcopflow_simulation_result(sim_result, bus_limits=bus_limits)
+            if parsed is None:
+                return None
+            opflow_result, _metadata = parsed
+            return opflow_result
+        if application == "sopflow":
+            parsed = parse_sopflow_simulation_result(sim_result, bus_limits=bus_limits)
+            if parsed is None:
+                return None
+            opflow_result, _metadata = parsed
+            return opflow_result
+        if application == "pflow":
+            parsed = parse_pflow_simulation_result(sim_result, bus_limits=bus_limits)
+            if parsed is None:
+                return None
+            opflow_result, _metadata = parsed
+            return opflow_result
+        _logger.warning(
+            "Unknown application '%s' for parse_simulation_result_for_app — "
+            "falling back to OPFLOW parser.",
+            application,
+        )
         return parse_simulation_result(sim_result, bus_limits=bus_limits)
-    if application == "scopflow":
-        parsed = parse_scopflow_simulation_result(sim_result, bus_limits=bus_limits)
-        if parsed is None:
-            return None
-        opflow_result, _metadata = parsed
-        return opflow_result
-    if application == "tcopflow":
-        parsed = parse_tcopflow_simulation_result(sim_result, bus_limits=bus_limits)
-        if parsed is None:
-            return None
-        opflow_result, _metadata = parsed
-        return opflow_result
-    if application == "sopflow":
-        parsed = parse_sopflow_simulation_result(sim_result, bus_limits=bus_limits)
-        if parsed is None:
-            return None
-        opflow_result, _metadata = parsed
-        return opflow_result
-    if application == "pflow":
-        parsed = parse_pflow_simulation_result(sim_result, bus_limits=bus_limits)
-        if parsed is None:
-            return None
-        opflow_result, _metadata = parsed
-        return opflow_result
-    _logger.warning(
-        "Unknown application '%s' for parse_simulation_result_for_app — "
-        "falling back to OPFLOW parser.",
-        application,
-    )
-    return parse_simulation_result(sim_result, bus_limits=bus_limits)
 
 
 def parse_scopflow_metadata(sim_result) -> dict | None:

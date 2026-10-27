@@ -22,6 +22,7 @@ from reportlab.platypus import (
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.exago_engine.agent_loop import SearchSession
 from agentigrid.exago_engine.journal import describe_contingency_scope, is_solve_iteration
 from agentigrid.exago_parsers.opflow_results import OPFLOWResult
@@ -39,7 +40,7 @@ except ModuleNotFoundError:
         reserve_trajectory_chart,
     )
 
-logger = logging.getLogger("launcher.report_generator")
+logger = logging.getLogger("agentigrid.launcher.report_generator")
 
 # ── Font Registration ────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ def _register_fonts():
 
 # ── Chart Export Helper ──────────────────────────────────────────────────────
 
+@log_scope(logger, "Report chart export")
 def _export_chart_image(fig, width_px: int = 800, height_px: int = 400) -> bytes | None:
     """Export a Plotly figure to PNG bytes.
 
@@ -215,6 +217,7 @@ class ReportGenerator:
             ),
         }
 
+    @log_scope(logger, "PDF report generation")
     def generate(
         self,
         session: SearchSession,

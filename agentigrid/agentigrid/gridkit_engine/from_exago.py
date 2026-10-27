@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import math
 import re
 from collections import defaultdict
@@ -30,9 +31,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.exago_parsers.matpower_model import MATNetwork
 from agentigrid.exago_parsers.matpower_parser import parse_matpower
 from agentigrid.gridkit_parsers.case_parser import MACHINE_CLASSES, _is_bus_port
+
+logger = logging.getLogger("agentigrid.gridkit_engine.from_exago")
 
 # AC steady states that ExaGO saves as one solved MATPOWER case (-save_output).
 STEADY_STATE_APPS = {"opflow": "opflowout.m", "pflow": "pflowout.m"}
@@ -76,40 +80,41 @@ def find_latest_steady_state(exago_workdir: Path | str) -> SteadyStateSource:
     Raises SteadyStateError when that simulation is not a single converged
     AC steady state with a saved solution (no silent fallback to an older one).
     """
-    exago_workdir = Path(exago_workdir)
-    journals = sorted(exago_workdir.glob("journal_*.json"))
-    if not journals:
-        raise SteadyStateError(f"No ExaGO journal in {exago_workdir}; run an ExaGO study first.")
-    journal = journals[-1]          # names carry the timestamp, so sorting by name is by time
-    entries = json.loads(journal.read_text()).get("entries", [])
-    simulated = [e for e in entries if e.get("exago_command")]
-    if not simulated:
-        raise SteadyStateError(f"{journal.name} has no simulation.")
-    entry = simulated[-1]
-    cmd = entry["exago_command"]
-    it = entry.get("iteration")
-    app = cmd.get("application", "")
-    where = f"The most recent ExaGO iteration ({it}, {journal.name})"
-    if cmd.get("mode") != "single":
-        raise SteadyStateError(f"{where} is a '{cmd.get('mode')}' run of many solves, "
-                               "not a single steady state.")
-    if app not in STEADY_STATE_APPS:
-        raise SteadyStateError(f"{where} ran {app}; only {sorted(STEADY_STATE_APPS)} give an "
-                               "AC steady state GridKit can start from.")
-    # PFLOW's saved file always has converged = 0 (ExaGO writes the OPFLOW
-    # flag), so the journal's status is the one to trust.
-    status = str(entry.get("convergence_status", ""))
-    if not status.upper().startswith("CONVERGED"):
-        raise SteadyStateError(f"{where} did not converge (status: {status or 'unknown'}).")
-    netfile = _netfile(cmd.get("argv") or [])
-    if netfile is None:
-        raise SteadyStateError(f"{where}: no -netfile in the recorded command.")
-    solved = netfile.parent / STEADY_STATE_APPS[app]
-    if not solved.exists():
-        raise SteadyStateError(f"{where}: solution file {solved} is missing "
-                               "(runs before ExaGO saved its output cannot be used).")
-    return SteadyStateSource(journal, int(it), str(entry.get("description", "")), app,
-                             netfile.parent, solved)
+    with log_scope(logger, "ExaGO steady state lookup", workdir=exago_workdir):
+        exago_workdir = Path(exago_workdir)
+        journals = sorted(exago_workdir.glob("journal_*.json"))
+        if not journals:
+            raise SteadyStateError(f"No ExaGO journal in {exago_workdir}; run an ExaGO study first.")
+        journal = journals[-1]          # names carry the timestamp, so sorting by name is by time
+        entries = json.loads(journal.read_text()).get("entries", [])
+        simulated = [e for e in entries if e.get("exago_command")]
+        if not simulated:
+            raise SteadyStateError(f"{journal.name} has no simulation.")
+        entry = simulated[-1]
+        cmd = entry["exago_command"]
+        it = entry.get("iteration")
+        app = cmd.get("application", "")
+        where = f"The most recent ExaGO iteration ({it}, {journal.name})"
+        if cmd.get("mode") != "single":
+            raise SteadyStateError(f"{where} is a '{cmd.get('mode')}' run of many solves, "
+                                   "not a single steady state.")
+        if app not in STEADY_STATE_APPS:
+            raise SteadyStateError(f"{where} ran {app}; only {sorted(STEADY_STATE_APPS)} give an "
+                                   "AC steady state GridKit can start from.")
+        # PFLOW's saved file always has converged = 0 (ExaGO writes the OPFLOW
+        # flag), so the journal's status is the one to trust.
+        status = str(entry.get("convergence_status", ""))
+        if not status.upper().startswith("CONVERGED"):
+            raise SteadyStateError(f"{where} did not converge (status: {status or 'unknown'}).")
+        netfile = _netfile(cmd.get("argv") or [])
+        if netfile is None:
+            raise SteadyStateError(f"{where}: no -netfile in the recorded command.")
+        solved = netfile.parent / STEADY_STATE_APPS[app]
+        if not solved.exists():
+            raise SteadyStateError(f"{where}: solution file {solved} is missing "
+                                   "(runs before ExaGO saved its output cannot be used).")
+        return SteadyStateSource(journal, int(it), str(entry.get("description", "")), app,
+                                 netfile.parent, solved)
 
 
 # ---------------------------------------------------------------------------
@@ -411,8 +416,13 @@ def exago_branch_directions(net: MATNetwork) -> list[str]:
 
 def build_from_exago(case: dict, source: SteadyStateSource) -> tuple[dict, list[str]]:
     """Read *source*'s solved case and apply it to the GridKit *case*."""
-    net = parse_matpower(source.solved_file)
-    notes = exago_shifts_to_degrees(net)
-    notes += exago_branch_directions(net)
-    out, more = apply_steady_state(case, net)
-    return out, notes + more
+    with log_scope(
+        logger, "ExaGO to GridKit conversion",
+        application=source.application,
+        run_dir=source.run_dir,
+    ):
+        net = parse_matpower(source.solved_file)
+        notes = exago_shifts_to_degrees(net)
+        notes += exago_branch_directions(net)
+        out, more = apply_steady_state(case, net)
+        return out, notes + more
