@@ -227,7 +227,7 @@ def regenerate_from_journal(
         )
         try:
             resp = backend.complete(sys_p, user_p)
-            ledger.record("report", resp)
+            ledger.record("report", resp, prompt_chars=len(sys_p) + len(user_p))
             analysis_text = resp.raw_text
             gc = parse_goal_classification(
                 analysis_text, {e.iteration for e in journal.entries}

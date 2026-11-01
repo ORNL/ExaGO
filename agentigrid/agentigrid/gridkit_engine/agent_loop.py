@@ -172,7 +172,8 @@ class GridkitAgentLoop:
                 feedback = None
                 self._print(f"[Iter {iteration}] Asking {self._backend.name()} ({self._cfg.llm.model})...")
                 response = self._backend.complete(system_prompt, user_prompt)
-                session.token_ledger.record("search", response, iteration)
+                session.token_ledger.record("search", response, iteration,
+                                            prompt_chars=len(system_prompt) + len(user_prompt))
                 session.total_prompt_tokens = session.token_ledger.total_prompt
                 session.total_completion_tokens = session.token_ledger.total_completion
                 data = response.json_data

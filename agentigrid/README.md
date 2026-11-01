@@ -278,7 +278,8 @@ Every LLM call of a session is counted (ExaGO and GridKit), each under one phase
 | `report` | analysis regenerated for a PDF from a saved journal |
 | `other` | anything else |
 
-The per-call record (phase, iteration, model, backend, prompt and completion tokens) and the
+The per-call record (phase, iteration, model, backend, prompt and completion tokens, and the
+prompt/completion length in characters, `prompt_chars` / `completion_chars`) and the
 per-phase totals are written as a top-level `token_usage` block to the journal JSON (ExaGO
 `workdir/journal_*.json`, GridKit `workdir/gridkit/session_*/journal.json`) and to saved
 sessions. Usage a backend did not report stays `null` per call and is counted in

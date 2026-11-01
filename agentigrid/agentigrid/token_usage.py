@@ -38,12 +38,21 @@ class TokenLedger:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
 
-    def record(self, phase: str, response: LLMResponse, iteration: Optional[int] = None) -> None:
+    def record(
+        self,
+        phase: str,
+        response: LLMResponse,
+        iteration: Optional[int] = None,
+        prompt_chars: Optional[int] = None,
+    ) -> None:
         """Add one ``complete()`` response under *phase*.
 
-        Fields missing on *response* are recorded as ``None``, so bookkeeping
-        never fails on a partial response object.
+        *prompt_chars* is the length of system + user prompt (``None`` if the
+        call site cannot provide it); ``completion_chars`` is the length of the
+        response's ``raw_text``. Fields missing on *response* are recorded as
+        ``None``, so bookkeeping never fails on a partial response object.
         """
+        raw_text = getattr(response, "raw_text", None)
         if phase not in PHASES:
             raise ValueError(f"Unknown token phase '{phase}' (expected one of {PHASES})")
         self.calls.append({
@@ -53,6 +62,8 @@ class TokenLedger:
             "backend": _str_or_none(getattr(response, "backend", None)),
             "prompt_tokens": _int_or_none(getattr(response, "prompt_tokens", None)),
             "completion_tokens": _int_or_none(getattr(response, "completion_tokens", None)),
+            "prompt_chars": _int_or_none(prompt_chars),
+            "completion_chars": len(raw_text) if isinstance(raw_text, str) else None,
         })
 
     # ------------------------------------------------------------------
@@ -70,6 +81,14 @@ class TokenLedger:
     @property
     def total(self) -> int:
         return self.total_prompt + self.total_completion
+
+    @property
+    def total_prompt_chars(self) -> int:
+        return sum(c.get("prompt_chars") or 0 for c in self.calls)
+
+    @property
+    def total_completion_chars(self) -> int:
+        return sum(c.get("completion_chars") or 0 for c in self.calls)
 
     @property
     def calls_without_usage(self) -> int:
@@ -94,6 +113,8 @@ class TokenLedger:
                 "completion_tokens": completion,
                 "total_tokens": prompt + completion,
                 "calls_without_usage": sum(1 for c in calls if _missing_usage(c)),
+                "prompt_chars": sum(c.get("prompt_chars") or 0 for c in calls),
+                "completion_chars": sum(c.get("completion_chars") or 0 for c in calls),
             }
         return out
 
@@ -110,6 +131,8 @@ class TokenLedger:
             "completion_tokens": self.total_completion,
             "total_tokens": self.total,
             "calls_without_usage": self.calls_without_usage,
+            "prompt_chars": self.total_prompt_chars,
+            "completion_chars": self.total_completion_chars,
             "by_phase": self.by_phase,
             "per_call": [dict(c) for c in self.calls],
         }
@@ -126,6 +149,8 @@ class TokenLedger:
                 "backend": c.get("backend"),
                 "prompt_tokens": c.get("prompt_tokens"),
                 "completion_tokens": c.get("completion_tokens"),
+                "prompt_chars": c.get("prompt_chars"),           # absent in older journals
+                "completion_chars": c.get("completion_chars"),
                 **({"carried_over": True} if c.get("carried_over") else {}),
             })
         return ledger
@@ -142,6 +167,7 @@ class TokenLedger:
             ledger.calls.append({
                 "phase": "search", "iteration": None, "model": None, "backend": None,
                 "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+                "prompt_chars": None, "completion_chars": None,
                 "carried_over": True,
             })
         return ledger

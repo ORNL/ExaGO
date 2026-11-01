@@ -116,6 +116,18 @@ class TestExagoSessionTokens:
         search_iters = [c["iteration"] for c in ledger.calls if c["phase"] == "search"]
         assert search_iters == [1, 1, 2, 3]
 
+    def test_char_lengths_match_backend_calls(self, tmp_path: Path):
+        _, backend, _, session = _run_session(tmp_path)
+        ledger = session.token_ledger
+        assert [c["prompt_chars"] for c in ledger.calls] == [
+            len(system) + len(user) for system, user in backend.calls
+        ]
+        assert all(c["completion_chars"] is not None for c in ledger.calls)
+        assert ledger.calls[3]["completion_chars"] == len("Once upon a time.")   # analyze fallback
+        assert ledger.total_prompt_chars == sum(c["prompt_chars"] for c in ledger.calls)
+        assert ledger.total_completion_chars == sum(c["completion_chars"] for c in ledger.calls)
+        assert ledger.to_dict()["prompt_chars"] == ledger.total_prompt_chars
+
     def test_journal_has_token_usage(self, tmp_path: Path):
         cfg, _, controller, _ = _run_session(tmp_path)
         exports = sorted(cfg.output.workdir.glob("journal_*.json"))

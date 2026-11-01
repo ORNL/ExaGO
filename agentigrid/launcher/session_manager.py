@@ -240,7 +240,8 @@ class SessionManager:
 
             response = backend.complete(system_prompt, user_prompt)
             # Same ledger as the session the analysis belongs to.
-            session.token_ledger.record("analysis", response)
+            session.token_ledger.record("analysis", response,
+                                        prompt_chars=len(system_prompt) + len(user_prompt))
             session.total_prompt_tokens = session.token_ledger.total_prompt
             session.total_completion_tokens = session.token_ledger.total_completion
             session.journal.token_usage = session.token_ledger.to_dict()

@@ -25,6 +25,10 @@ def test_parse_failures_counted(tmp_path):
     assert session.termination_reason == "parse_failures"
     _ledger_matches_backend(session, backend)
     assert session.token_ledger.total == 3 * 15
+    assert [c["prompt_chars"] for c in session.token_ledger.calls] == [
+        len(system) + len(user) for system, user in backend.prompts
+    ]
+    assert [c["completion_chars"] for c in session.token_ledger.calls] == [1, 1, 1]
     assert [c["iteration"] for c in session.token_ledger.calls] == [1, 2, 3]
 
 

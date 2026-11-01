@@ -36,6 +36,7 @@ def test_totals_and_phases():
     assert ledger.by_phase["search"] == {
         "calls": 2, "prompt_tokens": 220, "completion_tokens": 100,
         "total_tokens": 320, "calls_without_usage": 0,
+        "prompt_chars": 0, "completion_chars": 0,
     }
     assert sum(p["total_tokens"] for p in ledger.by_phase.values()) == ledger.total
 
@@ -103,3 +104,34 @@ def test_summary_text_format():
 
 def test_phase_names():
     assert PHASES == ("objective_extraction", "search", "analysis", "steering", "report", "other")
+
+
+def test_char_totals_equal_sum_over_calls():
+    ledger = TokenLedger()
+    r1 = _resp(10, 5); r1.raw_text = "abcd"
+    r2 = _resp(20, 6); r2.raw_text = "xy"
+    ledger.record("search", r1, 1, prompt_chars=120)
+    ledger.record("search", r2, 2, prompt_chars=80)
+    ledger.record("analysis", _resp(30, 7), prompt_chars=None)    # call site without a length
+    ledger.record("other", SimpleNamespace())                        # no raw_text at all
+
+    assert [c["prompt_chars"] for c in ledger.calls] == [120, 80, None, None]
+    assert [c["completion_chars"] for c in ledger.calls] == [4, 2, 0, None]
+    assert ledger.total_prompt_chars == sum(c["prompt_chars"] or 0 for c in ledger.calls) == 200
+    assert ledger.total_completion_chars == sum(c["completion_chars"] or 0 for c in ledger.calls) == 6
+    assert ledger.by_phase["search"]["prompt_chars"] == 200
+    assert ledger.by_phase["search"]["completion_chars"] == 6
+    assert sum(a["prompt_chars"] for a in ledger.by_phase.values()) == ledger.total_prompt_chars
+    data = ledger.to_dict()
+    assert data["prompt_chars"] == 200 and data["completion_chars"] == 6
+    assert TokenLedger.from_dict(data).calls == ledger.calls
+
+
+def test_old_dict_without_char_fields_loads():
+    old = {"per_call": [{"phase": "search", "iteration": 1, "model": "m", "backend": "b",
+                         "prompt_tokens": 10, "completion_tokens": 5}]}
+    ledger = TokenLedger.from_dict(old)
+    assert ledger.calls[0]["prompt_chars"] is None
+    assert ledger.calls[0]["completion_chars"] is None
+    assert ledger.total == 15 and ledger.total_prompt_chars == 0
+    assert ledger.to_dict()["by_phase"]["search"]["prompt_chars"] == 0

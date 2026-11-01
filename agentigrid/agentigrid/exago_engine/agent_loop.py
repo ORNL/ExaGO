@@ -1351,7 +1351,8 @@ class AgentLoopController:
             self._on_phase(iteration, "llm_request")
 
         response = self._backend.complete(system_prompt, user_prompt)
-        self._ledger.record("search", response, iteration)
+        self._ledger.record("search", response, iteration,
+                            prompt_chars=len(system_prompt) + len(user_prompt))
         logger.debug("LLM raw response: %s", response.raw_text[:500])
 
         # Track tokens
@@ -4707,7 +4708,8 @@ class AgentLoopController:
             context = self._latest_results_text or "No results available."
             user = f"Question: {query}\n\nCurrent results:\n{context}"
             response = self._backend.complete(system, user)
-            self._ledger.record("search", response, self._ledger_iteration)
+            self._ledger.record("search", response, self._ledger_iteration,
+                                prompt_chars=len(system) + len(user))
             return response.raw_text
         except Exception as exc:
             logger.warning("LLM fallback for analysis failed: %s", exc)
@@ -4738,7 +4740,8 @@ class AgentLoopController:
                 context="initial_goal",
             )
             response = self._backend.complete(sys_prompt, user_prompt)
-            self._ledger.record("objective_extraction", response, 0)
+            self._ledger.record("objective_extraction", response, 0,
+                                prompt_chars=len(sys_prompt) + len(user_prompt))
             parsed = parse_objective_extraction(response.raw_text)
             if parsed:
                 for obj_data in parsed:
@@ -4772,7 +4775,8 @@ class AgentLoopController:
                 context="steering_directive",
             )
             response = self._backend.complete(sys_prompt, user_prompt)
-            self._ledger.record("steering", response, iteration)
+            self._ledger.record("steering", response, iteration,
+                                prompt_chars=len(sys_prompt) + len(user_prompt))
             parsed = parse_objective_extraction(response.raw_text)
             if parsed:
                 for obj_data in parsed:
@@ -4887,7 +4891,8 @@ class AgentLoopController:
                 near_optimal_abs_tol=self._config.report.near_optimal_abs_tol,
             )
             response = self._backend.complete(sys_prompt, user_prompt)
-            self._ledger.record("analysis", response)
+            self._ledger.record("analysis", response,
+                                prompt_chars=len(sys_prompt) + len(user_prompt))
             analysis_text = response.raw_text
             valid_iters = {e.iteration for e in self._journal.entries}
             goal_classification = parse_goal_classification(analysis_text, valid_iters)
