@@ -239,6 +239,11 @@ class SessionManager:
             )
 
             response = backend.complete(system_prompt, user_prompt)
+            # Same ledger as the session the analysis belongs to.
+            session.token_ledger.record("analysis", response)
+            session.total_prompt_tokens = session.token_ledger.total_prompt
+            session.total_completion_tokens = session.token_ledger.total_completion
+            session.journal.token_usage = session.token_ledger.to_dict()
             raw_text = response.raw_text
 
             valid_iters = {e.iteration for e in session.journal.entries}
@@ -398,6 +403,7 @@ class SessionManager:
                 current_network=None,
                 total_prompt_tokens=self._session.total_prompt_tokens,
                 total_completion_tokens=self._session.total_completion_tokens,
+                token_usage=self._session.token_ledger.to_dict(),
                 last_iteration=len(self._session.journal) - 1,
                 termination_reason=self._session.termination_reason,
             )

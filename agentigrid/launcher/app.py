@@ -1330,6 +1330,8 @@ def _render_overview_tab(session):
     mc3.metric("Duration", duration_str)
     mc4.metric("Termination", session.termination_reason)
     mc5.metric("Tokens", f"{total_tokens:,}" if total_tokens > 0 else "—")
+    if len(session.token_ledger):
+        st.caption(session.token_ledger.summary_text())
 
     base_entry = session.journal.entries[0] if session.journal.entries else None
     best_entry = None

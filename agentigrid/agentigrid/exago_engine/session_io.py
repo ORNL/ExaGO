@@ -19,7 +19,7 @@ from agentigrid.exago_parsers.matpower_parser import parse_matpower
 
 logger = logging.getLogger("agentigrid.exago_engine.session_io")
 
-SESSION_FORMAT_VERSION = "1.1"
+SESSION_FORMAT_VERSION = "1.2"     # 1.2: token_usage (per-call token ledger)
 
 
 def save_session(
@@ -35,6 +35,7 @@ def save_session(
     total_prompt_tokens: int,
     total_completion_tokens: int,
     last_iteration: int,
+    token_usage: dict | None = None,
     termination_reason: str = "paused",
     enforced_vmin: float | None = None,
     enforced_vmax: float | None = None,
@@ -60,9 +61,10 @@ def save_session(
         steering_history: List of steering directive dicts.
         active_steering_directives: Currently active steering directives.
         current_network: The modified network state (last iteration's network).
-        total_prompt_tokens: Cumulative prompt tokens used.
-        total_completion_tokens: Cumulative completion tokens used.
+        total_prompt_tokens: Cumulative prompt tokens used (all LLM calls).
+        total_completion_tokens: Cumulative completion tokens used (all LLM calls).
         last_iteration: The last completed iteration number.
+        token_usage: ``TokenLedger.to_dict()`` of the session (per-call breakdown).
         termination_reason: Why the session was saved (e.g., "paused", "user_stopped").
         enforced_vmin: Minimum voltage limit enforced in current network.
         enforced_vmax: Maximum voltage limit enforced in current network.
@@ -91,6 +93,7 @@ def save_session(
             "termination_reason": termination_reason,
             "total_prompt_tokens": total_prompt_tokens,
             "total_completion_tokens": total_completion_tokens,
+            "token_usage": token_usage,
             "enforced_vmin": enforced_vmin,
             "enforced_vmax": enforced_vmax,
             "current_network_file": network_file,
@@ -132,6 +135,7 @@ def load_session(save_dir: Path) -> dict[str, Any]:
         - "steering_history", "active_steering_directives"
         - "current_network" (MATNetwork or None)
         - "last_iteration", "total_prompt_tokens", "total_completion_tokens"
+        - "token_usage" (TokenLedger.to_dict(), None for sessions saved before format 1.2)
         - "enforced_vmin", "enforced_vmax"
 
     Raises:
@@ -146,7 +150,7 @@ def load_session(save_dir: Path) -> dict[str, Any]:
         raw = json.loads(session_path.read_text(encoding="utf-8"))
 
         version = raw.get("format_version", "0")
-        if version not in ("1.0", SESSION_FORMAT_VERSION):
+        if version not in ("1.0", "1.1", SESSION_FORMAT_VERSION):
             raise ValueError(
                 f"Unsupported session format version '{version}' "
                 f"(expected '{SESSION_FORMAT_VERSION}')"
@@ -228,6 +232,7 @@ def load_session(save_dir: Path) -> dict[str, Any]:
             "last_iteration": raw.get("last_iteration", 0),
             "total_prompt_tokens": raw.get("total_prompt_tokens", 0),
             "total_completion_tokens": raw.get("total_completion_tokens", 0),
+            "token_usage": raw.get("token_usage"),   # None before format 1.2
             "enforced_vmin": raw.get("enforced_vmin"),
             "enforced_vmax": raw.get("enforced_vmax"),
             "termination_reason": raw.get("termination_reason", "paused"),

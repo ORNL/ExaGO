@@ -21,6 +21,7 @@ from agentigrid.logging_setup import log_scope
 from agentigrid.backends import create_backend
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.config import AppConfig
+from agentigrid.token_usage import TokenLedger
 from agentigrid.exago_engine.commands import parse_command
 from agentigrid.exago_engine.executor import SimulationExecutor, SimulationResult
 from agentigrid.exago_engine.explore import (
@@ -737,8 +738,9 @@ class SearchSession:
     end_time: Optional[str] = None
     termination_reason: str = ""
     final_findings: Optional[dict] = None
-    total_prompt_tokens: int = 0
+    total_prompt_tokens: int = 0        # all LLM calls of the session (every phase)
     total_completion_tokens: int = 0
+    token_ledger: TokenLedger = field(default_factory=TokenLedger)
     goal_classification: Optional[dict] = None
     analysis_text: Optional[str] = None
     enforced_vmin: Optional[float] = None
@@ -755,6 +757,21 @@ class SearchSession:
 
 class AgentLoopController:
     """Drives the iterative LLM-driven search."""
+
+    @property
+    def _total_prompt_tokens(self) -> int:
+        """Prompt tokens of every LLM call so far (all phases)."""
+        return self._ledger.total_prompt
+
+    @property
+    def _total_completion_tokens(self) -> int:
+        """Completion tokens of every LLM call so far (all phases)."""
+        return self._ledger.total_completion
+
+    @property
+    def token_ledger(self) -> TokenLedger:
+        """Per-call token record of this session."""
+        return self._ledger
 
     def __init__(
         self,
@@ -799,8 +816,8 @@ class AgentLoopController:
         self._latest_results_text: Optional[str] = None
         self._error_feedback: Optional[str] = None
         self._consecutive_parse_failures = 0
-        self._total_prompt_tokens = 0
-        self._total_completion_tokens = 0
+        self._ledger = TokenLedger()        # every LLM call of the session, by phase
+        self._ledger_iteration: Optional[int] = None
         self._opflow_results_cache: dict[int, OPFLOWResult] = {}
         self._scopflow_num_contingencies: int = 0
         self._tcopflow_num_steps: int = 0
@@ -1002,6 +1019,7 @@ class AgentLoopController:
             config=self._config,
             journal=self._journal,
             start_time=datetime.now().isoformat(),
+            token_ledger=self._ledger,
         )
 
         # 1. Parse base case
@@ -1287,6 +1305,7 @@ class AgentLoopController:
     ) -> tuple[str, bool]:
         """Execute one iteration. Returns (action_type, should_continue)."""
         self._current_goal = goal
+        self._ledger_iteration = iteration       # for token records of calls made below
         # Drain the steering queue at the iteration boundary
         new_directives: list[dict] = []
         while True:
@@ -1332,13 +1351,12 @@ class AgentLoopController:
             self._on_phase(iteration, "llm_request")
 
         response = self._backend.complete(system_prompt, user_prompt)
+        self._ledger.record("search", response, iteration)
         logger.debug("LLM raw response: %s", response.raw_text[:500])
 
         # Track tokens
         pt = response.prompt_tokens or 0
         ct = response.completion_tokens or 0
-        self._total_prompt_tokens += pt
-        self._total_completion_tokens += ct
         if pt or ct:
             self._print(
                 f"[Iter {iteration}] Tokens: {pt} prompt + {ct} completion "
@@ -4689,6 +4707,7 @@ class AgentLoopController:
             context = self._latest_results_text or "No results available."
             user = f"Question: {query}\n\nCurrent results:\n{context}"
             response = self._backend.complete(system, user)
+            self._ledger.record("search", response, self._ledger_iteration)
             return response.raw_text
         except Exception as exc:
             logger.warning("LLM fallback for analysis failed: %s", exc)
@@ -4719,6 +4738,7 @@ class AgentLoopController:
                 context="initial_goal",
             )
             response = self._backend.complete(sys_prompt, user_prompt)
+            self._ledger.record("objective_extraction", response, 0)
             parsed = parse_objective_extraction(response.raw_text)
             if parsed:
                 for obj_data in parsed:
@@ -4752,6 +4772,7 @@ class AgentLoopController:
                 context="steering_directive",
             )
             response = self._backend.complete(sys_prompt, user_prompt)
+            self._ledger.record("steering", response, iteration)
             parsed = parse_objective_extraction(response.raw_text)
             if parsed:
                 for obj_data in parsed:
@@ -4842,7 +4863,7 @@ class AgentLoopController:
     @log_scope(logger, "ExaGO finalization")
     def _finalize(self, session: SearchSession, elapsed_seconds: float) -> None:
         """Print summary and save journal."""
-        total_tokens = self._total_prompt_tokens + self._total_completion_tokens
+        tokens_before_analysis = self._ledger.total
         if self._pending_explore is not None:      # session ended right after an explore
             dirs, best = self._pending_explore
             self._pending_explore = None
@@ -4859,13 +4880,14 @@ class AgentLoopController:
                 stats=raw_stats,
                 # Bounded digest avoids context overflow on large sweeps.
                 journal_formatted=self._journal.format_for_classification(),
-                total_tokens=total_tokens,
+                total_tokens=tokens_before_analysis,
                 objective_registry=self._journal.objective_registry.to_dict_list(),
                 preference_history=self._journal.objective_registry.history,
                 application=self._config.search.application,
                 near_optimal_abs_tol=self._config.report.near_optimal_abs_tol,
             )
             response = self._backend.complete(sys_prompt, user_prompt)
+            self._ledger.record("analysis", response)
             analysis_text = response.raw_text
             valid_iters = {e.iteration for e in self._journal.entries}
             goal_classification = parse_goal_classification(analysis_text, valid_iters)
@@ -4885,6 +4907,8 @@ class AgentLoopController:
         )
 
         # Store on session for downstream consumers (GUI, tests)
+        session.total_prompt_tokens = self._total_prompt_tokens
+        session.total_completion_tokens = self._total_completion_tokens
         session.goal_classification = goal_classification
         session.analysis_text = analysis_text
         session.objective_registry_data = self._journal.objective_registry.to_dict_list()
@@ -4908,12 +4932,8 @@ class AgentLoopController:
             f"(of max {self._config.search.max_iterations})"
         )
         print(f"  Duration:       {elapsed_seconds:.1f} seconds")
-        if total_tokens:
-            print(
-                f"  Tokens used:    ~{total_tokens:,} "
-                f"(prompt: {self._total_prompt_tokens:,}, "
-                f"completion: {self._total_completion_tokens:,})"
-            )
+        if len(self._ledger):
+            print(f"  {self._ledger.summary_text()}")
         print(f"  Termination:    {session.termination_reason}")
 
         # Goal-aware best-solution line
@@ -5029,6 +5049,7 @@ class AgentLoopController:
                 self._config.output.workdir / f"journal_{timestamp}.{fmt}"
             )
             journal_path.parent.mkdir(parents=True, exist_ok=True)
+            self._journal.token_usage = self._ledger.to_dict()
             if fmt == "csv":
                 self._journal.export_csv(journal_path)
             else:
@@ -5096,9 +5117,13 @@ class AgentLoopController:
         else:
             self._tcopflow_profile_overrides = {}
 
-        # Restore token counts
-        self._total_prompt_tokens = saved["total_prompt_tokens"]
-        self._total_completion_tokens = saved["total_completion_tokens"]
+        # Restore token counts (sessions saved before per-call accounting: totals only)
+        if saved.get("token_usage"):
+            self._ledger = TokenLedger.from_dict(saved["token_usage"])
+        else:
+            self._ledger = TokenLedger.from_legacy_totals(
+                saved["total_prompt_tokens"], saved["total_completion_tokens"],
+            )
 
         # Parse base case and restore networks
         base_case = saved["base_case_path"]
@@ -5171,6 +5196,7 @@ class AgentLoopController:
             config=self._config,
             journal=self._journal,
             start_time=datetime.now().isoformat(),
+            token_ledger=self._ledger,
         )
 
         # Continue the agent loop from last_iteration + 1
@@ -5276,6 +5302,7 @@ class AgentLoopController:
             current_network=self._current_network,
             total_prompt_tokens=self._total_prompt_tokens,
             total_completion_tokens=self._total_completion_tokens,
+            token_usage=self._ledger.to_dict(),
             last_iteration=last_iteration,
             enforced_vmin=enforced_vmin,
             enforced_vmax=enforced_vmax,

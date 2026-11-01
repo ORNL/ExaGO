@@ -217,6 +217,8 @@ class SearchJournal:
         self.session_best: Optional[dict] = None
         # load_factor: session-level load scaling factor (updated by set_load_factor action).
         self.load_factor: Optional[float] = None
+        # token_usage: TokenLedger.to_dict() of the session, set before export.
+        self.token_usage: Optional[dict] = None
 
     def update_session_best(
         self,
@@ -1122,6 +1124,8 @@ class SearchJournal:
             data["session_best"] = self.session_best
         if self.load_factor is not None:
             data["load_factor"] = self.load_factor
+        if self.token_usage is not None:
+            data["token_usage"] = self.token_usage
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info("Journal exported to %s (%d entries)", path, len(self._entries))
 

@@ -41,6 +41,7 @@ from agentigrid.gridkit_parsers.case_parser import (
 from agentigrid.gridkit_parsers.network_summary import network_summary
 from agentigrid.gridkit_parsers.results_parser import read_results
 from agentigrid.prompts.gridkit import build_system_prompt
+from agentigrid.token_usage import TokenLedger
 
 logger = logging.getLogger("agentigrid.gridkit_engine.agent_loop")
 
@@ -59,8 +60,9 @@ class GridkitSession:
     error: Optional[str] = None
     final_answer: Optional[dict] = None
     journal_path: Optional[Path] = None
-    total_prompt_tokens: int = 0
+    total_prompt_tokens: int = 0        # all LLM calls of the session
     total_completion_tokens: int = 0
+    token_ledger: TokenLedger = field(default_factory=TokenLedger)
     screens: list[str] = field(default_factory=list)   # verdict lines, in order
     steady_state: Optional[str] = None                  # ExaGO source, when started from it
 
@@ -170,8 +172,9 @@ class GridkitAgentLoop:
                 feedback = None
                 self._print(f"[Iter {iteration}] Asking {self._backend.name()} ({self._cfg.llm.model})...")
                 response = self._backend.complete(system_prompt, user_prompt)
-                session.total_prompt_tokens += response.prompt_tokens or 0
-                session.total_completion_tokens += response.completion_tokens or 0
+                session.token_ledger.record("search", response, iteration)
+                session.total_prompt_tokens = session.token_ledger.total_prompt
+                session.total_completion_tokens = session.token_ledger.total_completion
                 data = response.json_data
                 if data is None and _BACKEND_ERROR_RE.match(response.raw_text or ""):
                     session.termination_reason = "llm_error"
@@ -401,6 +404,7 @@ class GridkitAgentLoop:
 
     @log_scope(logger, "GridKit finalization")
     def _finalize(self, session: GridkitSession) -> GridkitSession:
+        self._journal.token_usage = session.token_ledger.to_dict()
         session.journal_path = self._journal.export_json()
         print()
         print("=" * 60)
@@ -420,8 +424,7 @@ class GridkitAgentLoop:
                 print("  Details:")
                 for line in details.splitlines():
                     print(f"    {line}")
-        print(f"  Tokens:      {session.total_prompt_tokens} prompt + "
-              f"{session.total_completion_tokens} completion")
+        print(f"  {session.token_ledger.summary_text()}")
         print(f"  Journal:     {session.journal_path}")
         return session
 
