@@ -122,30 +122,68 @@ def _series_after(t: Sequence[float], x: Sequence[float], t0: float) -> list[tup
     return [(ti, xi) for ti, xi in zip(t, x) if ti >= t0]
 
 
+def _unwrap_rad(x: Sequence[float]) -> list[float]:
+    """Angle series in rad without 2*pi jumps (same idea as numpy.unwrap).
+
+    GridKit integrates delta, so its output is already continuous; this only
+    protects the check against a wrapped angle from another source.
+    """
+    if not x:
+        return []
+    out = [x[0]]
+    for prev, cur in zip(x, x[1:]):
+        step = cur - prev
+        step -= 2.0 * math.pi * round(step / (2.0 * math.pi))
+        out.append(out[-1] + step)
+    return out
+
+
 def check_angle_stability(
     t: Sequence[float],
     deltas: Mapping[str, Sequence[float]],
     limit_deg: float = ANGLE_SPREAD_MAX_DEG,
 ) -> CheckResult:
-    """Largest spread between machine rotor angles over the run."""
+    """Largest change of the angle between any two machines over the run.
+
+    The angle between two machines in steady state depends on the dispatch
+    and on the size of the grid (about 108 deg in ACTIVSg10k), so it says
+    nothing about stability. Only the change caused by the event is tested:
+
+        d_i(t) = delta_i(t) - delta_i(0)        change of machine i
+        change(t) = max_i d_i(t) - min_i d_i(t)  largest pairwise change
+
+    A common drift of all machines (a frequency change) cancels out.
+    The run must start from a steady state (see check_steady_state).
+    The steady-state spread is reported for information only.
+    """
     src = "M-14B G.2.2 (angle limit: AgentiGrid default)"
     if len(deltas) < 2:
         return CheckResult("angle_stability", "not_tested", None, limit_deg,
                            "fewer than two machine angles recorded", src)
     names = list(deltas)
-    worst, worst_t = -1.0, None
+    # Continuous angles and their pre-event (steady-state) values.
+    angles = {n: _unwrap_rad(deltas[n]) for n in names}
+    start = {n: angles[n][0] for n in names}
+    initial_spread = math.degrees(max(start.values()) - min(start.values()))
+
+    worst, worst_t, worst_pair = -1.0, None, (None, None)
     for i, ti in enumerate(t):
-        vals = [deltas[n][i] for n in names]
-        spread = math.degrees(max(vals) - min(vals))
+        change = {n: angles[n][i] - start[n] for n in names}
+        hi = max(change, key=change.get)   # machine that advanced most
+        lo = min(change, key=change.get)   # machine that fell back most
+        spread = math.degrees(change[hi] - change[lo])
         if spread > worst:
-            worst, worst_t = spread, ti
+            worst, worst_t, worst_pair = spread, ti, (hi, lo)
     ok = worst <= limit_deg
     return CheckResult(
         "angle_stability", "pass" if ok else "fail", worst, limit_deg,
-        f"largest machine angle spread {num(worst, '.1f', ' deg')} at t = {worst_t:g} s"
+        f"largest change of machine angle difference {num(worst, '.1f', ' deg')} "
+        f"at t = {worst_t:g} s (machines {worst_pair[0]} and {worst_pair[1]}); "
+        f"steady-state spread {num(initial_spread, '.1f', ' deg')} (information only)"
         + ("" if ok else " (loss of synchronism)"),
         src,
-        {"spread_deg": worst, "t_s": worst_t},
+        {"spread_deg": worst, "t_s": worst_t, "machines": list(worst_pair),
+         "initial_spread_deg": initial_spread},
     )
 
 
