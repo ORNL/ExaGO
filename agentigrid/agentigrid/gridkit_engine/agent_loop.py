@@ -448,7 +448,7 @@ def _outcome_table(outcomes: list[FaultOutcome]) -> str:
         return criteria.num(scale * c.value, fmt, unit)
 
     lines = ["ALL BUS FAULTS (rounded value, full value in brackets):",
-             f"{'Bus':>6} | {'Result':<10} | {'Angle spread':>32} | {'Vmin 2.5s':>28} | {'Damping':>28}",
+             f"{'Bus':>6} | {'Result':<10} | {'Angle change':>32} | {'Vmin 2.5s':>28} | {'Damping':>28}",
              "-" * 116]
     for o in sorted(outcomes, key=lambda o: o.bus):
         lines.append(

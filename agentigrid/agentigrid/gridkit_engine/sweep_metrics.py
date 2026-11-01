@@ -33,7 +33,8 @@ CHECKS: dict[str, tuple[Callable, dict[str, set[str]], str]] = {
     "angle_stability": (
         lambda s, ctx: criteria.check_angle_stability(s.t, _angles(s)),
         {"machines": {"delta"}},
-        "machines stay in synchronism (angle spread <= 180 deg)",
+        "machines stay in synchronism (largest change of the rotor-angle difference between any two "
+        "machines, relative to the pre-fault steady state, <= 180 deg)",
     ),
     "voltage_recovery": (
         lambda s, ctx: criteria.check_voltage_recovery(s.t, _vm(s), ctx["clear_time_s"]),

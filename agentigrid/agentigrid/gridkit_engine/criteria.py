@@ -55,7 +55,9 @@ MARGIN_PRIMARY_CYCLES = 0.25
 
 # Angle stability: M-14B G.2.2 requires transient stability (machines stay in
 # synchronism) but gives no angle. AgentiGrid default: loss of synchronism
-# when the spread between any two machine angles exceeds 180 degrees.
+# when the rotor-angle difference between any two machines changes by more
+# than 180 degrees from its pre-fault (initial) value. The absolute spread is
+# not tested: in large cases most of it is already there in steady state.
 ANGLE_SPREAD_MAX_DEG = 180.0
 
 # Transient voltage recovery at BES buses (M-14B G.2.2):
