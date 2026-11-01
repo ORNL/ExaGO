@@ -41,8 +41,9 @@ DEFAULTS: dict[str, Any] = {
         "openai_base_url": None,
         "ollama_host": "http://localhost:11434",
         "ollama_cloud_host": None,
-        "temperature": 0.3,
+        "temperature": 0.3,          # null: no temperature is sent
         "max_tokens": 4096,
+        "reasoning_effort": None,    # null: nothing is sent (provider default)
     },
     "search": {
         "max_iterations": 20,
@@ -157,8 +158,11 @@ class LLMConfig:
     openai_base_url: Optional[str]
     ollama_host: str
     ollama_cloud_host: Optional[str]
-    temperature: float
+    temperature: Optional[float]          # None: the parameter is not sent
     max_tokens: int
+    # Sent as reasoning_effort (OpenAI-compatible, incl. Gemini) or think (Ollama);
+    # None: nothing is sent and the provider default applies.
+    reasoning_effort: Optional[str] = None
 
 
 @dataclass(frozen=True)

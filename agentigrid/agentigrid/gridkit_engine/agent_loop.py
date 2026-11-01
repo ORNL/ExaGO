@@ -41,6 +41,7 @@ from agentigrid.gridkit_parsers.case_parser import (
 from agentigrid.gridkit_parsers.network_summary import network_summary
 from agentigrid.gridkit_parsers.results_parser import read_results
 from agentigrid.prompts.gridkit import build_system_prompt
+from agentigrid.llm_settings import collect_llm_settings, format_llm_settings
 from agentigrid.token_usage import TokenLedger
 
 logger = logging.getLogger("agentigrid.gridkit_engine.agent_loop")
@@ -135,6 +136,8 @@ class GridkitAgentLoop:
             self._journal = GridkitJournal(goal, case_file, session_dir)
             session = GridkitSession(goal=goal, case_file=case_file, session_dir=session_dir)
         self._session = session
+        self._journal.llm_settings = collect_llm_settings(self._cfg.llm, self._backend)
+        self._print(format_llm_settings(self._journal.llm_settings))
         if source_text:
             session.steady_state = steady_state.describe()
             self._journal.add(JournalEntry(0, "steady_state", "operating point from ExaGO",

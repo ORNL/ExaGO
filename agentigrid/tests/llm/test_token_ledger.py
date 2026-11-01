@@ -37,6 +37,7 @@ def test_totals_and_phases():
         "calls": 2, "prompt_tokens": 220, "completion_tokens": 100,
         "total_tokens": 320, "calls_without_usage": 0,
         "prompt_chars": 0, "completion_chars": 0,
+        "reasoning_tokens": 0, "billable_output_tokens": 100,
     }
     assert sum(p["total_tokens"] for p in ledger.by_phase.values()) == ledger.total
 

@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   steering, report regeneration), with a per-phase breakdown in the journal
   (`token_usage`), the console summary, the PDF report and the GUI. Token totals now
   include all phases; search-only totals are `token_usage.by_phase.search`.
+- LLM options `llm.reasoning_effort` (OpenAI-compatible incl. Gemini, Ollama `think`) and
+  `llm.temperature: null` (no temperature sent); usage details per call (reasoning tokens, provider
+  total, billable output; Gemini's thinking tokens derived from `total_tokens`); every journal
+  records the run's `llm_settings` (incl. package versions and the Ollama model digest).
 
 ## [2.1]
 

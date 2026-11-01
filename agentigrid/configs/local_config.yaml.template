@@ -27,8 +27,15 @@ llm:
   api_key_env: "ANTHROPIC_API_KEY"     # env var name (unused for local Ollama)
   ollama_host: "http://localhost:11434"
   # ollama_cloud_host: null            # set for Ollama Cloud
-  temperature: 0.3
+  temperature: 0.3                     # null: not sent (some reasoning models reject it)
   max_tokens: 4096
+  # reasoning_effort: "medium"         # openai/Gemini: reasoning_effort; ollama: think ("none" = off)
+  # Gemini via Google's OpenAI-compatible endpoint
+  # backend: "openai"
+  # model: "gemini-3.8-flash"
+  # openai_base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  # api_key_env: "GEMINI_API_KEY"
+  # reasoning_effort: "medium"
 
 # Search settings
 search:

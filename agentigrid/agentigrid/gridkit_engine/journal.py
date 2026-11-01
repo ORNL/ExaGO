@@ -49,6 +49,7 @@ class GridkitJournal:
         self.session_dir = session_dir
         self.entries: list[JournalEntry] = []
         self.token_usage: dict | None = None     # TokenLedger.to_dict(), set before export
+        self.llm_settings: dict | None = None    # collect_llm_settings() of the run
 
     def add(self, entry: JournalEntry) -> JournalEntry:
         self.entries.append(entry)
@@ -75,6 +76,7 @@ class GridkitJournal:
             "element_map": str(self.session_dir / "element_map.json"),
             "entries": [asdict(e) for e in self.entries],
             **({"token_usage": self.token_usage} if self.token_usage is not None else {}),
+            **({"llm_settings": self.llm_settings} if self.llm_settings is not None else {}),
         }
 
     def export_json(self, path: Path | None = None) -> Path:

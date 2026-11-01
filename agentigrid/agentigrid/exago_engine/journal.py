@@ -219,6 +219,8 @@ class SearchJournal:
         self.load_factor: Optional[float] = None
         # token_usage: TokenLedger.to_dict() of the session, set before export.
         self.token_usage: Optional[dict] = None
+        # llm_settings: collect_llm_settings() of the run (backend, model, parameters sent).
+        self.llm_settings: Optional[dict] = None
 
     def update_session_best(
         self,
@@ -1126,6 +1128,8 @@ class SearchJournal:
             data["load_factor"] = self.load_factor
         if self.token_usage is not None:
             data["token_usage"] = self.token_usage
+        if self.llm_settings is not None:
+            data["llm_settings"] = self.llm_settings
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info("Journal exported to %s (%d entries)", path, len(self._entries))
 

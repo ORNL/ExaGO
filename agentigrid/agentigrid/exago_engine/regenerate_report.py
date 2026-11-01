@@ -57,7 +57,8 @@ def load_journal_export(path: Path) -> SearchJournal:
     Rebuilds every current :class:`JournalEntry` field (dict.get with dataclass
     defaults, so older exports still load), the :class:`ObjectiveRegistry` (with
     its saved preference history), and the optional
-    ``benchmark_result`` / ``session_best`` / ``load_factor`` / ``token_usage`` fields.
+    ``benchmark_result`` / ``session_best`` / ``load_factor`` / ``token_usage`` /
+    ``llm_settings`` fields.
 
     Raises:
         ValueError: If *path* looks like a ``session.json`` (has ``format_version``
@@ -136,6 +137,8 @@ def load_journal_export(path: Path) -> SearchJournal:
         journal.load_factor = raw["load_factor"]
     if raw.get("token_usage") is not None:     # absent in journals before token accounting
         journal.token_usage = raw["token_usage"]
+    if raw.get("llm_settings") is not None:    # absent in journals before settings recording
+        journal.llm_settings = raw["llm_settings"]
 
     logger.info("Loaded journal export %s (%d entries)", path, len(journal.entries))
     return journal

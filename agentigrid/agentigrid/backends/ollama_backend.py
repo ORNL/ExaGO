@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse
@@ -46,6 +47,22 @@ class OllamaBackend(LLMBackend):
 
         self._client = ollama.Client(**client_kwargs)
 
+        # think= exists in newer ollama clients only (0.6.1: bool | "low"/"medium"/"high").
+        self._think: Any = None
+        if config.reasoning_effort is not None:
+            try:
+                supported = "think" in inspect.signature(self._client.chat).parameters
+            except (TypeError, ValueError):
+                supported = False
+            if supported:
+                effort = config.reasoning_effort
+                self._think = False if str(effort).lower() == "none" else effort
+            else:
+                logger.warning(
+                    "llm.reasoning_effort=%r is set but the installed ollama client has no "
+                    "'think' argument; nothing is sent", config.reasoning_effort,
+                )
+
     def name(self) -> str:
         """Return the backend name."""
         return self._backend_name
@@ -54,6 +71,35 @@ class OllamaBackend(LLMBackend):
         """Some Ollama models support JSON mode (e.g., Qwen-based)."""
         model_lower = self._config.model.lower()
         return "qwen" in model_lower
+
+    def endpoint(self) -> Optional[str]:
+        """Ollama host the client talks to."""
+        return self._host
+
+    def reasoning_param(self) -> dict:
+        """``think`` as sent (nothing when not configured or not supported)."""
+        return {} if self._think is None else {"think": self._think}
+
+    def model_digest(self) -> Optional[str]:
+        """Digest of the configured model as in ``ollama list``; None if it cannot be read.
+
+        Ollama tags are not pinned, so the digest identifies the exact model a run used.
+        Never raises.
+        """
+        try:
+            listing = self._client.list()
+            models = listing.get("models", []) if isinstance(listing, dict) else listing.models
+            wanted = self._config.model
+            names = {wanted} if ":" in wanted else {wanted, f"{wanted}:latest"}
+            for m in models:
+                name = m.get("model") if isinstance(m, dict) else getattr(m, "model", None)
+                if name in names:
+                    digest = m.get("digest") if isinstance(m, dict) else getattr(m, "digest", None)
+                    return digest if isinstance(digest, str) else None
+        except Exception as exc:  # noqa: BLE001 - a settings record must never fail a run
+            logger.warning("Could not read the Ollama model digest for %s: %s",
+                           self._config.model, exc)
+        return None
 
     def complete(
         self,
@@ -69,10 +115,9 @@ class OllamaBackend(LLMBackend):
             {"role": "user", "content": user_prompt},
         ]
 
-        options: dict = {
-            "temperature": temp,
-            "num_predict": self._config.max_tokens,
-        }
+        options: dict = {"num_predict": self._config.max_tokens}
+        if temp is not None:                     # temperature: null -> not sent
+            options["temperature"] = temp
 
         kwargs: dict = {
             "model": self._config.model,
@@ -82,6 +127,7 @@ class OllamaBackend(LLMBackend):
 
         if self.supports_json_mode():
             kwargs["format"] = "json"
+        kwargs.update(self.reasoning_param())
 
         try:
             with log_scope(logger, "LLM API request", backend=self.name(), model=self._config.model):

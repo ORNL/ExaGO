@@ -227,8 +227,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _coerce_override_value(raw: str) -> Any:
-    """Coerce a --set string value to int/float/bool, else leave as string."""
+    """Coerce a --set string value to None/int/float/bool, else leave as string.
+
+    Only ``null`` means None (as in YAML); ``none`` stays a string because it is a
+    real value for some keys (``exago.save_solutions``, ``llm.reasoning_effort``).
+    """
     low = raw.strip().lower()
+    if low == "null":
+        return None
     if low in ("true", "false"):
         return low == "true"
     for caster in (int, float):

@@ -58,3 +58,17 @@ def test_journal_block_and_missing_usage(tmp_path):
     assert journal["token_usage"] == session.token_ledger.to_dict()
     assert journal["token_usage"]["calls"] == 2
     assert journal["token_usage"]["total_tokens"] == 28
+
+
+def test_journal_llm_settings_without_key(tmp_path, monkeypatch):
+    secret = "sk-test-SECRET-do-not-leak-0123456789"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", secret)          # api_key_env of the default config
+    loop, _ = _loop(tmp_path, [{"action": "complete", "summary": "VERDICT: ok", "details": ""}])
+    session = loop.run(IEEE39, "anything")
+    text = session.journal_path.read_text()
+    assert secret not in text
+    settings = json.loads(text)["llm_settings"]
+    assert settings["backend_name"] == "scripted"
+    assert settings["model"] == loop._cfg.llm.model
+    assert settings["temperature"] == loop._cfg.llm.temperature
+    assert settings["ollama_model_digest"] is None

@@ -38,8 +38,18 @@ llm:
   ollama_host: "http://localhost:11434"
   ollama_cloud_host: null
   # Generation parameters
-  temperature: 0.3
+  temperature: 0.3              # null: no temperature is sent (some reasoning models reject it)
   max_tokens: 4096
+  # Reasoning effort, sent only when set: reasoning_effort for openai (incl. Gemini:
+  # low|medium|high), think for ollama ("none" -> off); not supported for anthropic.
+  # null: nothing is sent, the provider default applies.
+  reasoning_effort: null
+  # Gemini via Google's OpenAI-compatible endpoint
+  # backend: "openai"
+  # model: "gemini-3.8-flash"
+  # openai_base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  # api_key_env: "GEMINI_API_KEY"
+  # reasoning_effort: "medium"
 
 # Search settings
 search:

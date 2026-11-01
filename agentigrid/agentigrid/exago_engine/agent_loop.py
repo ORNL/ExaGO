@@ -21,6 +21,7 @@ from agentigrid.logging_setup import log_scope
 from agentigrid.backends import create_backend
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.config import AppConfig
+from agentigrid.llm_settings import collect_llm_settings, format_llm_settings
 from agentigrid.token_usage import TokenLedger
 from agentigrid.exago_engine.commands import parse_command
 from agentigrid.exago_engine.executor import SimulationExecutor, SimulationResult
@@ -773,6 +774,11 @@ class AgentLoopController:
         """Per-call token record of this session."""
         return self._ledger
 
+    def _record_llm_settings(self) -> None:
+        """Put the run's LLM settings on the journal and print them in one line."""
+        self._journal.llm_settings = collect_llm_settings(self._config.llm, self._backend)
+        self._print(format_llm_settings(self._journal.llm_settings))
+
     def __init__(
         self,
         config: AppConfig,
@@ -1021,6 +1027,7 @@ class AgentLoopController:
             start_time=datetime.now().isoformat(),
             token_ledger=self._ledger,
         )
+        self._record_llm_settings()
 
         # 1. Parse base case
         logger.info("Parsing base case: %s", base_case)
@@ -5203,6 +5210,7 @@ class AgentLoopController:
             start_time=datetime.now().isoformat(),
             token_ledger=self._ledger,
         )
+        self._record_llm_settings()
 
         # Continue the agent loop from last_iteration + 1
         max_iter = self._config.search.max_iterations
