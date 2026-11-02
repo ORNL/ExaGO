@@ -33,7 +33,7 @@ from agentigrid.gridkit_engine.journal import GridkitJournal, JournalEntry, outc
 from agentigrid.gridkit_engine.modifier import apply_modifications, prepare_fault_case, write_case
 from agentigrid.gridkit_engine.schema_description import command_schema_text
 from agentigrid.gridkit_engine.settings import GridkitSettings
-from agentigrid.gridkit_engine.sweep_metrics import FaultOutcome, run_checks, screen_verdict
+from agentigrid.gridkit_engine.sweep_metrics import FaultOutcome, info_label, run_checks, screen_verdict
 from agentigrid.gridkit_engine.validation import validate_fault_study
 from agentigrid.gridkit_parsers.case_parser import (
     MACHINE_CLASSES, build_element_map, create_element_map, load_case,
@@ -137,7 +137,10 @@ class GridkitAgentLoop:
             session = GridkitSession(goal=goal, case_file=case_file, session_dir=session_dir)
         self._session = session
         self._journal.llm_settings = collect_llm_settings(self._cfg.llm, self._backend)
+        self._journal.damping_in_verdict = self._settings.damping_in_verdict
         self._print(format_llm_settings(self._journal.llm_settings))
+        if not self._settings.damping_in_verdict:
+            self._print(f"[Session] {info_label('damping')} (gridkit.damping_in_verdict: false)")
         if source_text:
             session.steady_state = steady_state.describe()
             self._journal.add(JournalEntry(0, "steady_state", "operating point from ExaGO",
@@ -165,7 +168,8 @@ class GridkitAgentLoop:
         net_text = "\n".join(filter(None, [network_summary(self._emap),
                                             _starting_state_line(steady_state)]))
         system_prompt = build_system_prompt(
-            command_schema_text(self._settings.fault_start_s, self._settings.tmax_s),
+            command_schema_text(self._settings.fault_start_s, self._settings.tmax_s,
+                                self._settings.info_checks),
             net_text, base_text,
         )
         latest: Optional[str] = None
@@ -392,7 +396,7 @@ class GridkitAgentLoop:
         checks = []
         if res.status.csv_found and res.status.csv_rows:
             series = read_results(res.csv_path, wmap)
-            checks = run_checks(series, study.checks, clear)
+            checks = run_checks(series, study.checks, clear, self._settings.info_checks)
         return FaultOutcome(res.job.bus, res.status, checks)
 
     def _subject(self, study: FaultStudy) -> str:
@@ -458,12 +462,16 @@ def _outcome_table(outcomes: list[FaultOutcome]) -> str:
             return "-" if c is None else c.status
         return criteria.num(scale * c.value, fmt, unit)
 
+    damping_info = any(c.name == "damping" and c.status == "info" for o in outcomes for c in o.checks)
+    damping_head = "Damping (info)" if damping_info else "Damping"
     lines = ["ALL BUS FAULTS (rounded value, full value in brackets):",
-             f"{'Bus':>6} | {'Result':<10} | {'Angle change':>32} | {'Vmin 2.5s':>28} | {'Damping':>28}",
+             f"{'Bus':>6} | {'Result':<10} | {'Angle change':>32} | {'Vmin 2.5s':>28} | {damping_head:>28}",
              "-" * 116]
     for o in sorted(outcomes, key=lambda o: o.bus):
         lines.append(
             f"{o.bus:>6} | {o.status:<10} | {val(o, 'angle_stability', '.1f', ' deg'):>32} | "
             f"{val(o, 'voltage_recovery', '.3f', ' pu'):>28} | {val(o, 'damping', '.1f', '%', 100):>28}"
         )
+    if damping_info:
+        lines.append(f"Result does not include damping: {info_label('damping')}.")
     return "\n".join(lines)

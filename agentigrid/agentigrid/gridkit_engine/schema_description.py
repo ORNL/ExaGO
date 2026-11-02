@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from agentigrid.gridkit_engine import criteria
-from agentigrid.gridkit_engine.sweep_metrics import CHECKS
+from agentigrid.gridkit_engine.sweep_metrics import check_lines
 from agentigrid.gridkit_engine.validation import MAX_FAULTS
 
 
 def command_schema_text(start_s: float = criteria.FAULT_START_S,
-                        tmax_s: float = criteria.SIM_LENGTH_S) -> str:
+                        tmax_s: float = criteria.SIM_LENGTH_S,
+                        info_checks: frozenset[str] = frozenset()) -> str:
     """Text for the GridKit system prompt: what the LLM may ask for.
-    *start_s* and *tmax_s* are the defaults in effect (from the gridkit config)."""
-    checks = "\n".join(f"     - {name}: {desc}" for name, (_, _, desc) in CHECKS.items())
+    *start_s* and *tmax_s* are the defaults in effect (from the gridkit config);
+    *info_checks* are reported but not part of the verdict."""
+    checks = "\n".join(f"     - {line}" for line in check_lines(info_checks))
     skipped = "\n".join(f"   - {tid} {name}: {why}" for tid, name, why in criteria.SKIPPED_TESTS)
     default_checks = ", ".join(f'"{c}"' for c in ("angle_stability", "voltage_recovery",
                                                    "damping", "final_voltage"))

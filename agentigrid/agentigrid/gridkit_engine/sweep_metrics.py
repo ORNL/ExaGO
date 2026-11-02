@@ -8,11 +8,14 @@ Check signature:
     check(series, context) -> CheckResult
 ``series`` is a gridkit_parsers.results_parser.TimeSeries; ``context`` holds
 ``clear_time_s`` (time the fault is cleared).
+
+A check can be made informational (gridkit.damping_in_verdict: false for damping):
+it is still computed and reported, with status "info", and never counts in a verdict.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
 from agentigrid.gridkit_engine import criteria
@@ -59,6 +62,24 @@ CHECKS: dict[str, tuple[Callable, dict[str, set[str]], str]] = {
 }
 
 
+# Why a check is informational only: shown to the LLM and under the per-fault table.
+INFO_NOTES: dict[str, str] = {
+    "damping": "informational only: the peak-decay estimate is not reliable on multi-mode "
+               "responses; not part of the verdict",
+}
+
+
+def info_label(name: str) -> str:
+    """'damping (informational only: ...)'."""
+    return f"{name} ({INFO_NOTES.get(name, 'informational only; not part of the verdict')})"
+
+
+def check_lines(info_only: frozenset[str] = frozenset()) -> list[str]:
+    """One line per registered check for the LLM, informational ones marked as such."""
+    return [info_label(name) if name in info_only else f"{name}: {desc}"
+            for name, (_, _, desc) in CHECKS.items()]
+
+
 def get_check(name: str) -> Callable:
     """The check function registered under *name*."""
     if name not in CHECKS:
@@ -79,9 +100,17 @@ def register_check(name: str, fn: Callable, needs: dict[str, set[str]], descript
     CHECKS[name] = (fn, needs, description)
 
 
-def run_checks(series, names: list[str], clear_time_s: float) -> list[CheckResult]:
+def as_info(result: CheckResult) -> CheckResult:
+    """*result* reported only: status "info", the status it would have had kept in its data."""
+    return replace(result, status="info", data={**result.data, "status_if_judged": result.status})
+
+
+def run_checks(series, names: list[str], clear_time_s: float,
+               info_only: frozenset[str] = frozenset()) -> list[CheckResult]:
+    """Run the named checks; those in *info_only* come back with status "info"."""
     ctx = {"clear_time_s": clear_time_s}
-    return [get_check(n)(series, ctx) for n in names]
+    results = [get_check(n)(series, ctx) for n in names]
+    return [as_info(r) if r.name in info_only else r for r in results]
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +128,7 @@ class FaultOutcome:
     @property
     def status(self) -> str:
         """"fail" if the run failed or any check failed, "not_tested" if a
-        check could not be judged, otherwise "pass"."""
+        check could not be judged, otherwise "pass". "info" checks never count."""
         if not self.run.solved or any(c.status == "fail" for c in self.checks):
             return "fail"
         if any(c.status == "not_tested" for c in self.checks):
@@ -107,9 +136,13 @@ class FaultOutcome:
         return "pass"
 
 
+# Most informational lines in a verdict (one per fault and check); the rest are in the journal.
+MAX_INFO_LINES = 50
+
+
 def screen_verdict(subject: str, outcomes: list[FaultOutcome], study_note: str) -> str:
     """Verdict line, table of every failure (never cut short), untested checks,
-    and the PJM tests skipped because GridKit lacks their elements."""
+    informational checks, and the PJM tests skipped because GridKit lacks their elements."""
     n = len(outcomes)
     failed = [o for o in outcomes if o.status == "fail"]
     untested = [o for o in outcomes if o.status == "not_tested"]
@@ -138,6 +171,15 @@ def screen_verdict(subject: str, outcomes: list[FaultOutcome], study_note: str) 
             for c in o.checks:
                 if c.status == "not_tested":
                     lines.append(f"  bus {o.bus}: {c.name} - {c.detail}")
+
+    info = [(o.bus, c) for o in sorted(outcomes, key=lambda o: o.bus)
+            for c in o.checks if c.status == "info"]
+    if info:
+        names = sorted({c.name for _, c in info})
+        lines += ["", "INFORMATIONAL, not part of the verdict: " + "; ".join(info_label(n) for n in names)]
+        lines += [f"  bus {bus}: {c.name} - {c.detail}" for bus, c in info[:MAX_INFO_LINES]]
+        if len(info) > MAX_INFO_LINES:
+            lines.append(f"  ... {len(info) - MAX_INFO_LINES} more (values in the journal)")
 
     lines += ["", "PJM tests SKIPPED (GridKit lacks the element):"]
     lines += [f"  {tid}: {name} - {why}" for tid, name, why in criteria.SKIPPED_TESTS]

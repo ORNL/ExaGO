@@ -28,6 +28,7 @@ class GridkitSettings:
     dynamicsimulation_binary: Optional[Path] = None
     timeout_s: float = DEFAULT_TIMEOUT_S
     threads: Optional[int] = _DEFAULTS.threads   # per run; None = inherit the environment
+    damping_in_verdict: bool = _DEFAULTS.damping_in_verdict
     workers: int = 0                # 0 = auto: min(cpu count, MAX_AUTO_WORKERS)
     workdir: Path = Path("./workdir/gridkit")
     exago_workdir: Path = Path("./workdir/exago")   # where "latest_steady_state" is looked up
@@ -45,6 +46,11 @@ class GridkitSettings:
     @property
     def contingency_analysis(self) -> Path:
         return self.binary_dir / "ContingencyAnalysis"
+
+    @property
+    def info_checks(self) -> frozenset[str]:
+        """Checks computed and reported but kept out of the verdict (status "info")."""
+        return frozenset() if self.damping_in_verdict else frozenset({"damping"})
 
     def subprocess_env(self) -> Optional[dict[str, str]]:
         """Environment for a GridKit process: ours with the thread variables set
@@ -72,6 +78,7 @@ class GridkitSettings:
             dynamicsimulation_binary=gk.dynamicsimulation_binary,
             timeout_s=float(gk.timeout),
             threads=gk.threads,
+            damping_in_verdict=gk.damping_in_verdict,
             workdir=Path(cfg.output.workdir) / "gridkit",
             exago_workdir=Path(cfg.output.workdir) / "exago",
             logs_dir=Path(cfg.output.logs_dir) / "gridkit",

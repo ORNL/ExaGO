@@ -75,6 +75,7 @@ def test_session_end_to_end(tmp_path):
     assert (session.session_dir / "element_map.json").exists()
 
     journal = json.loads(session.journal_path.read_text())
+    assert journal["damping_in_verdict"] is True
     actions = [e["action"] for e in journal["entries"]]
     assert actions == ["base_case", "error", "error", "fault_screen", "fault_screen", "complete"]
     assert "steady state: pass" in journal["entries"][0]["verdict"].lower()

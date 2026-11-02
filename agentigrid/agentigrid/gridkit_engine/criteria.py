@@ -102,7 +102,7 @@ class CheckResult:
     """Outcome of one PJM check on one run."""
 
     name: str
-    status: str               # "pass", "fail" or "not_tested"
+    status: str               # "pass", "fail", "not_tested", or "info" (reported, not judged)
     value: Optional[float]
     limit: Optional[float]
     detail: str

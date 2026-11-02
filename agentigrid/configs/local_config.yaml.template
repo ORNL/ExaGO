@@ -63,6 +63,9 @@ gridkit:
   timeout: 600                          # seconds per GridKit run
   threads: 1                            # OPENBLAS_NUM_THREADS/OMP_NUM_THREADS per run (runs go
                                         #   in parallel); null = leave the environment as is
+  damping_in_verdict: true              # false: damping is computed and reported as "info" only,
+                                        #   outside the verdict (peak-decay estimate unreliable on
+                                        #   multi-mode responses)
 
   # Written into each run's solver .json; keys are GridKit's own
   # (GridKit/application/PhasorDynamics/README.md)
