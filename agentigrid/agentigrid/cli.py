@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from agentigrid import __version__
+from agentigrid.backends.retry import EXIT_CODES
 from agentigrid.config import AppConfig, load_config
 from agentigrid.logging_setup import setup_logging
 
@@ -404,6 +405,19 @@ def _start_stdin_listener(controller) -> None:
     t.start()
 
 
+# Session endings that are failures: exit 1 (API errors: EXIT_CODES, 3 and 4).
+_FAILED_ENDINGS = ("llm_error", "base_case_failed", "parse_failures")
+
+
+def exit_for_termination(termination: str) -> None:
+    """Exit with the code for how a session ended: 3 api_error, 4 quota_exhausted,
+    1 other failures; return (exit 0) for completed / max_iterations / user_stopped."""
+    if termination in EXIT_CODES:
+        sys.exit(EXIT_CODES[termination])
+    if termination in _FAILED_ENDINGS:
+        sys.exit(1)
+
+
 def run_search(cfg: AppConfig, goal: str, quiet: bool = False) -> None:
     """Run the LLM-driven search loop."""
     from agentigrid.exago_engine.agent_loop import AgentLoopController
@@ -414,7 +428,8 @@ def run_search(cfg: AppConfig, goal: str, quiet: bool = False) -> None:
     if sys.stdin.isatty():
         _start_stdin_listener(controller)
 
-    controller.run(cfg.search.base_case, goal)
+    session = controller.run(cfg.search.base_case, goal)
+    exit_for_termination(session.termination_reason)
 
 
 def exago_output(cfg: AppConfig) -> AppConfig:
@@ -584,7 +599,8 @@ def main(argv: list[str] | None = None) -> None:
         controller = AgentLoopController(cfg, quiet=quiet)
         if sys.stdin.isatty():
             _start_stdin_listener(controller)
-        controller.resume_from(resume_dir)
+        session = controller.resume_from(resume_dir)
+        exit_for_termination(session.termination_reason)
         return
 
     if not quiet:

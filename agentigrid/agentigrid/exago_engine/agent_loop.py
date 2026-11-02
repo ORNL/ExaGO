@@ -20,6 +20,7 @@ from typing import Callable, Optional
 from agentigrid.logging_setup import log_scope
 from agentigrid.backends import create_backend
 from agentigrid.backends.base import LLMBackend, LLMResponse
+from agentigrid.backends.retry import EXIT_CODES, LLMCallFailed, complete_with_retry
 from agentigrid.config import AppConfig
 from agentigrid.llm_settings import collect_llm_settings, format_llm_settings
 from agentigrid.token_usage import TokenLedger
@@ -70,6 +71,10 @@ from agentigrid.exago_engine.goal_classifier import build_classification_prompts
 logger = logging.getLogger("agentigrid.exago_engine.agent_loop")
 
 _MAX_CONSECUTIVE_PARSE_FAILURES = 3
+
+
+class _SkipAnalysis(Exception):
+    """No post-search analysis call (the session ended on an API error)."""
 
 
 def _bus_limits_from_network(net) -> dict[int, tuple[float, float]]:
@@ -738,6 +743,7 @@ class SearchSession:
     start_time: str
     end_time: Optional[str] = None
     termination_reason: str = ""
+    error: Optional[str] = None         # the terminal LLM API error, when the session ended on one
     final_findings: Optional[dict] = None
     total_prompt_tokens: int = 0        # all LLM calls of the session (every phase)
     total_completion_tokens: int = 0
@@ -822,6 +828,8 @@ class AgentLoopController:
         self._latest_results_text: Optional[str] = None
         self._error_feedback: Optional[str] = None
         self._consecutive_parse_failures = 0
+        self._abort_reason: Optional[str] = None   # set when an iteration ends the session early
+        self._sleep: Callable[[float], None] = time.sleep   # retry waits (tests replace it)
         self._ledger = TokenLedger()        # every LLM call of the session, by phase
         self._ledger_iteration: Optional[int] = None
         self._opflow_results_cache: dict[int, OPFLOWResult] = {}
@@ -852,6 +860,53 @@ class AgentLoopController:
         """Print progress message unless quiet mode is enabled."""
         if not self._quiet:
             print(msg)
+
+    def _llm(self, system: str, user: str, phase: str, iteration: Optional[int] = None) -> LLMResponse:
+        """Every LLM call of the session: retries transient API errors (llm.retry),
+        logs each failed attempt in the journal, records tokens of the answer only.
+        Raises LLMCallFailed on a terminal error (retries exhausted, quota, fatal)."""
+        def on_event(event: dict) -> None:
+            self._journal.llm_events.append({"phase": phase, "iteration": iteration, **event})
+            if event["outcome"] == "retry":
+                print(f"[LLM] {phase} call failed ({event['error_kind']}): {event['error'][:160]} "
+                      f"- retry in {event['wait_s']:g} s")
+
+        response = complete_with_retry(self._backend, system, user, self._config.llm.retry,
+                                       on_event=on_event, sleep=self._sleep)
+        self._ledger.record(phase, response, iteration, prompt_chars=len(system) + len(user))
+        return response
+
+    def _end_on_llm_failure(self, session: "SearchSession", exc: LLMCallFailed) -> None:
+        """End the session on a terminal LLM API error: never "completed", no best result."""
+        session.termination_reason = exc.termination
+        session.error = exc.message
+        print(f"[LLM] Session ended: {exc.termination} after {exc.attempts} attempt(s): {exc.message[:300]}")
+
+    def _run_iterations(self, session: "SearchSession", goal: str, first_iteration: int) -> None:
+        """The agent loop from *first_iteration*; sets session.termination_reason."""
+        max_iter = self._config.search.max_iterations
+        try:
+            for iteration in range(first_iteration, max_iter + 1):
+                if self._stop_requested:
+                    session.termination_reason = "user_stopped"
+                    self._print("\nSearch stopped by user.")
+                    break
+                with log_scope(logger, "ExaGO iteration", iteration=iteration):
+                    action_type, should_continue = self._iteration(iteration, goal)
+                # Notify callback after each iteration
+                if self._on_iteration:
+                    latest_entry = self._journal.latest
+                    if latest_entry:
+                        self._on_iteration(iteration, latest_entry, action_type, self._latest_opflow)
+                if not should_continue:
+                    if not session.termination_reason:
+                        session.termination_reason = self._abort_reason or "completed"
+                    break
+            else:
+                session.termination_reason = "max_iterations"
+                self._print(f"\nMax iterations ({max_iter}) reached.")
+        except LLMCallFailed as exc:
+            self._end_on_llm_failure(session, exc)
 
     def request_stop(self) -> None:
         """Request graceful termination of the search loop."""
@@ -1234,7 +1289,10 @@ class AgentLoopController:
             self._print(f"[Iter 0] Base case simulation FAILED: {sim_result.error_message}")
 
         # 2b. Extract initial objectives from goal
-        self._extract_initial_objectives(goal)
+        try:
+            self._extract_initial_objectives(goal)
+        except LLMCallFailed as exc:
+            self._end_on_llm_failure(session, exc)
 
         # Backfill base case metrics now that objectives are registered
         if self._latest_opflow is not None:
@@ -1249,27 +1307,9 @@ class AgentLoopController:
             if latest_entry:
                 self._on_iteration(0, latest_entry, "base_case", self._latest_opflow)
 
-        # 3. Agent loop
-        max_iter = self._config.search.max_iterations
-        for iteration in range(1, max_iter + 1):
-            if self._stop_requested:
-                session.termination_reason = "user_stopped"
-                self._print("\nSearch stopped by user.")
-                break
-            with log_scope(logger, "ExaGO iteration", iteration=iteration):
-                action_type, should_continue = self._iteration(iteration, goal)
-            # Notify callback after each iteration
-            if self._on_iteration:
-                latest_entry = self._journal.latest
-                if latest_entry:
-                    self._on_iteration(iteration, latest_entry, action_type, self._latest_opflow)
-            if not should_continue:
-                if not session.termination_reason:
-                    session.termination_reason = "completed"
-                break
-        else:
-            session.termination_reason = "max_iterations"
-            self._print(f"\nMax iterations ({max_iter}) reached.")
+        # 3. Agent loop (not after a terminal API error in the objective extraction)
+        if not session.termination_reason:
+            self._run_iterations(session, goal, 1)
 
         if not session.termination_reason:
             session.termination_reason = "completed"
@@ -1357,9 +1397,9 @@ class AgentLoopController:
         if self._on_phase:
             self._on_phase(iteration, "llm_request")
 
-        response = self._backend.complete(system_prompt, user_prompt)
-        self._ledger.record("search", response, iteration,
-                            prompt_chars=len(system_prompt) + len(user_prompt))
+        # A terminal API error raises LLMCallFailed: only a received answer gets here,
+        # so the parse-failure counter below counts real parse failures only.
+        response = self._llm(system_prompt, user_prompt, "search", iteration)
         logger.debug("LLM raw response: %s", response.raw_text[:500])
 
         # Track tokens
@@ -1383,6 +1423,7 @@ class AgentLoopController:
             self._print(f"[Iter {iteration}] Failed to parse LLM response as JSON")
             if self._consecutive_parse_failures >= _MAX_CONSECUTIVE_PARSE_FAILURES:
                 self._print(f"[Iter {iteration}] Too many consecutive parse failures — aborting")
+                self._abort_reason = "parse_failures"
                 return "error", False
             self._error_feedback = (
                 "Failed to parse JSON from your response. "
@@ -4714,10 +4755,10 @@ class AgentLoopController:
             )
             context = self._latest_results_text or "No results available."
             user = f"Question: {query}\n\nCurrent results:\n{context}"
-            response = self._backend.complete(system, user)
-            self._ledger.record("search", response, self._ledger_iteration,
-                                prompt_chars=len(system) + len(user))
+            response = self._llm(system, user, "search", self._ledger_iteration)
             return response.raw_text
+        except LLMCallFailed:
+            raise
         except Exception as exc:
             logger.warning("LLM fallback for analysis failed: %s", exc)
             return (
@@ -4746,9 +4787,7 @@ class AgentLoopController:
                 available_metrics=available_metrics_for_app(self._config.search.application),
                 context="initial_goal",
             )
-            response = self._backend.complete(sys_prompt, user_prompt)
-            self._ledger.record("objective_extraction", response, 0,
-                                prompt_chars=len(sys_prompt) + len(user_prompt))
+            response = self._llm(sys_prompt, user_prompt, "objective_extraction", 0)
             parsed = parse_objective_extraction(response.raw_text)
             if parsed:
                 for obj_data in parsed:
@@ -4769,6 +4808,8 @@ class AgentLoopController:
                 # Nothing to optimize in the goal (e.g. a test or report): track
                 # nothing rather than invent an objective the user did not ask for.
                 self._print("[Objectives] None stated in the goal; none tracked")
+        except LLMCallFailed:
+            raise
         except Exception as exc:
             logger.warning("Failed to extract initial objectives: %s", exc)
 
@@ -4781,9 +4822,7 @@ class AgentLoopController:
                 available_metrics=available_metrics_for_app(self._config.search.application),
                 context="steering_directive",
             )
-            response = self._backend.complete(sys_prompt, user_prompt)
-            self._ledger.record("steering", response, iteration,
-                                prompt_chars=len(sys_prompt) + len(user_prompt))
+            response = self._llm(sys_prompt, user_prompt, "steering", iteration)
             parsed = parse_objective_extraction(response.raw_text)
             if parsed:
                 for obj_data in parsed:
@@ -4801,6 +4840,8 @@ class AgentLoopController:
                     f"{', '.join(o['name'] for o in parsed)}"
                 )
                 self._backfill_metrics()
+        except LLMCallFailed:
+            raise
         except Exception as exc:
             logger.warning("Failed to extract objectives from steering: %s", exc)
 
@@ -4881,9 +4922,13 @@ class AgentLoopController:
             self._executor.prune_solutions(dirs, best)
 
         # --- Post-search goal classification via LLM ---
+        # Not after a terminal API error (no "best" result then); if this call itself
+        # fails for good, the session ends with that error.
         goal_classification: Optional[dict] = None
         analysis_text: Optional[str] = None
         try:
+            if session.termination_reason in EXIT_CODES:
+                raise _SkipAnalysis
             raw_stats = self._journal.summary_stats()
             sys_prompt, user_prompt = build_classification_prompts(
                 goal=session.goal,
@@ -4899,14 +4944,17 @@ class AgentLoopController:
                 latest_results_text=self._latest_results_text,
                 final_findings=getattr(self, "_final_findings", None),
             )
-            response = self._backend.complete(sys_prompt, user_prompt)
-            self._ledger.record("analysis", response,
-                                prompt_chars=len(sys_prompt) + len(user_prompt))
+            response = self._llm(sys_prompt, user_prompt, "analysis")
             analysis_text = response.raw_text
             valid_iters = {e.iteration for e in self._journal.entries}
             goal_classification = parse_goal_classification(analysis_text, valid_iters)
+        except _SkipAnalysis:
+            pass
+        except LLMCallFailed as exc:
+            self._end_on_llm_failure(session, exc)
         except Exception as exc:
             logger.warning("Post-search goal classification failed: %s", exc)
+        api_failed = session.termination_reason in EXIT_CODES
 
         # Resolve stats with override if classification succeeded
         best_iter_override = (
@@ -4958,7 +5006,10 @@ class AgentLoopController:
             goal_classification["best_iteration_rationale"] if goal_classification else None
         )
 
-        if best_obj is None:
+        if api_failed:
+            print(f"  Best solution:  none (session ended: {session.termination_reason})")
+            print(f"  Error:          {(session.error or '')[:300]}")
+        elif best_obj is None:
             print("  Best solution:  N/A (no feasible solution found)")
         elif self._config.search.application == "pflow":
             best_entry = None
@@ -5064,6 +5115,7 @@ class AgentLoopController:
             )
             journal_path.parent.mkdir(parents=True, exist_ok=True)
             self._journal.token_usage = self._ledger.to_dict()
+            self._journal.termination_reason = session.termination_reason
             if fmt == "csv":
                 self._journal.export_csv(journal_path)
             else:
@@ -5215,25 +5267,7 @@ class AgentLoopController:
         self._record_llm_settings()
 
         # Continue the agent loop from last_iteration + 1
-        max_iter = self._config.search.max_iterations
-        for iteration in range(last_iteration + 1, max_iter + 1):
-            if self._stop_requested:
-                session.termination_reason = "user_stopped"
-                self._print("\nSearch stopped by user.")
-                break
-            with log_scope(logger, "ExaGO iteration", iteration=iteration):
-                action_type, should_continue = self._iteration(iteration, goal)
-            if self._on_iteration:
-                latest_entry = self._journal.latest
-                if latest_entry:
-                    self._on_iteration(iteration, latest_entry, action_type, self._latest_opflow)
-            if not should_continue:
-                if not session.termination_reason:
-                    session.termination_reason = "completed"
-                break
-        else:
-            session.termination_reason = "max_iterations"
-            self._print(f"\nMax iterations ({max_iter}) reached.")
+        self._run_iterations(session, goal, last_iteration + 1)
 
         if not session.termination_reason:
             session.termination_reason = "completed"
