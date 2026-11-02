@@ -30,6 +30,12 @@ llm:
   temperature: 0.3                     # null: not sent (some reasoning models reject it)
   max_tokens: 4096
   # reasoning_effort: "medium"         # openai/Gemini: reasoning_effort; ollama: think ("none" = off)
+  # Retries of transient API errors (HTTP 5xx, timeouts, connection errors, 429 rate
+  # limits that are not quota exhaustion), logged in the journal. Quota exhaustion is not
+  # retried (session ends "quota_exhausted", exit 4); other API errors end it "api_error" (exit 3).
+  retry:
+    max_retries: 5
+    backoff_s: [10, 30, 60, 120, 240]   # wait before retry 1, 2, ...; the last value repeats
   # Gemini via Google's OpenAI-compatible endpoint
   # backend: "openai"
   # model: "gemini-3.8-flash"

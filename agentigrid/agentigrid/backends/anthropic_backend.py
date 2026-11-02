@@ -9,6 +9,7 @@ from typing import Optional
 from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.backends.json_extract import extract_json
+from agentigrid.backends.retry import classify_error
 from agentigrid.config import LLMConfig
 
 logger = logging.getLogger("agentigrid.backends.anthropic")
@@ -35,7 +36,8 @@ class AnthropicBackend(LLMBackend):
                 config.api_key_env,
             )
 
-        self._client = anthropic.Anthropic(api_key=api_key)
+        # No SDK retries: agentigrid.backends.retry retries and logs every attempt.
+        self._client = anthropic.Anthropic(api_key=api_key, max_retries=0)
         if config.reasoning_effort is not None:
             # Extended thinking needs a token budget, not an effort level: not mapped.
             logger.warning(
@@ -106,6 +108,7 @@ class AnthropicBackend(LLMBackend):
                 json_error=error_msg,
                 model=self._config.model,
                 backend=self.name(),
+                error_kind=classify_error(exc),
                 prompt_tokens=None,
                 completion_tokens=None,
             )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -44,6 +44,10 @@ DEFAULTS: dict[str, Any] = {
         "temperature": 0.3,          # null: no temperature is sent
         "max_tokens": 4096,
         "reasoning_effort": None,    # null: nothing is sent (provider default)
+        "retry": {
+            "max_retries": 5,                       # transient API errors (5xx, timeouts, connection, 429 rate limit)
+            "backoff_s": [10, 30, 60, 120, 240],    # wait before retry 1, 2, ...; the last value repeats
+        },
     },
     "search": {
         "max_iterations": 20,
@@ -153,6 +157,20 @@ class DataConfig:
 
 
 @dataclass(frozen=True)
+class RetryConfig:
+    """Retries of transient LLM API errors (agentigrid.backends.retry)."""
+
+    max_retries: int = 5
+    backoff_s: tuple[float, ...] = (10.0, 30.0, 60.0, 120.0, 240.0)
+
+    def wait_s(self, retry_index: int) -> float:
+        """Seconds to wait before retry *retry_index* (0-based); the last value repeats."""
+        if not self.backoff_s:
+            return 0.0
+        return float(self.backoff_s[min(retry_index, len(self.backoff_s) - 1)])
+
+
+@dataclass(frozen=True)
 class LLMConfig:
     backend: str
     model: str
@@ -165,6 +183,7 @@ class LLMConfig:
     # Sent as reasoning_effort (OpenAI-compatible, incl. Gemini) or think (Ollama);
     # None: nothing is sent and the provider default applies.
     reasoning_effort: Optional[str] = None
+    retry: RetryConfig = field(default_factory=RetryConfig)
 
 
 @dataclass(frozen=True)
@@ -391,7 +410,10 @@ def load_config(
 
     data = _build_section(DataConfig, merged["data"], config_root, {"data_dir"})
 
-    llm = _build_section(LLMConfig, merged["llm"], config_root, set())
+    llm_raw = dict(merged["llm"])
+    llm = replace(_build_section(LLMConfig, {k: v for k, v in llm_raw.items() if k != "retry"},
+                                 config_root, set()),
+                  retry=_build_retry(llm_raw.get("retry")))
 
     search_path_fields = {"base_case", "gic_file", "ctgc_file", "pload_profile", "qload_profile", "wind_profile", "scenario_file"}
     search = _build_section(SearchConfig, merged["search"], config_root, search_path_fields)
@@ -431,6 +453,22 @@ def _build_gridkit(raw: dict, root: Path) -> GridkitConfig:
                          dynamicsimulation_binary=base.dynamicsimulation_binary,
                          timeout=base.timeout, threads=base.threads,
                          damping_in_verdict=bool(base.damping_in_verdict), **parts)
+
+
+def _build_retry(raw: Optional[dict]) -> RetryConfig:
+    """The ``llm.retry`` section; an empty or null section keeps the defaults."""
+    base = DEFAULTS["llm"]["retry"]
+    raw = {**base, **(raw or {})}
+    unknown = set(raw) - {f.name for f in fields(RetryConfig)}
+    if unknown:
+        logger.warning("Unknown key(s) in llm.retry: %s (ignored)", sorted(unknown))
+    backoff = raw.get("backoff_s")
+    if backoff is None:
+        backoff = base["backoff_s"]
+    elif not isinstance(backoff, (list, tuple)):
+        backoff = [backoff]
+    return RetryConfig(max_retries=max(0, int(raw.get("max_retries") or 0)),
+                       backoff_s=tuple(float(b) for b in backoff))
 
 
 def _validate(cfg: AppConfig) -> None:

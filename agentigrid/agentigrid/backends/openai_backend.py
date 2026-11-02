@@ -9,6 +9,7 @@ from typing import Optional
 from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse, derive_reasoning_tokens
 from agentigrid.backends.json_extract import extract_json
+from agentigrid.backends.retry import classify_error
 from agentigrid.config import LLMConfig
 
 logger = logging.getLogger("agentigrid.backends.openai")
@@ -35,7 +36,8 @@ class OpenAIBackend(LLMBackend):
                 config.api_key_env,
             )
 
-        kwargs: dict = {"api_key": api_key}
+        # No SDK retries: agentigrid.backends.retry retries and logs every attempt.
+        kwargs: dict = {"api_key": api_key, "max_retries": 0}
         if config.openai_base_url:
             kwargs["base_url"] = config.openai_base_url
 
@@ -127,6 +129,7 @@ class OpenAIBackend(LLMBackend):
                 json_error=error_msg,
                 model=self._config.model,
                 backend=self.name(),
+                error_kind=classify_error(exc),
                 prompt_tokens=None,
                 completion_tokens=None,
             )

@@ -65,6 +65,7 @@ def collect_llm_settings(config: LLMConfig, backend: Any = None) -> dict[str, An
         "reasoning_effort": config.reasoning_effort,
         "reasoning_param_sent": reasoning_sent if isinstance(reasoning_sent, dict) else {},
         "max_tokens": config.max_tokens,
+        "retry": {"max_retries": config.retry.max_retries, "backoff_s": list(config.retry.backoff_s)},
         "packages": {name: _package_version(name) for name in _PACKAGES},
         "ollama_model_digest": _plain(_call(backend, "model_digest")),
     }
@@ -81,6 +82,10 @@ def format_llm_settings(settings: dict[str, Any]) -> str:
         "reasoning " + (", ".join(f"{k}={v}" for k, v in sent.items()) if sent else "not sent"),
         f"max_tokens {settings.get('max_tokens')}",
     ]
+    retry = settings.get("retry") or {}
+    if retry:
+        waits = "/".join(f"{w:g}" for w in retry.get("backoff_s") or [])
+        parts.append(f"retries {retry.get('max_retries')} ({waits} s)")
     versions = ", ".join(f"{k} {v}" for k, v in (settings.get("packages") or {}).items() if v)
     if versions:
         parts.append(versions)

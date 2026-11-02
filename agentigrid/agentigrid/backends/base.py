@@ -22,6 +22,9 @@ class LLMResponse:
     reasoning_tokens: Optional[int] = None
     api_total_tokens: Optional[int] = None      # the provider's own usage.total_tokens
     reasoning_tokens_derived: bool = False      # True: reasoning is outside completion_tokens
+    # Set when the call failed (raw_text then holds the error message):
+    # "transient", "quota" or "fatal" (agentigrid.backends.retry.classify_error).
+    error_kind: Optional[str] = None
 
 
 def derive_reasoning_tokens(
