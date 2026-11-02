@@ -406,7 +406,7 @@ def _start_stdin_listener(controller) -> None:
 
 
 # Session endings that are failures: exit 1 (API errors: EXIT_CODES, 3 and 4).
-_FAILED_ENDINGS = ("llm_error", "base_case_failed", "parse_failures")
+_FAILED_ENDINGS = ("base_case_failed", "parse_failures")
 
 
 def exit_for_termination(termination: str) -> None:
@@ -491,8 +491,7 @@ def run_gridkit(cfg: AppConfig, args: argparse.Namespace) -> None:
     except (FileNotFoundError, CaseFileError, SteadyStateError) as exc:
         logger.error("%s", exc)
         sys.exit(1)
-    if session.termination_reason in ("llm_error", "base_case_failed", "parse_failures"):
-        sys.exit(1)
+    exit_for_termination(session.termination_reason)
 
 
 def run_regenerate_report(argv: list[str] | None = None) -> None:

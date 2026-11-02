@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
+from agentigrid.backends.base import LLMResponse
+from agentigrid.backends.retry import LLMCallFailed, complete_with_retry
 from agentigrid.logging_setup import log_scope
 from agentigrid.config import AppConfig
 from agentigrid.gridkit_engine import criteria
@@ -47,8 +48,6 @@ from agentigrid.token_usage import TokenLedger
 logger = logging.getLogger("agentigrid.gridkit_engine.agent_loop")
 
 _MAX_CONSECUTIVE_PARSE_FAILURES = 3
-# How the shared backends report a failed API call (no key, no connection, ...).
-_BACKEND_ERROR_RE = re.compile(r"^(\w+ API error:|Cannot connect to Ollama)")
 _FULL_TABLE_MAX = 50        # screens up to this size also show every passing fault
 
 
@@ -94,6 +93,7 @@ class GridkitAgentLoop:
             backend = create_backend(cfg.llm)
         self._backend = backend
         self._quiet = quiet
+        self._sleep: Callable[[float], None] = time.sleep   # retry waits (tests replace it)
         self._screen_cache: dict[str, tuple[int, str]] = {}
         self._starts: dict[str, _Start] = {}     # by FaultStudy.start_from
 
@@ -180,18 +180,19 @@ class GridkitAgentLoop:
                 user_prompt = self._user_prompt(goal, latest, feedback, iteration)
                 feedback = None
                 self._print(f"[Iter {iteration}] Asking {self._backend.name()} ({self._cfg.llm.model})...")
-                response = self._backend.complete(system_prompt, user_prompt)
-                session.token_ledger.record("search", response, iteration,
-                                            prompt_chars=len(system_prompt) + len(user_prompt))
+                try:
+                    response = self._llm(session, system_prompt, user_prompt, iteration)
+                except LLMCallFailed as exc:
+                    session.termination_reason = exc.termination     # api_error / quota_exhausted
+                    session.error = exc.message
+                    self._journal.add(JournalEntry(iteration, "error", f"LLM call failed ({exc.termination})",
+                                                   result_text=exc.message))
+                    print(f"[LLM] Session ended: {exc.termination} after {exc.attempts} attempt(s): "
+                          f"{exc.message[:300]}")
+                    break
                 session.total_prompt_tokens = session.token_ledger.total_prompt
                 session.total_completion_tokens = session.token_ledger.total_completion
                 data = response.json_data
-                if data is None and _BACKEND_ERROR_RE.match(response.raw_text or ""):
-                    session.termination_reason = "llm_error"
-                    session.error = response.raw_text.strip()
-                    self._journal.add(JournalEntry(iteration, "error", "LLM call failed",
-                                                   result_text=session.error))
-                    break
                 if data is None:
                     parse_failures += 1
                     self._journal.add(JournalEntry(iteration, "error", "reply was not JSON",
@@ -219,6 +220,21 @@ class GridkitAgentLoop:
         return self._finalize(session)
 
     # ------------------------------------------------------------------
+    def _llm(self, session: GridkitSession, system: str, user: str, iteration: int) -> LLMResponse:
+        """One LLM call with the shared retry (llm.retry): failed attempts go to the
+        journal's llm_events, tokens of the answer only to the ledger. Raises
+        LLMCallFailed on a terminal error (same policy as the ExaGO loop)."""
+        def on_event(event: dict) -> None:
+            self._journal.llm_events.append({"phase": "search", "iteration": iteration, **event})
+            if event["outcome"] == "retry":
+                print(f"[LLM] search call failed ({event['error_kind']}): {event['error'][:160]} "
+                      f"- retry in {event['wait_s']:g} s")
+
+        response = complete_with_retry(self._backend, system, user, self._cfg.llm.retry,
+                                       on_event=on_event, sleep=self._sleep)
+        session.token_ledger.record("search", response, iteration, prompt_chars=len(system) + len(user))
+        return response
+
     def _run_base_case(self, case: dict, emap: dict, run_dir: Path,
                        iteration: int = 0, what: str = "no fault") -> tuple[str, bool]:
         """No-fault run of a copy of *case*: it must solve and stay still."""
@@ -415,6 +431,7 @@ class GridkitAgentLoop:
     @log_scope(logger, "GridKit finalization")
     def _finalize(self, session: GridkitSession) -> GridkitSession:
         self._journal.token_usage = session.token_ledger.to_dict()
+        self._journal.termination_reason = session.termination_reason
         session.journal_path = self._journal.export_json()
         print()
         print("=" * 60)

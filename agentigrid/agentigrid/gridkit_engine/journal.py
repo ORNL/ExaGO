@@ -51,6 +51,8 @@ class GridkitJournal:
         self.token_usage: dict | None = None     # TokenLedger.to_dict(), set before export
         self.llm_settings: dict | None = None    # collect_llm_settings() of the run
         self.damping_in_verdict: bool = True     # gridkit.damping_in_verdict of the run
+        self.termination_reason: str | None = None   # set before export
+        self.llm_events: list[dict] = []         # failed LLM call attempts (backends/retry.py)
 
     def add(self, entry: JournalEntry) -> JournalEntry:
         self.entries.append(entry)
@@ -76,6 +78,8 @@ class GridkitJournal:
             "session_dir": str(self.session_dir),
             "element_map": str(self.session_dir / "element_map.json"),
             "damping_in_verdict": self.damping_in_verdict,
+            "termination_reason": self.termination_reason,
+            "llm_events": self.llm_events,
             "entries": [asdict(e) for e in self.entries],
             **({"token_usage": self.token_usage} if self.token_usage is not None else {}),
             **({"llm_settings": self.llm_settings} if self.llm_settings is not None else {}),
