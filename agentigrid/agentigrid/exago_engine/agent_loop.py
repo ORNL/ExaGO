@@ -4896,6 +4896,8 @@ class AgentLoopController:
                 preference_history=self._journal.objective_registry.history,
                 application=self._config.search.application,
                 near_optimal_abs_tol=self._config.report.near_optimal_abs_tol,
+                latest_results_text=self._latest_results_text,
+                final_findings=getattr(self, "_final_findings", None),
             )
             response = self._backend.complete(sys_prompt, user_prompt)
             self._ledger.record("analysis", response,
