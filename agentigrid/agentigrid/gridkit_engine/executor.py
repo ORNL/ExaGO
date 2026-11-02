@@ -88,6 +88,7 @@ def run_one(job: RunJob, settings: GridkitSettings) -> RunResult:
             proc = subprocess.run(
                 [str(binary), SOLVER_FILE], cwd=job.run_dir,
                 capture_output=True, text=True, timeout=settings.timeout_s,
+                env=settings.subprocess_env(),
             )
             exit_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired as exc:
@@ -152,6 +153,7 @@ def run_contingency(jobs: list[RunJob], settings: GridkitSettings) -> list[RunRe
             proc = subprocess.run(
                 [str(binary), SOLVER_FILE], cwd=run_dir,
                 capture_output=True, text=True, timeout=settings.timeout_s * len(jobs),
+                env=settings.subprocess_env(),
             )
             exit_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired as exc:

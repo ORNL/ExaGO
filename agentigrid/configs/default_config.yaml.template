@@ -92,6 +92,8 @@ gridkit:
   binary_dir: "./applications/gridkit"  # links to GridKit/build/bin
   dynamicsimulation_binary: null        # defaults to {binary_dir}/DynamicSimulation
   timeout: 600                          # seconds per GridKit run
+  threads: 1                            # OPENBLAS_NUM_THREADS/OMP_NUM_THREADS per run (runs go
+                                        #   in parallel); null = leave the environment as is
 
   # Written into each run's solver .json; keys are GridKit's own
   # (GridKit/application/PhasorDynamics/README.md)

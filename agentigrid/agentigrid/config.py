@@ -104,6 +104,7 @@ DEFAULTS: dict[str, Any] = {
         "binary_dir": "./applications/gridkit",
         "dynamicsimulation_binary": None,
         "timeout": 600,
+        "threads": 1,
         "study": {
             "tmax": 15.0,
             "dt_monitor": 0.01,
@@ -268,6 +269,7 @@ class GridkitConfig:
     binary_dir: Path = Path("./applications/gridkit")
     dynamicsimulation_binary: Optional[Path] = None   # defaults to {binary_dir}/DynamicSimulation
     timeout: float = 600        # seconds per GridKit run
+    threads: Optional[int] = 1  # OPENBLAS/OMP_NUM_THREADS per run; None = leave the environment as is
     study: GridkitStudyConfig = field(default_factory=GridkitStudyConfig)
     fault: GridkitFaultConfig = field(default_factory=GridkitFaultConfig)
 
@@ -425,7 +427,7 @@ def _build_gridkit(raw: dict, root: Path) -> GridkitConfig:
              for name, cls in nested.items()}
     return GridkitConfig(binary_dir=base.binary_dir,
                          dynamicsimulation_binary=base.dynamicsimulation_binary,
-                         timeout=base.timeout, **parts)
+                         timeout=base.timeout, threads=base.threads, **parts)
 
 
 def _validate(cfg: AppConfig) -> None:

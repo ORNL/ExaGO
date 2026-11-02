@@ -4,6 +4,7 @@ code uses it (settings, solver .json, fault-study defaults, schema text)."""
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ import yaml
 from agentigrid.config import GridkitConfig, load_config
 from agentigrid.gridkit_engine import criteria
 from agentigrid.gridkit_engine.commands import parse_fault_study
-from agentigrid.gridkit_engine.executor import RunJob, solver_file_content
+from agentigrid.gridkit_engine.executor import RunJob, run_one, solver_file_content
 from agentigrid.gridkit_engine.schema_description import command_schema_text
 from agentigrid.gridkit_engine.settings import GridkitSettings
 
@@ -95,6 +96,35 @@ class TestSettingsFromConfig:
     def test_keyword_override_wins(self):
         s = GridkitSettings.from_config(load_config(None), binary_dir=Path("/x"), max_iterations=3)
         assert s.binary_dir == Path("/x") and s.max_iterations == 3
+
+
+class TestThreads:
+    def test_default_one_thread(self):
+        s = GridkitSettings.from_config(load_config(None))
+        assert s.threads == 1
+        env = s.subprocess_env()
+        assert env["OPENBLAS_NUM_THREADS"] == "1" and env["OMP_NUM_THREADS"] == "1"
+        assert env["PATH"] == os.environ["PATH"]
+
+    def test_null_inherits_environment(self, tmp_path):
+        s = GridkitSettings.from_config(load_config(_write(tmp_path, {"threads": None})))
+        assert s.threads is None and s.subprocess_env() is None
+
+    def test_value_carried(self, tmp_path):
+        s = GridkitSettings.from_config(load_config(_write(tmp_path, {"threads": 4})))
+        assert s.subprocess_env()["OMP_NUM_THREADS"] == "4"
+
+    def test_run_gets_thread_variables(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OPENBLAS_NUM_THREADS", "16")
+        fake = tmp_path / "DynamicSimulation"
+        fake.write_text("#!/bin/sh\necho threads=$OPENBLAS_NUM_THREADS,$OMP_NUM_THREADS\n")
+        fake.chmod(0o755)
+        job = RunJob(run_dir=tmp_path / "run", case_file=tmp_path / "case.json",
+                     tmax_s=1.0, dt_monitor_s=0.1)
+        run_one(job, GridkitSettings(dynamicsimulation_binary=fake, threads=1))
+        assert (job.run_dir / "stdout.txt").read_text().strip() == "threads=1,1"
+        run_one(job, GridkitSettings(dynamicsimulation_binary=fake, threads=None))
+        assert (job.run_dir / "stdout.txt").read_text().strip() == "threads=16,"
 
 
 class TestUse:
