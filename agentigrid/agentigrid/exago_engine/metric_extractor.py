@@ -7,11 +7,15 @@ takes an OPFLOWResult and returns a float value. Unknown metric names return Non
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 
 logger = logging.getLogger("agentigrid.exago_engine.metric_extractor")
+
+# Per-bus metric named by pattern: voltage_at_bus_<N> = Vm (pu) of bus N.
+_BUS_VOLTAGE_RE = re.compile(r"voltage_at_bus_(\d+)")
 
 
 def extract_metric(result: OPFLOWResult, metric_name: str) -> Optional[float]:
@@ -31,6 +35,13 @@ def extract_metric(result: OPFLOWResult, metric_name: str) -> Optional[float]:
         except Exception as exc:
             logger.warning("Failed to extract metric '%s': %s", metric_name, exc)
             return None
+    m = _BUS_VOLTAGE_RE.fullmatch(metric_name)
+    if m:
+        bus = int(m.group(1))
+        vm = next((b.Vm for b in result.buses if b.bus_id == bus), None)
+        if vm is None:
+            logger.debug("Metric '%s': bus %d not in the result", metric_name, bus)
+        return vm
     logger.debug("No extractor for metric '%s'", metric_name)
     return None
 
