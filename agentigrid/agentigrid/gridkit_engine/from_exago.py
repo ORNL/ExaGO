@@ -61,6 +61,9 @@ class SteadyStateSource:
     application: str
     run_dir: Path
     solved_file: Path
+    # File name of a supplied solved case that a harness registered as the latest
+    # ExaGO steady state (journal written with "seeded": true, no ExaGO run); else None.
+    supplied_case: Optional[str] = None
 
     def describe(self) -> str:
         return (f"ExaGO {self.application.upper()} iteration {self.iteration} "
@@ -86,7 +89,8 @@ def find_latest_steady_state(exago_workdir: Path | str) -> SteadyStateSource:
         if not journals:
             raise SteadyStateError(f"No ExaGO journal in {exago_workdir}; run an ExaGO study first.")
         journal = journals[-1]          # names carry the timestamp, so sorting by name is by time
-        entries = json.loads(journal.read_text()).get("entries", [])
+        data = json.loads(journal.read_text())
+        entries = data.get("entries", [])
         simulated = [e for e in entries if e.get("exago_command")]
         if not simulated:
             raise SteadyStateError(f"{journal.name} has no simulation.")
@@ -114,7 +118,8 @@ def find_latest_steady_state(exago_workdir: Path | str) -> SteadyStateSource:
             raise SteadyStateError(f"{where}: solution file {solved} is missing "
                                    "(runs before ExaGO saved its output cannot be used).")
         return SteadyStateSource(journal, int(it), str(entry.get("description", "")), app,
-                                 netfile.parent, solved)
+                                 netfile.parent, solved,
+                                 supplied_case=netfile.name if data.get("seeded") else None)
 
 
 # ---------------------------------------------------------------------------

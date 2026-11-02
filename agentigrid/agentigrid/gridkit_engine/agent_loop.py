@@ -162,9 +162,11 @@ class GridkitAgentLoop:
             session.termination_reason = "base_case_failed"
             return self._finalize(session)
 
+        net_text = "\n".join(filter(None, [network_summary(self._emap),
+                                            _starting_state_line(steady_state)]))
         system_prompt = build_system_prompt(
             command_schema_text(self._settings.fault_start_s, self._settings.tmax_s),
-            network_summary(self._emap), base_text,
+            net_text, base_text,
         )
         latest: Optional[str] = None
         feedback: Optional[str] = None
@@ -431,6 +433,15 @@ class GridkitAgentLoop:
         print(f"  {session.token_ledger.summary_text()}")
         print(f"  Journal:     {session.journal_path}")
         return session
+
+
+def _starting_state_line(source: Optional[SteadyStateSource]) -> Optional[str]:
+    """Network-section line naming a supplied case a harness registered as the
+    latest ExaGO steady state; None for a real ExaGO run or no ExaGO start."""
+    if source is None or not source.supplied_case:
+        return None
+    return (f"Starting state: the supplied case {source.supplied_case}, registered as the "
+            "latest ExaGO steady state (`--from-exago` uses it).")
 
 
 def _exago_label(source: SteadyStateSource) -> str:

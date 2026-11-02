@@ -11,6 +11,7 @@ import pytest
 
 from agentigrid.exago_engine.executor import _CMD_BUILDERS
 from agentigrid.exago_parsers.matpower_parser import parse_matpower
+from agentigrid.gridkit_engine.agent_loop import _starting_state_line
 from agentigrid.gridkit_engine.from_exago import (
     SteadyStateError,
     apply_steady_state,
@@ -85,6 +86,19 @@ def test_last_simulation_of_newest_journal(tmp_path):
     assert src.iteration == 1 and src.run_dir == tmp_path / "b"
     assert src.solved_file == tmp_path / "b" / "opflowout.m"
     assert "gen off" in src.describe()
+
+
+def test_seeded_journal_names_supplied_case(tmp_path):
+    _workdir(tmp_path, [_entry(0, tmp_path / "a")])
+    assert find_latest_steady_state(tmp_path).supplied_case is None
+    path = tmp_path / "journal_20261007_120000.json"
+    path.write_text(json.dumps({"seeded": True, **json.loads(path.read_text())}))
+    src = find_latest_steady_state(tmp_path)
+    assert src.supplied_case == "case.m"
+    line = _starting_state_line(src)
+    assert line == ("Starting state: the supplied case case.m, registered as the latest ExaGO "
+                    "steady state (`--from-exago` uses it).")
+    assert _starting_state_line(None) is None
 
 
 def test_pflow_uses_journal_status(tmp_path):
