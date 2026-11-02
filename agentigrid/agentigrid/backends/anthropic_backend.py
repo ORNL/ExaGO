@@ -9,7 +9,7 @@ from typing import Optional
 from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.backends.json_extract import extract_json
-from agentigrid.backends.retry import classify_error
+from agentigrid.backends.retry import error_fields
 from agentigrid.config import LLMConfig
 
 logger = logging.getLogger("agentigrid.backends.anthropic")
@@ -108,7 +108,7 @@ class AnthropicBackend(LLMBackend):
                 json_error=error_msg,
                 model=self._config.model,
                 backend=self.name(),
-                error_kind=classify_error(exc),
+                **error_fields(exc),
                 prompt_tokens=None,
                 completion_tokens=None,
             )

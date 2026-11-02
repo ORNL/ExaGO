@@ -25,6 +25,7 @@ class LLMResponse:
     # Set when the call failed (raw_text then holds the error message):
     # "transient", "quota" or "fatal" (agentigrid.backends.retry.classify_error).
     error_kind: Optional[str] = None
+    retry_after_s: Optional[float] = None       # retry delay the provider suggested, if any
 
 
 def derive_reasoning_tokens(
