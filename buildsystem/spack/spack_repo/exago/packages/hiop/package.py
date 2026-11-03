@@ -92,6 +92,7 @@ class Hiop(CMakePackage, CudaPackage, ROCmPackage):
     variant("mpi", default=True, description="Enable/Disable MPI")
     variant("raja", default=False, when="@0.3.99:", description="Enable/Disable RAJA")
     variant("kron", default=False, description="Enable/Disable Kron reduction")
+    variant("resolve", default=False, when="@develop", description="Enable/Disable Re::Solve")
     variant("sparse", default=True, description="Enable/Disable Sparse linear algebra")
     variant(
         "deepchecking",
@@ -102,7 +103,7 @@ class Hiop(CMakePackage, CudaPackage, ROCmPackage):
     variant(
         "cusolver_lu",
         default=False,
-        when="+cuda @0.7.1:",
+        when="+cuda @0.7.1:1.2.0",
         description="Enable/disable cuSovler LU refactorization",
     )
 
@@ -127,6 +128,7 @@ class Hiop(CMakePackage, CudaPackage, ROCmPackage):
         depends_on("magma {0}".format(cuda_dep), when=cuda_dep)
         depends_on("raja {0}".format(cuda_dep), when="+raja {0}".format(cuda_dep))
         depends_on("ginkgo {0}".format(cuda_dep), when="+ginkgo {0}".format(cuda_dep))
+        depends_on("resolve {0}".format(cuda_dep), when="+resolve {0}".format(cuda_dep))
         depends_on("umpire {0}".format(cuda_dep), when="+raja {0}".format(cuda_dep))
         # Camp GPU arch doesn't get propogated correctly
         depends_on("camp {0}".format(cuda_dep), when="+raja {0}".format(cuda_dep))
@@ -136,6 +138,7 @@ class Hiop(CMakePackage, CudaPackage, ROCmPackage):
         depends_on("magma {0}".format(rocm_dep), when=rocm_dep)
         depends_on("raja {0}".format(rocm_dep), when="+raja {0}".format(rocm_dep))
         depends_on("ginkgo {0}".format(rocm_dep), when="+ginkgo {0}".format(rocm_dep))
+        depends_on("resolve {0}".format(rocm_dep), when="+resolve {0}".format(rocm_dep))
         depends_on("umpire {0}".format(rocm_dep), when="+raja {0}".format(rocm_dep))
         # Camp GPU arch doesn't get propogated correctly
         depends_on("camp {0}".format(rocm_dep), when="+raja {0}".format(rocm_dep))
@@ -200,6 +203,12 @@ class Hiop(CMakePackage, CudaPackage, ROCmPackage):
 
     depends_on("ginkgo@1.5.0.glu_experimental", when="+ginkgo")
 
+    # TODO: the builtin resolve package has no tagged version >= 0.99.2 yet, so
+    # this resolves to resolve@develop. Pin a tag once the package adds one.
+    depends_on("resolve@0.99.2:+klu", when="+resolve")
+
+    conflicts("~sparse", when="+resolve", msg="ReSolve requires HiOp sparse linear algebra")
+
     flag_handler = build_system_flags
 
     def cmake_args(self):
@@ -238,6 +247,7 @@ class Hiop(CMakePackage, CudaPackage, ROCmPackage):
                 self.define_from_variant("HIOP_TEST_WITH_BSUB", "jsrun"),
                 self.define_from_variant("HIOP_USE_GINKGO", "ginkgo"),
                 self.define_from_variant("HIOP_USE_RESOLVE", "cusolver_lu"),
+                self.define_from_variant("HIOP_USE_RESOLVE", "resolve"),
             ]
         )
 
@@ -300,6 +310,9 @@ class Hiop(CMakePackage, CudaPackage, ROCmPackage):
 
         if spec.satisfies("+axom"):
             args.append(self.define("AXOM_DIR", spec["axom"].prefix))
+
+        if spec.satisfies("+resolve"):
+            args.append(self.define("ReSolve_DIR", spec["resolve"].prefix))
 
         return args
 

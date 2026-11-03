@@ -27,7 +27,9 @@ spack:
     exago:
       require: ~python+raja+hiop+rocm+ipopt amdgpu_target=gfx90a
     hiop:
-      require: +sparse+mpi+raja+rocm~ginkgo+kron
+      require: +sparse+mpi+raja+rocm~ginkgo+kron+resolve
+    resolve:
+      require: '@develop'
     ipopt:
       require: '~metis+coinhsl~mumps'
     # Pin OpenBlas version for consistent test results.
@@ -136,6 +138,21 @@ spack:
       externals:
       - spec: rocm-core@6.4.1
         prefix: /opt/rocm-6.4.1/
+    rocblas:
+      buildable: false
+      externals:
+      - spec: rocblas@6.4.1
+        prefix: /opt/rocm-6.4.1/
+    rocsolver:
+      buildable: false
+      externals:
+      - spec: rocsolver@6.4.1
+        prefix: /opt/rocm-6.4.1/
+    rocsparse:
+      buildable: false
+      externals:
+      - spec: rocsparse@6.4.1
+        prefix: /opt/rocm-6.4.1/
   config:
     install_tree:
       root: $SPACK_INSTALL
@@ -160,8 +177,11 @@ spack:
           - hsa-rocr-dev
           - llvm-amdgpu
           - python
+          - rocblas
           - rocm-core
           - rocprim
+          - rocsolver
+          - rocsparse
         all:
           filter:
             exclude_env_vars:
