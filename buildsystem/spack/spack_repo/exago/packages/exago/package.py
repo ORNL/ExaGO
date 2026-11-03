@@ -187,9 +187,11 @@ class Exago(CMakePackage, CudaPackage, ROCmPackage):
         with when("build_type=Release"):
             depends_on("hiop build_type=Release")
             depends_on("ginkgo build_type=Release", when="^hiop+ginkgo")
+            depends_on("resolve build_type=Release", when="^hiop+resolve")
         with when("build_type=Debug"):
             depends_on("hiop build_type=RelWithDebInfo")
             depends_on("ginkgo build_type=Debug", when="^hiop+ginkgo")
+            depends_on("resolve build_type=Debug", when="^hiop+resolve")
 
     # depends_on("hpctoolkit", when="with_profiling=hpctoolkit")
     # depends_on("tau", when="with_profiling=tau")
