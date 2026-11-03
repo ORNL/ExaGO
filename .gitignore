@@ -12,8 +12,8 @@ node_modules
 .env
 package-lock.json
 config.py
-spack_*
-hiop/
+/spack_*
+/hiop/
 solution
 myenv/
 *.DS_Store
