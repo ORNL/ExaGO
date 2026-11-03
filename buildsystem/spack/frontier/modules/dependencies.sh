@@ -108,8 +108,8 @@ module load mpfr/4.2.2-gcc-14.2.0-5asupl6
 module load suite-sparse/7.12.2-gcc-14.2.0-4c5p3x2
 # umpire@=2025.12.0~asan~backtrace+c~cuda~dev_benchmarks~device_alloc~deviceconst~examples+fmt_header_only~fortran~ipc_shmem~ipo~mpi~mpi3_shmem~numa~omptarget~openmp+rocm~sanitizer_tests+shared~sqlite_experimental~tools~werror amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=0372fbd6e1f17d7e6dd72693f8b857f3ec7559e9 generator=make tests=none platform=linux os=sles15 target=zen3
 module load umpire/2025.12.0-gcc-14.2.0-ya3ddpz
-# hiop@=1.2.0~axom~cuda~deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja+rocm~shared+sparse amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=6acee835136e9beddf3570b28739a1b1001e528a generator=make patches:=e73daa7 platform=linux os=sles15 target=zen3
-module load hiop/1.2.0-gcc-14.2.0-4sh35tv
+# hiop@=develop~axom~cuda~deepchecking~ginkgo~ipo~jsrun+kron+mpi+raja+rocm~shared+sparse amdgpu_target:=gfx90a build_system=cmake build_type=Release commit=fb37b2ce04b618b645f61dc66a1967009798518f generator=make platform=linux os=sles15 target=zen3
+module load hiop/develop-gcc-14.2.0-esi5kaz
 # ipopt@=3.14.14+coinhsl~debug~java~metis~mumps build_system=autotools platform=linux os=sles15 target=zen3
 module load ipopt/3.14.14-gcc-14.2.0-nfnr74d
 # parmetis@=4.0.3~gdb~int64~ipo+shared build_system=cmake build_type=Release generator=make patches:=4f89253,50ed208,704b84f platform=linux os=sles15 target=zen3
@@ -118,5 +118,5 @@ module load parmetis/4.0.3-gcc-14.2.0-qqnhd6e
 module load petsc/3.25.2-gcc-14.2.0-upzor6w
 # spdlog@=1.15.0~ipo+shared build_system=cmake build_type=Release cxxstd=14 generator=make patches:=5ed92f4,fd4cbb1,fdc325d platform=linux os=sles15 target=zen3
 module load spdlog/1.15.0-gcc-14.2.0-ouzzal7
-# exago@=develop~cuda+hiop~ipo+ipopt+logging+mpi~python+raja+rocm+testing amdgpu_target:=gfx90a build_system=cmake build_type=Release dev_path=/lustre/orion/scratch/nkouk/stf006/Tmp/ExaGO generator=make platform=linux os=sles15 target=zen3
-## module load exago/develop-gcc-14.2.0-plo2kls
+# exago@=develop~cuda+hiop~ipo+ipopt+logging+mpi~python+raja+rocm+testing amdgpu_target:=gfx90a build_system=cmake build_type=Release dev_path=/lustre/orion/scratch/nkouk/stf006/Codes/ExaGO generator=make platform=linux os=sles15 target=zen3
+## module load exago/develop-gcc-14.2.0-4l4mi22

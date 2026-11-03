@@ -1,6 +1,7 @@
 spack:
   specs:
   - exago@develop
+    ^hiop@develop
   view: false
   concretizer:
     unify: when_possible
