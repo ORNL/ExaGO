@@ -13,9 +13,9 @@
 /**
 
   @brief Takes a raw pointer to some data and registers it with the
-  allocator and resource manager.
+  Umpire allocator and resource manager.
 
-  TODO: Ensure that we do not have to deregister the allocation with
+  @todo Ensure that we do not have to deregister the allocation with
   the resource manager. This is done with `resmgr.deregisterAllocation(T* ptr)`,
   but must we do this with ever allocation? Will we incurr a memory leak if not?
 

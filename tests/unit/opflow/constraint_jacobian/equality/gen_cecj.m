@@ -11,6 +11,7 @@ theta3=deg2rad(30);
 theta4=deg2rad(0);
 theta5=deg2rad(0);
 
+mvabase = 100;
 
 R=2;
 X=1;
@@ -28,8 +29,8 @@ Qg=-2.2;
 Pd=-3.4;
 Qd=8.8;
 
-Gl=0.25;
-Bl=-0.05;
+Gl=0.25 / mvabase;
+Bl=-0.05 / mvabase;
 
 
 theta12=theta1-theta2;

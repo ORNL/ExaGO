@@ -1,7 +1,7 @@
 # Unit Test Design for ExaGO OPFLOW's  Inequality Constraints
 
 ## Goal
-Design the scalable unit test for the OPFLOW function **OPFLOWComputeInequalityConstraints_PBPOL**.
+Design the scalable unit test for the OPFLOW function **OPFLOWComputeInequalityConstraintJacobian_PBPOL**.
 
 ## Inequality constraints
 There are three "sets" of the inequality constraints:
@@ -66,7 +66,13 @@ Dimensions of the matrix are:
 ## Input
 
 ExaGO OPFLOW reads .m file, thus the input file for unit test is in this format.
-A 5-bus system **CICJ-unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
+A 5-bus system **CICJ_unittestx1.m** will be used as a basis for this test. In addition, an artificial solution vector will be also generated as an input for the test.
+
+### Test files
+
+- `CICJ_unittestx<N>.m`: N copies of the 5-bus system (N = 1, 3, 600). Regenerate with `python3 gen_network.py <N>`.
+- `CICJ_nolinelimits_unittestx<N>.m`: the same networks with zero line ratings, so OPFLOW creates no line flow constraints and only the generator bus rows remain. Regenerate with `python3 gen_network.py --no-line-limits <N>`. The `_NOLINELIMITS` tests use them with `cicj_nolinelimits.csv`.
+- `cicj.csv` and `cicj_nolinelimits.csv`: reference Jacobians for N=1, written by the MATLAB script `gen_cicj.m` (set `line_limits = false` at its top for `cicj_nolinelimits.csv`). The first line holds the numbers of rows and columns, followed by a 0, and each following line one nonzero as a 1-based `row,column,value` triple. The test replicates it for N copies (see [Scaling](#scaling)).
 
 ### Parameters values in .m file
 
@@ -77,10 +83,11 @@ Following are the values of parameters of interest for this test:
 - $`B_{branch}=1.2`$
 - $`tapratio_{branch}=1`$ for all but transformer that has $`tapratio_{transformer}=2`$
 - $`phaseshift_{branch}=0`$ for all but transformer that has $`phaseshift_{branch}=60`$
+- $`rate_{A}=rate_{B}=rate_{C}=230`$ (0 in the `CICJ_nolinelimits_unittestx<N>.m` networks)
 - $`Q_{gmax}=197.8`$
 - $`Q_{gmin}=-202.2`$
 - $`P_{d}=-3.4`$
-- $`Q_{d}=-8.8`$
+- $`Q_{d}=8.8`$
 - $`G_{l}=0.25`$
 - $`B_{l}=-0.05`$
 
@@ -107,7 +114,7 @@ In general, solution vector has following elements per bus:
 3. Generator MW (if generator bus)
 4. Generator MVar (if generator bus)
 
-For the 5-bus system **CEC-unittestx1.m**, solution vector is:
+For the 5-bus system **CICJ_unittestx1.m**, solution vector is:
 <table>
 <tr>
 <td>0</td> <td>2</td> <td>0</td> <td>2</td> <td>30*PI/180.0</td> <td>2</td> <td>1.6</td> <td>-2.2</td> <td>0</td> <td>2</td> <td>0</td> <td>2</td> 
@@ -163,10 +170,10 @@ With the parameters of the example network the matrix is:
 <td> </td> <td>theta1</td> <td>Vm1</td> <td>theta2</td> <td>Vm2</td> <td>theta3</td> <td>Vm3</td> <td>Pg3</td> <td>Qg3</td> <td>theta4</td> <td>Vm4</td> <td>theta5</td> <td>Vm5</td>
 </tr>
 <tr>
-<td>IEC1</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>200</td> <td>0</td> <td>-1.5</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
+<td>IEC1</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>4.178</td> <td>0</td> <td>-1.5</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>IEC2</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-200</td> <td>0</td> <td>-1.5</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
+<td>IEC2</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0.178</td> <td>0</td> <td>-1.5</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
 <td>Sf12</td> <td>7.68</td> <td>9.6</td> <td>-7.68</td> <td>1.92</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td>
@@ -184,13 +191,13 @@ With the parameters of the example network the matrix is:
 <td>Sf24</td> <td>0</td> <td>0</td> <td>7.68</td> <td>9.6</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-7.68</td> <td>1.92</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>St24</td> <td>0</td> <td>0</td> <td>-7.68</td> <td>1.92</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>7.68</td> <td>9.6</td> <td>1.6</td> <td>-0.4</td>
+<td>St24</td> <td>0</td> <td>0</td> <td>-7.68</td> <td>1.92</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>7.68</td> <td>9.6</td> <td>0</td> <td>0</td>
 </tr>
 <tr>
-<td>Sf45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>15.36</td> <td>19.2</td> <td>-15.36</td> <td>3.84</td>
+<td>Sf45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>7.68</td> <td>9.6</td> <td>-7.68</td> <td>1.92</td>
 </tr>
 <tr>
-<td>St45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-15.36</td> <td>3.94</td> <td>15.36</td> <td>19.2</td>
+<td>St45</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>0</td> <td>-7.68</td> <td>1.92</td> <td>7.68</td> <td>9.6</td>
 </tr>
 </table>
 
@@ -218,3 +225,11 @@ To build a Jacobian matrix when the network is being multiplied the process for 
 ![img1.png](Jacobian.jpg)
 
 ### Jacobian for N=3
+
+The network with N copies has 4N+1 buses, N generators and 4N lines, because each copy after the first starts at the last bus of the previous one. The Jacobian therefore has 10N rows and 10N+2 columns, 30 x 32 for N=3.
+
+OPFLOW numbers all generator bus constraints before all line flow constraints, so the N=1 matrix above is split when it is replicated:
+- Its first 2 rows (generator bus voltage constraints) become rows 2n and 2n+1 for copy n (n = 0, ..., N-1).
+- Its remaining 8 rows (line flow constraints) become rows 2N+8n to 2N+8n+7 for copy n (n = 0, ..., N-1).
+
+The columns of copy n are shifted by 10n, so its first two columns fall on the last two of copy n-1 (the shared bus). Without line limits, only the 2N generator bus rows remain.

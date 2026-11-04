@@ -1,3 +1,6 @@
+% Set to false for CICJ_nolinelimits_unittestx*.m (zero line ratings)
+line_limits = true;
+
 Vm=2;
 Vm1=2;
 Vm2=2;
@@ -12,6 +15,7 @@ theta3=deg2rad(30);
 theta4=deg2rad(0);
 theta5=deg2rad(0);
 
+mvabase=100;
 
 R=2;
 X=1;
@@ -25,8 +29,8 @@ shiftt=deg2rad(60);
 
 Pg=1.6;
 Qg=-2.2;
-Qmax=197.8;
-Qmin=-202.2;
+Qmax=197.8 / mvabase;
+Qmin=-202.2 / mvabase;
 
 Pd=-3.4;
 Qd=8.8;
@@ -247,10 +251,10 @@ dQt45dtheta5 =Vm4*Vm5*(Btf*sin(theta54)+Gtf*cos(theta54));
 Sf45 = Pf45*Pf45 + Qf45*Qf45;
 St45 = Pt45*Pt45 + Qt45*Qt45;
 
-dSf45dPf45 = 4*Pf45;
-dSf45dQf45 = 4*Qf45;
-dSt45dPt45 = 4*Pt45;
-dSt45dQt45 = 4*Qt45;
+dSf45dPf45 = 2*Pf45;
+dSf45dQf45 = 2*Qf45;
+dSt45dPt45 = 2*Pt45;
+dSt45dQt45 = 2*Qt45;
 
 dSf45dVm4 =    (dSf45dPf45*dPf45dVm4+   dSf45dQf45*dQf45dVm4)*multiplier;
 dSf45dVm5 =    (dSf45dPf45*dPf45dVm5+   dSf45dQf45*dQf45dVm5)*multiplier;
@@ -318,6 +322,14 @@ J(10,11) = dSt45dtheta5;
 J(9,12) = dSf45dVm5;
 J(10,12) = dSt45dVm5;
 
+csvfile = 'cicj.csv';
+if ~line_limits
+    % Only the generator bus constraints remain
+    Line = 0;
+    J = J(1:2*Gen,:);
+    csvfile = 'cicj_nolinelimits.csv';
+end
+
 J
 
 JW(1,1) =  2*Line+2*Gen;
@@ -334,5 +346,5 @@ for i=1:(2*Line+2*Gen)
         end
     end
 end
-writematrix(JW,'cicj.csv') 
+writematrix(JW,csvfile)
             

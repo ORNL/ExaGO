@@ -447,13 +447,20 @@ public:
     Vec temp1, temp2;
     PetscInt nrow, ncol;
 
+    // Create constraint Jacobian matrices to compare against
     ierr = MatDuplicate(Jeqref, MAT_DO_NOT_COPY_VALUES, &Jeq);
     CHKERRQ(ierr);
-    ierr = MatDuplicate(Jineqref, MAT_DO_NOT_COPY_VALUES, &Jineq);
-    CHKERRQ(ierr);
+    std::cout << "opflow->Nconineq: " << opflow->Nconineq << "\n";
+    if (opflow->Nconineq) {
+      ierr = MatDuplicate(Jineqref, MAT_DO_NOT_COPY_VALUES, &Jineq);
+      CHKERRQ(ierr);
+    }
+
+    // Compute constraint Jacobians
     ierr = OPFLOWComputeConstraintJacobian(opflow, X, Jeq, Jineq);
     CHKERRQ(ierr);
 
+    // Verify equality constraint Jacobian
     ierr = MatGetSize(Jeq, &nrow, &ncol);
     CHKERRQ(ierr);
     ierr = VecCreate(MPI_COMM_SELF, &temp1);
@@ -480,36 +487,40 @@ public:
     ierr = VecDestroy(&temp2);
     CHKERRQ(ierr);
 
-    ierr = MatGetSize(Jineq, &nrow, &ncol);
-    CHKERRQ(ierr);
-    ierr = VecCreate(MPI_COMM_SELF, &temp1);
-    CHKERRQ(ierr);
-    ierr = VecSetSizes(temp1, nrow, nrow);
-    CHKERRQ(ierr);
-    ierr = VecSetFromOptions(temp1);
-
-    ierr = VecDuplicate(temp1, &temp2);
-    CHKERRQ(ierr);
-
-    ierr = VecSet(temp1, 0.0);
-    ierr = VecSet(temp2, 0.0);
-
-    ierr = MatMult(Jineq, X, temp1);
-    CHKERRQ(ierr);
-    ierr = MatMult(Jineqref, X, temp2);
-    CHKERRQ(ierr);
-
-    fail += verifyAnswer(temp1, temp2);
-
-    ierr = VecDestroy(&temp1);
-    CHKERRQ(ierr);
-    ierr = VecDestroy(&temp2);
-    CHKERRQ(ierr);
-
     ierr = MatDestroy(&Jeq);
     CHKERRQ(ierr);
-    ierr = MatDestroy(&Jineq);
-    CHKERRQ(ierr);
+
+    if (opflow->Nconineq) {
+      // Verify inequality constraint Jacobian
+      ierr = MatGetSize(Jineq, &nrow, &ncol);
+      CHKERRQ(ierr);
+      ierr = VecCreate(MPI_COMM_SELF, &temp1);
+      CHKERRQ(ierr);
+      ierr = VecSetSizes(temp1, nrow, nrow);
+      CHKERRQ(ierr);
+      ierr = VecSetFromOptions(temp1);
+
+      ierr = VecDuplicate(temp1, &temp2);
+      CHKERRQ(ierr);
+
+      ierr = VecSet(temp1, 0.0);
+      ierr = VecSet(temp2, 0.0);
+
+      ierr = MatMult(Jineq, X, temp1);
+      CHKERRQ(ierr);
+      ierr = MatMult(Jineqref, X, temp2);
+      CHKERRQ(ierr);
+
+      fail += verifyAnswer(temp1, temp2);
+
+      ierr = VecDestroy(&temp1);
+      CHKERRQ(ierr);
+      ierr = VecDestroy(&temp2);
+      CHKERRQ(ierr);
+
+      ierr = MatDestroy(&Jineq);
+      CHKERRQ(ierr);
+    }
 
     cleanup(fail, opflow);
   }
@@ -691,8 +702,103 @@ public:
   }
 
 #if defined(EXAGO_ENABLE_RAJA)
+#if defined(EXAGO_ENABLE_HIOP_SPARSE)
   /**
    * @brief Specific test for computing the constraint Jacobian using HiOp
+   * Sparse
+   *
+   * @param x is in sparse-dense ordering
+   * @param Jeqref is in application ordering
+   * @param Jineqref is in application ordering
+   *
+   * @pre The flag _opflow_->nconineq determines the presence of inequality
+   * constraints. If the flag is set, checking against Jineqref_nat can be
+   * skipped entirely.
+   * @pre _Jeqref_nat_ and _Jineqref_nat_ have the same number of columns, but
+   * not the same number of rows
+   */
+  LocalOrdinalType computeConstraintJacobian(OPFLOW opflow, double *x_dev,
+                                             Mat Jeqref_nat, Mat Jineqref_nat,
+                                             umpire::ResourceManager &resmgr) {
+    PetscErrorCode ierr;
+    LocalOrdinalType fail = 0;
+
+    // Get allocators
+    umpire::Allocator h_allocator = resmgr.getAllocator("HOST");
+
+    // Get the hiop sparse matrix solution to test against
+    int *iRow, *jCol, *iRow_dev, *jCol_dev;
+    double *values, *values_dev;
+    int nnz = opflow->nnz_eqjacsp + opflow->nnz_ineqjacsp;
+
+    iRow = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+    jCol = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+    values = static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
+
+#ifdef EXAGO_ENABLE_GPU
+    umpire::Allocator d_allocator = resmgr.getAllocator("DEVICE");
+    iRow_dev = static_cast<int *>(d_allocator.allocate(nnz * sizeof(int)));
+    jCol_dev = static_cast<int *>(d_allocator.allocate(nnz * sizeof(int)));
+    values_dev =
+        static_cast<double *>(d_allocator.allocate(nnz * sizeof(double)));
+#else
+    iRow_dev = iRow;
+    jCol_dev = jCol;
+    values_dev = values;
+#endif
+
+    // Compute equality constraints
+    ierr = (*opflow->modelops.computesparseequalityconstraintjacobianhiop)(
+        opflow, x_dev, iRow_dev, jCol_dev, values_dev);
+    CHKERRQ(ierr);
+
+    // Checking for the presence of inequality constraints on the given problem
+    // Compute inequality constraints
+    if (opflow->Nconineq) {
+      ierr = (*opflow->modelops.computesparseinequalityconstraintjacobianhiop)(
+          opflow, x_dev, iRow_dev, jCol_dev, values_dev);
+      CHKERRQ(ierr);
+    }
+
+    // Copy from device to host
+    resmgr.copy(iRow, iRow_dev);
+    resmgr.copy(jCol, jCol_dev);
+    resmgr.copy(values, values_dev);
+
+    // Verify equality constraints
+    fail += verifyAnswer(Jeqref_nat, opflow->nnz_eqjacsp, iRow, jCol, values);
+
+    // Checking for the presence of inequality constraints on the given problem
+    // Verify inequality constraints
+    if (opflow->Nconineq) {
+      // The equality and inequality constraint Jacobians are stacked one after
+      // the other. Offset row and nnz
+      int nnz_offset = opflow->nnz_eqjacsp;
+      int row_offset = opflow->nconeq;
+      for (int i = 0; i < opflow->nnz_ineqjacsp; i++) {
+        iRow[i + nnz_offset] -= row_offset;
+      }
+
+      fail +=
+          verifyAnswer(Jineqref_nat, opflow->nnz_ineqjacsp, iRow + nnz_offset,
+                       jCol + nnz_offset, values + nnz_offset);
+    }
+
+    // Cleanup
+    h_allocator.deallocate(iRow);
+    h_allocator.deallocate(jCol);
+    h_allocator.deallocate(values);
+#ifdef EXAGO_ENABLE_GPU
+    d_allocator.deallocate(iRow_dev);
+    d_allocator.deallocate(jCol_dev);
+    d_allocator.deallocate(values_dev);
+#endif
+    cleanup(fail, opflow);
+  }
+
+#else
+  /**
+   * @brief Specific test for computing the constraint Jacobian using HiOp MDS
    *
    * @param x is in sparse-dense ordering
    * @param Jeqref is in application ordering
@@ -915,7 +1021,8 @@ public:
 #endif
     cleanup(fail, opflow);
   }
-#endif
+#endif // EXAGO_ENABLE_HIOP_SPARSE
+#endif // EXAGO_ENABLE_RAJA
 
   LocalOrdinalType computeHessian(OPFLOW opflow, Vec X, Vec Lambda,
                                   PetscScalar obj_factor, Mat Hessref) {
@@ -952,6 +1059,7 @@ public:
 
     cleanup(fail, opflow);
   }
+
   /**
    * @brief Specific test for computing the constraint Hessian using HiOp
    *
@@ -1063,11 +1171,70 @@ public:
   }
 
 #if defined(EXAGO_ENABLE_RAJA)
+#if defined(EXAGO_ENABLE_HIOP_SPARSE)
+  /**
+   * @brief Specific test for computing the hessian using HiOp sparse
+   */
   LocalOrdinalType computeHessian(OPFLOW opflow, double *x_ref_dev,
                                   double *lambda_ref_dev,
                                   PetscScalar obj_factor, Mat Hessref,
-                                  umpire::ResourceManager &resmgr,
-                                  double *hess_dense, double *hess_dense_dev) {
+                                  umpire::ResourceManager &resmgr) {
+    PetscErrorCode ierr;
+    LocalOrdinalType fail = 0;
+
+    // Get allocator
+    umpire::Allocator h_allocator = resmgr.getAllocator("HOST");
+
+    // Test sparse Hessian
+    int *iRow, *jCol, *iRow_dev, *jCol_dev;
+    double *values, *values_dev;
+    int nnz = opflow->nnz_hesssp;
+
+    iRow = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+    jCol = static_cast<int *>(h_allocator.allocate(nnz * sizeof(int)));
+    values = static_cast<double *>(h_allocator.allocate(nnz * sizeof(double)));
+#ifdef EXAGO_ENABLE_GPU
+    umpire::Allocator d_allocator = resmgr.getAllocator("DEVICE");
+    iRow_dev = static_cast<int *>(d_allocator.allocate(nnz * sizeof(int)));
+    jCol_dev = static_cast<int *>(d_allocator.allocate(nnz * sizeof(int)));
+    values_dev =
+        static_cast<double *>(d_allocator.allocate(nnz * sizeof(double)));
+#else
+    iRow_dev = iRow;
+    jCol_dev = jCol;
+    values_dev = values;
+#endif
+
+    opflow->obj_factor = obj_factor;
+    ierr = (*opflow->modelops.computesparsehessianhiop)(
+        opflow, x_ref_dev, lambda_ref_dev, iRow_dev, jCol_dev, values_dev);
+    CHKERRQ(ierr);
+
+    // Copy back from the device
+    resmgr.copy(iRow, iRow_dev);
+    resmgr.copy(jCol, jCol_dev);
+    resmgr.copy(values, values_dev);
+
+    fail += verifyAnswer(Hessref, nnz, iRow, jCol, values);
+
+    h_allocator.deallocate(iRow);
+    h_allocator.deallocate(jCol);
+    h_allocator.deallocate(values);
+#ifdef EXAGO_ENABLE_GPU
+    d_allocator.deallocate(iRow_dev);
+    d_allocator.deallocate(jCol_dev);
+    d_allocator.deallocate(values_dev);
+#endif
+    cleanup(fail, opflow);
+  }
+#else // EXAGO_ENABLE_HIOP_SPARSE
+  /**
+   * @brief Specific test for computing the hessian using HiOp MDS
+   */
+  LocalOrdinalType computeHessian(OPFLOW opflow, double *x_ref_dev,
+                                  double *lambda_ref_dev,
+                                  PetscScalar obj_factor, Mat Hessref,
+                                  umpire::ResourceManager &resmgr) {
     PetscErrorCode ierr;
     LocalOrdinalType fail = 0;
     PetscInt nrow, ncol;
@@ -1157,6 +1324,15 @@ public:
     fail += verifyAnswer(Hessref_sparse, nnz, iRow, jCol, values);
 
     // Test dense Hessian
+    double *hess_dense, *hess_dense_dev;
+    hess_dense = static_cast<double *>(
+        h_allocator.allocate(nxdense * nxdense * sizeof(double *)));
+#ifdef EXAGO_ENABLE_GPU
+    hess_dense_dev = static_cast<double *>(
+        d_allocator.allocate(nxdense * nxdense * sizeof(double *)));
+#else
+    hess_dense_dev = hess_dense;
+#endif
     ierr = (*opflow->modelops.computedensehessianhiop)(
         opflow, x_ref_dev, lambda_ref_dev, hess_dense_dev);
     CHKERRQ(ierr);
@@ -1184,14 +1360,17 @@ public:
     h_allocator.deallocate(iRow);
     h_allocator.deallocate(jCol);
     h_allocator.deallocate(values);
+    h_allocator.deallocate(hess_dense);
 #ifdef EXAGO_ENABLE_GPU
     d_allocator.deallocate(iRow_dev);
     d_allocator.deallocate(jCol_dev);
     d_allocator.deallocate(values_dev);
+    d_allocator.deallocate(hess_dense_dev);
 #endif
     cleanup(fail, opflow);
   }
-#endif
+#endif // EXAGO_ENABLE_HIOP_SPARSE
+#endif // EXAGO_ENABLE_RAJA
 
 private:
   virtual MPI_Comm getMPIComm(OPFLOW opflow) const {
