@@ -18,6 +18,20 @@ class LLMResponse:
     backend: str
     prompt_tokens: Optional[int]
     completion_tokens: Optional[int]
+    # Prompt-cache accounting (Anthropic). ``prompt_tokens`` always reports the
+    # TOTAL input tokens (uncached + cache writes + cache reads), so its meaning
+    # is the same with or without caching; these break that total down.
+    cache_creation_tokens: Optional[int] = None
+    cache_read_tokens: Optional[int] = None
+    # True when the request itself failed (network, auth, invalid request...),
+    # as opposed to the model answering with unparseable text. Lets the agent
+    # loop record API failures separately from rejected proposals.
+    api_error: bool = False
+    # Why generation stopped ("end_turn", "max_tokens", ...) and the content
+    # block types returned, when the backend reports them. A "max_tokens" stop
+    # is an output-cap limit, not a model proposal, and is recorded as such.
+    stop_reason: Optional[str] = None
+    content_types: Optional[list] = None
 
 
 class LLMBackend(ABC):

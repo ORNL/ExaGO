@@ -33,6 +33,12 @@ class TokenLedger:
 
     Usage a backend did not report stays ``None`` in the per-call list; the
     aggregates count it as 0 and report it in ``calls_without_usage``.
+
+    ``prompt_tokens`` is the total input of a call. With Anthropic prompt
+    caching it already includes ``cache_creation_tokens`` (cache writes) and
+    ``cache_read_tokens`` (cache reads), which break that total down; they are
+    ``None`` for backends without caching. ``api_error`` marks a failed request
+    and ``stop_reason`` why generation stopped (``"max_tokens"`` = cut off).
     """
 
     def __init__(self) -> None:
@@ -64,6 +70,10 @@ class TokenLedger:
             "completion_tokens": _int_or_none(getattr(response, "completion_tokens", None)),
             "prompt_chars": _int_or_none(prompt_chars),
             "completion_chars": len(raw_text) if isinstance(raw_text, str) else None,
+            "cache_creation_tokens": _int_or_none(getattr(response, "cache_creation_tokens", None)),
+            "cache_read_tokens": _int_or_none(getattr(response, "cache_read_tokens", None)),
+            "api_error": getattr(response, "api_error", False) is True,
+            "stop_reason": _str_or_none(getattr(response, "stop_reason", None)),
         })
 
     # ------------------------------------------------------------------
@@ -89,6 +99,23 @@ class TokenLedger:
     @property
     def total_completion_chars(self) -> int:
         return sum(c.get("completion_chars") or 0 for c in self.calls)
+
+    @property
+    def total_cache_creation(self) -> int:
+        return sum(c.get("cache_creation_tokens") or 0 for c in self.calls)
+
+    @property
+    def total_cache_read(self) -> int:
+        return sum(c.get("cache_read_tokens") or 0 for c in self.calls)
+
+    @property
+    def api_errors(self) -> int:
+        return sum(1 for c in self.calls if c.get("api_error"))
+
+    @property
+    def truncated(self) -> int:
+        """Calls whose output was cut off at the max_tokens cap."""
+        return sum(1 for c in self.calls if c.get("stop_reason") == "max_tokens")
 
     @property
     def calls_without_usage(self) -> int:
@@ -133,6 +160,10 @@ class TokenLedger:
             "calls_without_usage": self.calls_without_usage,
             "prompt_chars": self.total_prompt_chars,
             "completion_chars": self.total_completion_chars,
+            "cache_creation_tokens": self.total_cache_creation,
+            "cache_read_tokens": self.total_cache_read,
+            "api_errors": self.api_errors,
+            "truncated": self.truncated,
             "by_phase": self.by_phase,
             "per_call": [dict(c) for c in self.calls],
         }
@@ -151,6 +182,11 @@ class TokenLedger:
                 "completion_tokens": c.get("completion_tokens"),
                 "prompt_chars": c.get("prompt_chars"),           # absent in older journals
                 "completion_chars": c.get("completion_chars"),
+                # absent before the cache / error fields were added
+                "cache_creation_tokens": c.get("cache_creation_tokens"),
+                "cache_read_tokens": c.get("cache_read_tokens"),
+                "api_error": bool(c.get("api_error", False)),
+                "stop_reason": c.get("stop_reason"),
                 **({"carried_over": True} if c.get("carried_over") else {}),
             })
         return ledger
@@ -168,6 +204,8 @@ class TokenLedger:
                 "phase": "search", "iteration": None, "model": None, "backend": None,
                 "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
                 "prompt_chars": None, "completion_chars": None,
+                "cache_creation_tokens": None, "cache_read_tokens": None,
+                "api_error": False, "stop_reason": None,
                 "carried_over": True,
             })
         return ledger
@@ -189,6 +227,9 @@ class TokenLedger:
         )
         if self.calls:
             text += f"; {self.breakdown_text()}"
+        cached = self.total_cache_read
+        if cached:
+            text += f"; {cached:,} prompt tokens read from cache"
         missing = self.calls_without_usage
         if missing:
             text += f"; {missing} call{'s' if missing != 1 else ''} without usage data"
