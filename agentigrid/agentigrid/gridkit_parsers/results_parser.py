@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.gridkit_parsers.case_parser import column_owners
 
 logger = logging.getLogger("agentigrid.gridkit_parsers.results")
@@ -42,25 +43,26 @@ class TimeSeries:
 
 def read_results(csv_path: Path | str, element_map: dict) -> TimeSeries:
     """Read a GridKit CSV into a :class:`TimeSeries`."""
-    with Path(csv_path).open(encoding="utf-8") as fh:
-        rows = [r for r in csv.reader(fh) if r]
-    if not rows:
-        return TimeSeries(t=[])
-    header, data = rows[0], rows[1:]
-    columns = [[float(r[i]) for r in data] for i in range(len(header))]
-    series = TimeSeries(t=columns[0])
-    owners = column_owners(element_map, header[1:])
-    for i, name in enumerate(header[1:], start=1):
-        owner = owners[name]
-        if owner is None:
-            series.unmatched.append(name)
-        elif owner["kind"] == "bus":
-            series.buses.setdefault(owner["bus"], {})[owner["variable"]] = columns[i]
-        else:
-            dev = owner["id"]
-            series.devices.setdefault(dev, {})[owner["variable"]] = columns[i]
-            series.device_class[dev] = owner["class"]
-            series.device_bus[dev] = owner["bus"]
-    if series.unmatched:
-        logger.warning("CSV columns not in the element map: %s", series.unmatched[:10])
-    return series
+    with log_scope(logger, "GridKit CSV parsing", csv_path=csv_path):
+        with Path(csv_path).open(encoding="utf-8") as fh:
+            rows = [r for r in csv.reader(fh) if r]
+        if not rows:
+            return TimeSeries(t=[])
+        header, data = rows[0], rows[1:]
+        columns = [[float(r[i]) for r in data] for i in range(len(header))]
+        series = TimeSeries(t=columns[0])
+        owners = column_owners(element_map, header[1:])
+        for i, name in enumerate(header[1:], start=1):
+            owner = owners[name]
+            if owner is None:
+                series.unmatched.append(name)
+            elif owner["kind"] == "bus":
+                series.buses.setdefault(owner["bus"], {})[owner["variable"]] = columns[i]
+            else:
+                dev = owner["id"]
+                series.devices.setdefault(dev, {})[owner["variable"]] = columns[i]
+                series.device_class[dev] = owner["class"]
+                series.device_bus[dev] = owner["bus"]
+        if series.unmatched:
+            logger.warning("CSV columns not in the element map: %s", series.unmatched[:10])
+        return series

@@ -28,7 +28,7 @@ Time series conventions (GridKit output):
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Mapping, Optional, Sequence
 
 # ---------------------------------------------------------------------------
@@ -105,10 +105,17 @@ class CheckResult:
     limit: Optional[float]
     detail: str
     source: str
+    data: dict = field(default_factory=dict)   # every number in *detail*, unrounded (journal)
 
     @property
     def passed(self) -> bool:
         return self.status == "pass"
+
+
+def num(x: float, fmt: str, unit: str = "") -> str:
+    """*x* rounded with *fmt* for reading, then its full value in brackets, so a
+    rounded 1.100 that is really 1.10036 stays visible."""
+    return f"{x:{fmt}}{unit} [{float(x)!r}{unit}]"
 
 
 def _series_after(t: Sequence[float], x: Sequence[float], t0: float) -> list[tuple[float, float]]:
@@ -135,9 +142,10 @@ def check_angle_stability(
     ok = worst <= limit_deg
     return CheckResult(
         "angle_stability", "pass" if ok else "fail", worst, limit_deg,
-        f"largest machine angle spread {worst:.1f} deg at t = {worst_t:g} s"
+        f"largest machine angle spread {num(worst, '.1f', ' deg')} at t = {worst_t:g} s"
         + ("" if ok else " (loss of synchronism)"),
         src,
+        {"spread_deg": worst, "t_s": worst_t},
     )
 
 
@@ -165,9 +173,10 @@ def check_voltage_recovery(
     ok = worst_v >= min_pu
     return CheckResult(
         "voltage_recovery", "pass" if ok else "fail", worst_v, min_pu,
-        f"lowest voltage from {after_s:g} s after clearing: {worst_v:.3f} pu "
+        f"lowest voltage from {after_s:g} s after clearing: {num(worst_v, '.3f', ' pu')} "
         f"at bus {worst_bus}, t = {worst_t:g} s",
         src,
+        {"lowest_pu": worst_v, "bus": worst_bus, "t_s": worst_t},
     )
 
 
@@ -196,8 +205,9 @@ def check_voltage_envelope(
     bus, ti, vi, vmin = worst
     return CheckResult(
         name, "pass" if ok else "fail", vi, vmin,
-        f"closest to envelope: bus {bus} at t = {ti:g} s, {vi:.3f} pu vs minimum {vmin:.2f} pu",
+        f"closest to envelope: bus {bus} at t = {ti:g} s, {num(vi, '.3f', ' pu')} vs minimum {vmin:.2f} pu",
         source,
+        {"v_pu": vi, "bus": bus, "t_s": ti, "envelope_min_pu": vmin, "margin_pu": worst_margin},
     )
 
 
@@ -216,9 +226,11 @@ def check_final_voltage(
     ok = finals[lo_bus] >= vmin and finals[hi_bus] <= vmax
     return CheckResult(
         "final_voltage", "pass" if ok else "fail", finals[lo_bus], vmin,
-        f"end of run: lowest {finals[lo_bus]:.3f} pu (bus {lo_bus}), "
-        f"highest {finals[hi_bus]:.3f} pu (bus {hi_bus}), band {vmin}-{vmax} pu",
+        f"end of run: lowest {num(finals[lo_bus], '.3f', ' pu')} (bus {lo_bus}), "
+        f"highest {num(finals[hi_bus], '.3f', ' pu')} (bus {hi_bus}), band {vmin}-{vmax} pu",
         src,
+        {"lowest_pu": finals[lo_bus], "lowest_bus": lo_bus,
+         "highest_pu": finals[hi_bus], "highest_bus": hi_bus, "vmin_pu": vmin, "vmax_pu": vmax},
     )
 
 
@@ -302,11 +314,12 @@ def check_damping(
                            f"all swings below {min_amplitude_deg} deg after clearing", src)
     zeta, nm = worst
     ok = zeta >= min_ratio and not unmeasured
-    detail = f"lowest damping ratio {100 * zeta:.1f}% (machine {nm})"
+    detail = f"lowest damping ratio {num(100 * zeta, '.1f', '%')} (machine {nm})"
     if unmeasured:
         detail += f"; not measurable for {', '.join(unmeasured[:5])}"
     status = "pass" if ok else ("fail" if zeta < min_ratio else "not_tested")
-    return CheckResult("damping", status, zeta, min_ratio, detail, src)
+    return CheckResult("damping", status, zeta, min_ratio, detail, src,
+                       {"ratio": zeta, "machine": nm, "unmeasured": unmeasured})
 
 
 # Pre-fault steady state: the no-fault run of the case copy must stay still,
@@ -341,9 +354,10 @@ def check_steady_state(
     ok = angle_move <= angle_tol_deg and v_move <= v_tol_pu
     return CheckResult(
         "steady_state", "pass" if ok else "fail", angle_move, angle_tol_deg,
-        f"without a fault: angles move {angle_move:.3f} deg (limit {angle_tol_deg}), "
-        f"voltages move {v_move:.4f} pu (limit {v_tol_pu})",
+        f"without a fault: angles move {num(angle_move, '.3f', ' deg')} (limit {angle_tol_deg}), "
+        f"voltages move {num(v_move, '.4f', ' pu')} (limit {v_tol_pu})",
         src,
+        {"angle_move_deg": angle_move, "v_move_pu": v_move},
     )
 
 # PJM tests the agent does not run, because GridKit lacks the element they

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.gridkit_engine.settings import GridkitSettings
 from agentigrid.gridkit_parsers.status_parser import RunStatus, parse_run_status
 
@@ -78,11 +79,17 @@ def run_one(job: RunJob, settings: GridkitSettings) -> RunResult:
     binary = settings.dynamic_simulation.resolve()
     start = time.monotonic()
     try:
-        proc = subprocess.run(
-            [str(binary), SOLVER_FILE], cwd=job.run_dir,
-            capture_output=True, text=True, timeout=settings.timeout_s,
-        )
-        exit_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
+        with log_scope(
+            logger, "GridKit subprocess",
+            application="DynamicSimulation",
+            run_dir=job.run_dir,
+            bus=job.bus,
+        ):
+            proc = subprocess.run(
+                [str(binary), SOLVER_FILE], cwd=job.run_dir,
+                capture_output=True, text=True, timeout=settings.timeout_s,
+            )
+            exit_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired as exc:
         exit_code = None
         stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
@@ -103,7 +110,10 @@ def run_many(jobs: list[RunJob], settings: GridkitSettings) -> list[RunResult]:
     if not jobs:
         return []
     workers = settings.resolved_workers(len(jobs))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
+    with (
+        log_scope(logger, "GridKit simulation batch", tasks=len(jobs), workers=workers),
+        ThreadPoolExecutor(max_workers=workers) as pool,
+    ):
         return list(pool.map(lambda j: run_one(j, settings), jobs))
 
 
@@ -133,11 +143,17 @@ def run_contingency(jobs: list[RunJob], settings: GridkitSettings) -> list[RunRe
     binary = settings.contingency_analysis.resolve()
     start = time.monotonic()
     try:
-        proc = subprocess.run(
-            [str(binary), SOLVER_FILE], cwd=run_dir,
-            capture_output=True, text=True, timeout=settings.timeout_s * len(jobs),
-        )
-        exit_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
+        with log_scope(
+            logger, "GridKit subprocess",
+            application="ContingencyAnalysis",
+            run_dir=run_dir,
+            faults=len(jobs),
+        ):
+            proc = subprocess.run(
+                [str(binary), SOLVER_FILE], cwd=run_dir,
+                capture_output=True, text=True, timeout=settings.timeout_s * len(jobs),
+            )
+            exit_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired as exc:
         exit_code = None
         stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")

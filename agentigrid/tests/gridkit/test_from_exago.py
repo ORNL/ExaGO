@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 from pathlib import Path
@@ -13,6 +14,7 @@ from agentigrid.exago_parsers.matpower_parser import parse_matpower
 from agentigrid.gridkit_engine.from_exago import (
     SteadyStateError,
     apply_steady_state,
+    exago_shifts_to_degrees,
     find_latest_steady_state,
     goal_wants_steady_state,
 )
@@ -176,6 +178,98 @@ def test_shunts_and_branches_from_exago(pair):
     assert shunts[15]["params"]["Qnom"] == pytest.approx(-30 * vm * vm / 100)
     assert len(_devices(out, "Branch")) == sum(1 for b in net.branches if b.status)
     assert any("64-82" in n for n in notes)
+
+
+@needs_cases
+def test_exago_phase_shifts_read_as_radians(pair):
+    # ExaGO's saved solution writes shift angles in radians; GridKit wants radians.
+    case, net = pair
+    br = net.branches[0]
+    br.angle = math.radians(-12.0)
+    notes = exago_shifts_to_degrees(net)
+    assert br.angle == pytest.approx(-12.0) and "radians to degrees" in notes[0]
+    out, _ = apply_steady_state(case, net)
+    phases = [d["params"]["phase"] for d in _devices(out, "Branch") if d["params"]["phase"]]
+    assert phases == [pytest.approx(math.radians(-12.0))]
+
+
+def _with_static_gen(case, net, name):
+    # A 5 MW renewable at bus 2, as GridKit's 10k case writes it; ExaGO nets it from Pd.
+    case["header"]["case_name"] = name
+    case["devices"].append({"class": "LoadZIP", "id": "load_2_static_gen_1", "ports": {"bus": 2},
+                            "params": {"Pnom": -0.05, "Qnom": -0.01, "alphaI": 1.0, "alphaP": 0.0}})
+    b = next(b for b in net.buses if b.bus_i == 2)
+    b.Pd -= 5.0
+    b.Qd -= 1.0
+    return b
+
+
+@needs_cases
+def test_static_gen_kept_for_10k_case(pair):
+    case, net = pair
+    _with_static_gen(case, net, "ACTIVSg10k")
+    out, notes = apply_steady_state(case, net)
+    at2 = {d["id"]: d["params"] for d in _devices(out, "LoadZIP") if d["ports"]["bus"] == 2}
+    assert at2["load_2_static_gen_1"] == {"Pnom": -0.05, "Qnom": -0.01, "alphaI": 1.0, "alphaP": 0.0}
+    assert at2["load_2"]["Pnom"] == pytest.approx(7.39 / 100) and at2["load_2"]["alphaI"] == 0.0
+    assert any("static_gen" in n for n in notes)
+
+
+@needs_cases
+def test_static_gen_rule_off_for_other_cases(pair):
+    case, net = pair
+    b = _with_static_gen(case, net, "ACTIVSg200")
+    out, notes = apply_steady_state(case, net)
+    at2 = [d for d in _devices(out, "LoadZIP") if d["ports"]["bus"] == 2]
+    assert [d["id"] for d in at2] == ["load_2"] or [d["id"] for d in at2] == ["load_2_static_gen_1"]
+    assert at2[0]["params"]["Pnom"] == pytest.approx(b.Pd / 100)
+    assert not any("static_gen" in n for n in notes)
+
+
+@needs_cases
+def test_machines_pair_in_file_order(pair):
+    # ACTIVSg10k lists a bus's units as 1, 10, 2, ...; pairing must not re-sort them.
+    case, net = pair
+    gen = next(g for g in net.generators if g.bus == 135 and g.status)
+    m1 = next(d for d in _devices(case, "Genrou") if d["ports"]["bus"] == 135)
+    m10 = copy.deepcopy(m1)
+    m10["id"] = m1["id"].replace("_1_", "_10_", 1)
+    case["devices"].insert(case["devices"].index(m1) + 1, m10)
+    second = copy.deepcopy(gen)
+    second.Pg = 12.34
+    net.generators.insert(net.generators.index(gen) + 1, second)
+    out, _ = apply_steady_state(case, net)
+    p0 = {d["id"]: d["params"]["p0"] for d in _devices(out, "Genrou") if d["ports"]["bus"] == 135}
+    assert p0[m1["id"]] == pytest.approx(gen.Pg / 100)
+    assert p0[m10["id"]] == pytest.approx(12.34 / 100)
+
+
+@needs_cases
+@pytest.mark.parametrize("offset,snapped", [(0.005, True), (-0.005, True), (0.05, False)])
+def test_dispatch_at_limit_snapped(pair, offset, snapped):
+    case, net = pair
+    gen = next(g for g in net.generators if g.bus == 135 and g.status)
+    gen.Pg = gen.Pmax + offset
+    out, notes = apply_steady_state(case, net)
+    m = next(d for d in _devices(out, "Genrou") if d["ports"]["bus"] == 135)
+    assert m["params"]["p0"] == pytest.approx((gen.Pmax if snapped else gen.Pg) / 100)
+    assert any("set to the limit" in n for n in notes) == snapped
+
+
+@needs_cases
+def test_dispatch_at_valve_limit_set_inside(pair):
+    # Tgov1 rejects a start outside [Pvmin, Pvmax] with a 4-epsilon tolerance.
+    case, net = pair
+    gov = next(d for d in _devices(case, "Tgov1"))
+    m = next(d for d in case["devices"] if d["class"] in MACHINE_CLASSES
+             and d["ports"].get("pmech") == gov["ports"]["pmech"])
+    gen = next(g for g in net.generators if g.bus == m["ports"]["bus"] and g.status)
+    gen.Pg = gov["params"]["Pvmax"] * gov["params"]["Trate"] + 0.004
+    out, notes = apply_steady_state(case, net)
+    p0 = next(d for d in out["devices"] if d["id"] == m["id"])["params"]["p0"]
+    assert p0 * 100 / gov["params"]["Trate"] <= gov["params"]["Pvmax"]
+    assert p0 * 100 == pytest.approx(gov["params"]["Pvmax"] * gov["params"]["Trate"])
+    assert any("valve limit" in n for n in notes)
 
 
 @needs_cases

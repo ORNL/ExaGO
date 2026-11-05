@@ -265,6 +265,34 @@ agentigrid ./data/exago/examples/case_ACTIVSg200.m \
 
 In stress test mode, the LLM always uses fresh mode (each contingency tested independently from the base case), starts with the most loaded lines, and can escalate to N-2 combinations. The post-search report ranks contingencies by severity: infeasibility > voltage violations > high line loading > cost increase.
 
+## Token Accounting
+
+Every LLM call of a session is counted (ExaGO and GridKit), each under one phase:
+
+| Phase | Calls |
+|---|---|
+| `objective_extraction` | objectives read from the goal at startup |
+| `search` | every call inside the iteration loop, including explore/select, the `analyze` fallback and retries after a reply that was not JSON (all GridKit calls) |
+| `analysis` | post-search analysis and goal classification (CLI, or the GUI when it runs it) |
+| `steering` | objectives read from a steering directive |
+| `report` | analysis regenerated for a PDF from a saved journal |
+| `other` | anything else |
+
+The per-call record (phase, iteration, model, backend, prompt and completion tokens, and the
+prompt/completion length in characters, `prompt_chars` / `completion_chars`) and the
+per-phase totals are written as a top-level `token_usage` block to the journal JSON (ExaGO
+`workdir/journal_*.json`, GridKit `workdir/gridkit/session_*/journal.json`) and to saved
+sessions. Usage a backend did not report stays `null` per call and is counted in
+`calls_without_usage`. The final console summary shows the total, the number of calls and
+the breakdown, for example
+`Tokens: 26,105 total (24,100 prompt + 2,005 completion) in 4 LLM calls; objective extraction 1,190, search 19,497, analysis 5,418`;
+the PDF report and the GUI show the same.
+
+From this version on, `total_prompt_tokens` / `total_completion_tokens` and every printed
+total include **all phases**. Earlier versions counted search calls only; that number is
+`token_usage.by_phase.search` (sessions saved by an earlier version resume with their old
+total as one `search` entry).
+
 ## Session Save/Resume
 
 Searches can be saved to disk and resumed later — useful for long runs, interrupted sessions, or exploring different strategies from the same checkpoint.
@@ -367,7 +395,7 @@ agentigrid ./data/exago/examples/case_ACTIVSg200.m "Find the maximum load scalin
 
 # With options
 agentigrid ./data/exago/examples/case_ACTIVSg200.m "Minimize generation cost" \
-  --backend anthropic --model claude-sonnet-4-20250514 \
+  --backend anthropic --model claude-sonnet-4-6 \
   --app opflow --max-iter 30 --verbose
 
 # Quiet mode (only show final summary)
@@ -424,7 +452,7 @@ python -m agentigrid ./data/exago/examples/case_ACTIVSg200.m "test goal" --dry-r
   Version 0.1.0
 ============================================================
   Backend:        anthropic
-  Model:          claude-sonnet-4-20250514
+  Model:          claude-sonnet-4-6
   Application:    opflow
   Base case:      data/exago/examples/case_ACTIVSg200.m
   Goal:           Find the maximum load scaling factor
@@ -435,7 +463,7 @@ python -m agentigrid ./data/exago/examples/case_ACTIVSg200.m "test goal" --dry-r
 [Iter 0] Running base case simulation...
 [Iter 0] Base case: CONVERGED, cost=$27,557.57
 
-[Iter 1] Sending prompt to anthropic (claude-sonnet-4-20250514)...
+[Iter 1] Sending prompt to anthropic (claude-sonnet-4-6)...
 [Iter 1] LLM action: modify — "Scale all loads +20%"
 [Iter 1] Applied 1 command(s), 0 skipped
 [Iter 1] Simulation completed in 0.04s — CONVERGED, cost=$33,019.55
@@ -450,7 +478,7 @@ python -m agentigrid ./data/exago/examples/case_ACTIVSg200.m "test goal" --dry-r
 ============================================================
   Goal:           Find the maximum load scaling factor
   Application:    opflow
-  Backend:        anthropic (claude-sonnet-4-20250514)
+  Backend:        anthropic (claude-sonnet-4-6)
   Iterations:     6 (of max 20)
   Duration:       18.3 seconds
   Tokens used:    ~12,450 (prompt: 9,200, completion: 3,250)

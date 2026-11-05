@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.config import ExagoConfig, OutputConfig
 from agentigrid.exago_parsers.matpower_model import MATNetwork
 from agentigrid.exago_parsers.matpower_writer import write_matpower
@@ -288,29 +289,35 @@ class SimulationExecutor:
         t0 = time.monotonic()
 
         try:
-            if self._env_script:
-                shell_cmd = _shell_command
-                proc = subprocess.run(
-                    shell_cmd,
-                    shell=True,
-                    executable="/bin/bash",
-                    capture_output=True,
-                    text=True,
-                    timeout=self._exago.timeout,
-                    cwd=run_dir,
-                )
-            else:
-                run_env = None
-                if thread_limit and thread_limit > 0:
-                    run_env = {**os.environ, **{v: str(thread_limit) for v in _THREAD_ENV_VARS}}
-                proc = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=self._exago.timeout,
-                    cwd=run_dir,
-                    env=run_env,
-                )
+            with log_scope(
+                logger, "ExaGO subprocess",
+                application=application,
+                iteration=iteration,
+                run_dir=run_dir,
+            ):
+                if self._env_script:
+                    shell_cmd = _shell_command
+                    proc = subprocess.run(
+                        shell_cmd,
+                        shell=True,
+                        executable="/bin/bash",
+                        capture_output=True,
+                        text=True,
+                        timeout=self._exago.timeout,
+                        cwd=run_dir,
+                    )
+                else:
+                    run_env = None
+                    if thread_limit and thread_limit > 0:
+                        run_env = {**os.environ, **{v: str(thread_limit) for v in _THREAD_ENV_VARS}}
+                    proc = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=self._exago.timeout,
+                        cwd=run_dir,
+                        env=run_env,
+                    )
         except subprocess.TimeoutExpired:
             elapsed = time.monotonic() - t0
             error_msg = f"Simulation timed out after {self._exago.timeout} seconds"
@@ -415,7 +422,10 @@ class SimulationExecutor:
         results: dict[int, SimulationResult] = {}
         done = 0
 
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        with (
+            log_scope(logger, "ExaGO simulation batch", tasks=len(tasks), workers=max_workers),
+            ThreadPoolExecutor(max_workers=max_workers) as pool,
+        ):
             future_to_idx: dict = {}
             for idx, (network, application, iteration, extra_args) in enumerate(tasks):
                 future = pool.submit(
@@ -490,7 +500,10 @@ class SimulationExecutor:
         results: dict[int, object] = {}
         done = 0
 
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        with (
+            log_scope(logger, "ExaGO candidate batch", tasks=len(fns), workers=max_workers),
+            ThreadPoolExecutor(max_workers=max_workers) as pool,
+        ):
             future_to_idx = {pool.submit(fn): idx for idx, fn in enumerate(fns)}
             for future in as_completed(future_to_idx):
                 idx = future_to_idx[future]

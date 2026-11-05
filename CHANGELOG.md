@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [develop]
 
+### AgentiGrid
+- Count tokens of every LLM call (objective extraction, search, post-search analysis,
+  steering, report regeneration), with a per-phase breakdown in the journal
+  (`token_usage`), the console summary, the PDF report and the GUI. Token totals now
+  include all phases; search-only totals are `token_usage.by_phase.search`.
+
 ## [2.1]
 
 ### General

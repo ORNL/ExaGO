@@ -34,7 +34,8 @@ def outcome_row(o: FaultOutcome, run_dir: Path | None = None) -> dict:
         "solved": o.run.solved,
         "run": o.run.reason,
         "checks": {
-            c.name: {"status": c.status, "value": c.value, "limit": c.limit, "detail": c.detail}
+            c.name: {"status": c.status, "value": c.value, "limit": c.limit, "detail": c.detail,
+                     "data": c.data}
             for c in o.checks
         },
         "run_dir": str(run_dir) if run_dir else None,
@@ -47,6 +48,7 @@ class GridkitJournal:
         self.case_file = case_file
         self.session_dir = session_dir
         self.entries: list[JournalEntry] = []
+        self.token_usage: dict | None = None     # TokenLedger.to_dict(), set before export
 
     def add(self, entry: JournalEntry) -> JournalEntry:
         self.entries.append(entry)
@@ -72,6 +74,7 @@ class GridkitJournal:
             "session_dir": str(self.session_dir),
             "element_map": str(self.session_dir / "element_map.json"),
             "entries": [asdict(e) for e in self.entries],
+            **({"token_usage": self.token_usage} if self.token_usage is not None else {}),
         }
 
     def export_json(self, path: Path | None = None) -> Path:
