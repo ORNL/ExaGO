@@ -13,6 +13,8 @@
 #include <psimpl.h>
 #include <utils.h>
 
+using namespace std::string_literals;
+
 namespace exago {
 namespace psse {
 
@@ -29,6 +31,12 @@ void Warn(const std::string &message) { ExaGOLog(EXAGO_LOG_WARN, message); }
 
 std::string RemoveNulls(std::string str) {
   str.erase(std::remove(str.begin(), str.end(), '\0'), str.end());
+  return str;
+}
+
+std::string RemoveTrailingWhitespace(std::string str) {
+  auto notspace = [](char c) { return !std::isspace(c); };
+  str.erase(std::find_if(rbegin(str), rend(str), notspace).base(), end(str));
   return str;
 }
 
@@ -219,11 +227,11 @@ public:
       q_.push_back(line_);
       return *this;
     }
-    std::string noComment;
-    std::getline(std::istringstream(line_), noComment, '/');
+    auto noComment = line_.substr(0, line_.find("/ "s));
     std::istringstream iss(noComment);
     for (std::string item; std::getline(iss, item, ',');) {
       item = RemoveNulls(Strip(item));
+      CheckForSpanningQuoteString(item, iss);
       CheckSingleItem(item);
       q_.push_back(item);
     }
@@ -249,6 +257,22 @@ private:
       out += " " + item;
     }
     return out;
+  }
+
+  void CheckForSpanningQuoteString(std::string &item, std::istringstream &iss) {
+    char fc = item.front();
+    if (fc == '\'' || fc == '\"') {
+      if (item.back() != fc) {
+        for (std::string tmpItem; std::getline(iss, tmpItem, ',');) {
+          tmpItem = RemoveTrailingWhitespace(tmpItem);
+          item += ',' + tmpItem;
+          if (item.back() == fc) {
+            return;
+          }
+        }
+        Error("PSS(R)E parser: Open-ended quote string");
+      }
+    }
   }
 
   void CheckSingleItem(const std::string &item) {
@@ -287,6 +311,12 @@ inline CheckedLineItemStream &CheckedLineItemStream::operator>>(T &item) {
 CaseID ParseCaseID(std::istream &is) {
   CaseID cid;
   LineItemStream firstLine(is);
+  if (firstLine.Size() > 6) {
+    Warn("PSS(R)E parser: Missing case identification record (assume v33)");
+    is.clear();
+    is.seekg(0, std::ios::beg);
+    return cid;
+  }
   std::string record;
   auto recordLineStream = std::stringstream(firstLine.String());
   std::getline(recordLineStream, record, '/');
@@ -297,7 +327,7 @@ CaseID ParseCaseID(std::istream &is) {
   int supported[] = {32, 33, 34};
   if (std::find(std::begin(supported), std::end(supported), cid.rev) ==
       std::end(supported)) {
-    Error("PSS(R)E Power Flow Raw Data Files are supported only for "
+    Error("PSS(R)E parser: Power Flow Raw Data Files are supported only for "
           "versions 32, 33 and 34. This file is tagged version " +
           std::to_string(cid.rev));
   }
@@ -321,6 +351,34 @@ void SkipSystemWideData(std::istream &is) {
 struct Parser {
   int rev{34};
   bool ref_bus_names{false};
+
+  void Unsupported(const std::string &type) {
+    // Error("PSS(R)E parser: Unsupported record type: " + type);
+    Warn("PSS(R)E parser: Unsupported record type: " + type);
+  }
+
+  void Untested(const std::string &type) {
+    Warn("PSS(R)E parser: Record type: \"" + type + "\" remains untested.");
+  }
+
+  SystemWideData ParseSystemWideData(std::istream &is) {
+    if (rev >= 34) {
+      LineItemStream firstLine(is);
+      if (firstLine.Size() > 6) {
+        Warn("PSS(R)E parser: Missing system-wide data (assume first line is "
+             "bus record)");
+        is.clear();
+        is.seekg(0, std::ios::beg);
+        return {};
+      }
+      Unsupported("SystemWideData");
+      SkipSystemWideData(is);
+    }
+    return {};
+  }
+
+#define UNSUPPORTED(name)                                                      \
+  void ParseRecord(LineItemStream &, name &) { Unsupported(#name); }
 
   void ParseRecord(LineItemStream &lis, Bus &bus) {
     QuoteStringParse name;
@@ -422,7 +480,7 @@ struct Parser {
     }
   }
 
-  void ParseRecord(LineItemStream &, SystemSwitchingDevice &) {}
+  UNSUPPORTED(SystemSwitchingDevice)
 
   Winding ParseTransformerWinding(LineItemStream &lis) {
     Winding w;
@@ -491,15 +549,144 @@ struct Parser {
     area.arname = Strip(arname);
   }
 
-  void ParseRecord(LineItemStream &, TwoTerminalDCLine &) {}
+  TwoTerminalDCLine::Code ParseMeteredEndCode(CheckedLineItemStream &clis) {
+    std::string meter = "I";
+    std::string tmp;
+    clis >> tmp;
+    auto fc = tmp.front();
+    if ((fc == '\'' || fc == '\"') && tmp.back() == fc) {
+      meter = tmp.substr(1, tmp.size() - 2);
+    }
+    if (meter == "I") {
+      return TwoTerminalDCLine::Code::I;
+    } else if (meter == "R") {
+      return TwoTerminalDCLine::Code::R;
+    } else {
+      Error("PSS(R)E parser: Two-Terminal DC Line metered end code must be "
+            "either \'I\' or \'R\', got \'" +
+            meter + "\'");
+    }
+  }
 
-  void ParseRecord(LineItemStream &, VSCDCLine &) {}
+  TwoTerminalDCLine::Converter ParseTTDCLConverter(LineItemStream &lis) {
+    TwoTerminalDCLine::Converter c;
+    IntOrStringParse ip;
+    lis >> ip;
+    c.ip = ip.ToBusRef();
+    lis >> c.nb >> c.anmx >> c.anmn >> c.rc >> c.xc >> c.ebas;
+    auto clis = lis.Checked();
+    clis >> c.tr >> c.tap >> c.tmx >> c.tmn >> c.stp;
+    IntOrStringParse ic;
+    IntOrStringParse ifrom;
+    IntOrStringParse ito;
+    clis >> ic >> ifrom >> ito;
+    c.ic = ic.ToBusRef();
+    c.ifrom = ifrom.ToBusRef();
+    c.ito = ito.ToBusRef();
+    clis >> c.id >> c.xcap >> c.nd;
+    return c;
+  }
 
-  void ParseRecord(LineItemStream &, ImpedanceCorrection &) {}
+  void ParseRecord(LineItemStream &lis, TwoTerminalDCLine &dc) {
+    QuoteStringParse name;
+    lis >> name;
+    dc.name = Strip(name);
+    lis >> dc.mdc >> dc.rdc >> dc.setvl >> dc.vschd;
+    auto clis = lis.Checked();
+    clis >> dc.vcmod >> dc.rcomp >> dc.delti;
+    dc.meter = ParseMeteredEndCode(clis);
+    clis >> dc.dcvmin >> dc.cccitmx >> dc.cccacc;
+    dc.rectifier = ParseTTDCLConverter(lis.NextLine());
+    dc.inverter = ParseTTDCLConverter(lis.NextLine());
+  }
 
-  void ParseRecord(LineItemStream &, MultiTerminalDCLine &) {}
+  VSCDCLine::Converter ParseVSCDCLConverter(LineItemStream &lis) {
+    VSCDCLine::Converter c;
+    IntOrStringParse ibus;
+    lis >> ibus;
+    c.ibus = ibus.ToBusRef();
+    lis >> c.type >> c.mode >> c.dcset;
+    auto clis = lis.Checked();
+    clis >> c.acset >> c.aloss >> c.bloss >> c.minloss >> c.smax >> c.imax;
+    clis >> c.pwf >> c.maxq >> c.minq;
+    IntOrStringParse vsreg;
+    clis >> vsreg;
+    c.vsreg = vsreg.ToBusRef();
+    clis >> c.rmpct >> c.nreg;
+    return c;
+  }
 
-  void ParseRecord(LineItemStream &, MultiSectionLineGroup &) {}
+  void ParseRecord(LineItemStream &lis, VSCDCLine &dc) {
+    QuoteStringParse name;
+    lis >> name;
+    dc.name = Strip(name);
+    lis >> dc.mdc >> dc.rdc;
+    auto clis = lis.Checked();
+    for (std::size_t oi = 0; oi < 4; ++oi) {
+      clis >> dc.owners[oi].owner >> dc.owners[oi].fraction;
+    }
+    dc.converters[0] = ParseVSCDCLConverter(lis.NextLine());
+    dc.converters[1] = ParseVSCDCLConverter(lis.NextLine());
+  }
+
+  UNSUPPORTED(ImpedanceCorrection)
+
+  MultiTerminalDCLine::Converter ParseMTDCLConverter(LineItemStream &lis) {
+    MultiTerminalDCLine::Converter c;
+    IntOrStringParse ib;
+    lis >> ib;
+    c.ib = ib.ToBusRef();
+    lis >> c.n >> c.angmx >> c.angmn >> c.rc >> c.xc >> c.ebas;
+    lis >> c.tr >> c.tap >> c.tpmx >> c.tpmn >> c.tstp >> c.setvl;
+    auto clis = lis.Checked();
+    clis >> c.dcpf >> c.marg >> c.cnvcod;
+    return c;
+  }
+
+  MultiTerminalDCLine::DCBus ParseDCBus(LineItemStream &lis) {
+    MultiTerminalDCLine::DCBus b;
+    lis >> b.idc;
+    IntOrStringParse ib;
+    lis >> ib;
+    b.ib = ib.ToBusRef();
+    auto clis = lis.Checked();
+    clis >> b.area >> b.zone >> b.dcname >> b.idc2 >> b.rgrnd >> b.owner;
+    return b;
+  }
+
+  MultiTerminalDCLine::DCLink ParseDCLink(LineItemStream &lis) {
+    MultiTerminalDCLine::DCLink l;
+    lis >> l.idc >> l.jdc;
+    QuoteStringParse ckt;
+    lis >> ckt;
+    l.ckt = Strip(ckt);
+    lis >> l.met >> l.rdc >> Check >> l.ldc;
+    return l;
+  }
+
+  void ParseRecord(LineItemStream &lis, MultiTerminalDCLine &dc) {
+    QuoteStringParse name;
+    lis >> name;
+    dc.name = Strip(name);
+    lis >> dc.nconv >> dc.ndcbs >> dc.ndcln >> dc.mdc;
+    IntOrStringParse vconv;
+    lis >> vconv;
+    dc.vconv = vconv.ToBusRef();
+    IntOrStringParse vconvn;
+    lis.Checked() >> dc.vcmod >> vconvn;
+    dc.vconvn = vconvn.ToBusRef();
+    for (std::size_t i = 0; i < dc.nconv; ++i) {
+      dc.converters.emplace_back(ParseMTDCLConverter(lis.NextLine()));
+    }
+    for (std::size_t i = 0; i < dc.ndcbs; ++i) {
+      dc.dc_buses.emplace_back(ParseDCBus(lis.NextLine()));
+    }
+    for (std::size_t i = 0; i < dc.ndcln; ++i) {
+      dc.dc_links.emplace_back(ParseDCLink(lis.NextLine()));
+    }
+  }
+
+  UNSUPPORTED(MultiSectionLineGroup)
 
   void ParseRecord(LineItemStream &lis, Zone &zone) {
     QuoteStringParse zoname;
@@ -507,7 +694,7 @@ struct Parser {
     zone.zoname = Strip(zoname);
   }
 
-  void ParseRecord(LineItemStream &, InterAreaTransfer &) {}
+  UNSUPPORTED(InterAreaTransfer)
 
   void ParseRecord(LineItemStream &lis, Owner &owner) {
     QuoteStringParse owname;
@@ -515,7 +702,7 @@ struct Parser {
     owner.owname = Strip(owname);
   }
 
-  void ParseRecord(LineItemStream &, FACTSDevice &) {}
+  UNSUPPORTED(FACTSDevice)
 
   void ParseRecord(LineItemStream &lis, SwitchedShunt &sh) {
     IntOrStringParse i;
@@ -545,8 +732,68 @@ struct Parser {
     }
   }
 
-  void ParseRecord(LineItemStream &, GNEDevice &) {}
-  void ParseRecord(LineItemStream &, InductionMachine &) {}
+  UNSUPPORTED(GNEDevice)
+  UNSUPPORTED(InductionMachine)
+  UNSUPPORTED(Substation)
+
+  void ParseRecord(LineItemStream &lis, opf::ChangeCode &ch) {
+    Untested("opf::ChangeCode");
+
+    lis >> ch.icode;
+  }
+
+  void ParseRecord(LineItemStream &lis, opf::BusVoltageConstraint &bvc) {
+    Untested("opf::BusVoltageConstraint");
+
+    int bus_id;
+    lis >> bus_id;
+    bvc.bus.id = bus_id;
+    lis >> Check >> bvc.vnmax >> bvc.vnmin >> bvc.vemax >> bvc.vemin >>
+        bvc.ltyp >> bvc.slpen;
+  }
+
+  UNSUPPORTED(opf::AdjustableBusShunt)
+  UNSUPPORTED(opf::BusLoad)
+  UNSUPPORTED(opf::AdjustableBusLoadTable)
+  UNSUPPORTED(opf::GeneratorDispatch)
+  UNSUPPORTED(opf::ActivePowerDispatchTable)
+  UNSUPPORTED(opf::GenerationReserve)
+  UNSUPPORTED(opf::GenerationReactiveCapability)
+  UNSUPPORTED(opf::AdjustableBranchReactance)
+
+  void ParseRecord(LineItemStream &lis, opf::PiecewiseLinearCostTable &ct) {
+    Untested("opf::PiecewiseLinearCostTable");
+
+    lis >> ct.ltbl >> Check >> ct.label >> ct.npairs;
+    for (std::size_t i = 0; i < ct.npairs; ++i) {
+      opf::CoordinatePair crd;
+      lis >> crd.x >> crd.y;
+      ct.coords.push_back(crd);
+    }
+  }
+
+  void ParseRecord(LineItemStream &lis, opf::PiecewiseQuadraticCostTable &ct) {
+    Untested("opf::PiecewiseQuadraticCostTable");
+
+    lis >> ct.qtbl >> Check >> ct.label >> ct.cost >> ct.npairs;
+    for (std::size_t i = 0; i < ct.npairs; ++i) {
+      opf::CoordinatePair crd;
+      lis >> crd.x >> crd.y;
+      ct.coords.push_back(crd);
+    }
+  }
+
+  void ParseRecord(LineItemStream &lis, opf::PolyExpCostCurveTable &ct) {
+    Untested("opf::PolyExpCostCurveTable");
+
+    lis >> ct.ptbl >> Check >> ct.label >> ct.cost >> ct.costlin >>
+        ct.costquad >> ct.costexp >> ct.expn;
+  }
+
+  UNSUPPORTED(opf::PeriodReserveConstraint)
+  UNSUPPORTED(opf::BranchFlowConstraint)
+  UNSUPPORTED(opf::InterfaceFlowConstraint)
+  UNSUPPORTED(opf::LinearConstraintDependency)
 
   template <typename T> std::vector<T> ParseRecords(std::istream &is) {
     std::vector<T> recs;
@@ -658,31 +905,57 @@ void BusMapping::Resolve(BusRef &busref, BusMapping::Optional optional) const {
 void Network::ResolveBusIds() {
   using Optional = BusMapping::Optional;
   for (auto &load : loads) {
-    bus_mapping.Resolve(load.i);
+    bus_mapping->Resolve(load.i);
   }
   for (auto &shunt : fixed_bus_shunts) {
-    bus_mapping.Resolve(shunt.i);
+    bus_mapping->Resolve(shunt.i);
   }
   for (auto &gen : generators) {
-    bus_mapping.Resolve(gen.i);
-    bus_mapping.Resolve(gen.ireg, Optional{true});
+    bus_mapping->Resolve(gen.i);
+    bus_mapping->Resolve(gen.ireg, Optional{});
   }
   for (auto &br : branches) {
-    bus_mapping.Resolve(br.i);
-    bus_mapping.Resolve(br.j);
+    bus_mapping->Resolve(br.i);
+    bus_mapping->Resolve(br.j);
   }
   for (auto &tr : transformers) {
-    bus_mapping.Resolve(tr.i);
-    bus_mapping.Resolve(tr.j);
-    bus_mapping.Resolve(tr.k, Optional{true});
+    bus_mapping->Resolve(tr.i);
+    bus_mapping->Resolve(tr.j);
+    bus_mapping->Resolve(tr.k, Optional{});
   }
   for (auto &ar : area_interchanges) {
-    bus_mapping.Resolve(ar.isw, Optional{true});
+    bus_mapping->Resolve(ar.isw, Optional{});
+  }
+  for (auto &dc : two_terminal_dc_lines) {
+    bus_mapping->Resolve(dc.rectifier.ip);
+    bus_mapping->Resolve(dc.rectifier.ic, Optional{});
+    bus_mapping->Resolve(dc.rectifier.ifrom, Optional{});
+    bus_mapping->Resolve(dc.rectifier.ito, Optional{});
+    bus_mapping->Resolve(dc.inverter.ip);
+    bus_mapping->Resolve(dc.inverter.ic, Optional{});
+    bus_mapping->Resolve(dc.inverter.ifrom, Optional{});
+    bus_mapping->Resolve(dc.inverter.ito, Optional{});
+  }
+  for (auto &dc : vsc_dc_lines) {
+    bus_mapping->Resolve(dc.converters[0].ibus);
+    bus_mapping->Resolve(dc.converters[0].vsreg, Optional{});
+    bus_mapping->Resolve(dc.converters[1].ibus);
+    bus_mapping->Resolve(dc.converters[1].vsreg, Optional{});
+  }
+  for (auto &dc : multi_terminal_dc_lines) {
+    bus_mapping->Resolve(dc.vconv);
+    bus_mapping->Resolve(dc.vconvn, Optional{});
+    for (auto &conv : dc.converters) {
+      bus_mapping->Resolve(conv.ib);
+    }
+    for (auto &dcbus : dc.dc_buses) {
+      bus_mapping->Resolve(dcbus.ib, Optional{});
+    }
   }
   for (auto &sh : switched_shunts) {
-    bus_mapping.Resolve(sh.i);
-    bus_mapping.Resolve(sh.swreg, Optional{true});
-    bus_mapping.Resolve(sh.nreg, Optional{true});
+    bus_mapping->Resolve(sh.i);
+    bus_mapping->Resolve(sh.swreg, Optional{});
+    bus_mapping->Resolve(sh.nreg, Optional{});
   }
 }
 
@@ -734,82 +1007,7 @@ void Network::ResolveDefaults() {
   }
 }
 
-Network::Network(bool ref_bus_names, CaseID &&cid, std::vector<Bus> &&bus,
-                 std::vector<Load> &&load, std::vector<FixedBusShunt> &&fbshunt,
-                 std::vector<Generator> &&gen, std::vector<Branch> &&branch,
-                 std::vector<Transformer> &&trans,
-                 std::vector<AreaInterchange> &&area, std::vector<Zone> &&zone,
-                 std::vector<Owner> &&owner,
-                 std::vector<SwitchedShunt> &&swshunt)
-    : case_id(std::move(cid)), buses(std::move(bus)),
-      bus_mapping(buses, ref_bus_names), loads(std::move(load)),
-      fixed_bus_shunts(std::move(fbshunt)), generators(std::move(gen)),
-      branches(std::move(branch)), transformers(std::move(trans)),
-      area_interchanges(std::move(area)), zones(std::move(zone)),
-      owners(std::move(owner)), switched_shunts(std::move(swshunt)) {
-  ResolveBusIds();
-  ResolveDefaults();
-}
-
-Network ParseNetwork(std::istream &is) {
-  auto case_id = ParseCaseID(is);
-  if (case_id.rev >= 34) {
-    SkipSystemWideData(is);
-  }
-  auto parser = Parser{case_id.rev};
-  auto buses = parser.ParseRecords<Bus>(is);
-  auto loads = parser.ParseRecords<Load>(is);
-  auto fixed_bus_shunts = parser.ParseRecords<FixedBusShunt>(is);
-  auto generators = parser.ParseRecords<Generator>(is);
-  auto branches = parser.ParseRecords<Branch>(is);
-  // { TODO
-  if (case_id.rev >= 34) {
-    auto system_switching_devices =
-        parser.ParseRecords<SystemSwitchingDevice>(is);
-  }
-  // }
-  auto transformers = parser.ParseRecords<Transformer>(is);
-  auto area_interchanges = parser.ParseRecords<AreaInterchange>(is);
-  // { TODO
-  auto two_terminal_dc_lines = parser.ParseRecords<TwoTerminalDCLine>(is);
-  auto vsc_dc_lines = parser.ParseRecords<VSCDCLine>(is);
-  auto impedance_corrections = parser.ParseRecords<ImpedanceCorrection>(is);
-  auto multi_terminal_dc_lines = parser.ParseRecords<MultiTerminalDCLine>(is);
-  auto multi_section_line_groups =
-      parser.ParseRecords<MultiSectionLineGroup>(is);
-  // }
-  auto zones = parser.ParseRecords<Zone>(is);
-  // { TODO
-  auto inter_area_transfers = parser.ParseRecords<InterAreaTransfer>(is);
-  // }
-  auto owners = parser.ParseRecords<Owner>(is);
-  // { TODO
-  auto facts_devices = parser.ParseRecords<FACTSDevice>(is);
-  // }
-  auto switched_shunts = parser.ParseRecords<SwitchedShunt>(is);
-
-  // { TODO
-  auto gne_devices = parser.ParseRecords<GNEDevice>(is);
-  auto induction_machines = parser.ParseRecords<InductionMachine>(is);
-  // }
-
-  Network nw{parser.ref_bus_names,
-             std::move(case_id),
-             std::move(buses),
-             std::move(loads),
-             std::move(fixed_bus_shunts),
-             std::move(generators),
-             std::move(branches),
-             std::move(transformers),
-             std::move(area_interchanges),
-             std::move(zones),
-             std::move(owners),
-             std::move(switched_shunts)};
-
-  return nw;
-}
-
-Network ParseNetwork(const std::string &filename) {
+std::ifstream TryOpenFile(const std::string &filename) {
   auto quoted_filename = "\'" + filename + "\'";
   if (!std::filesystem::exists(filename)) {
     Error("PSS(R)E parser: File not found: " + quoted_filename);
@@ -820,11 +1018,46 @@ Network ParseNetwork(const std::string &filename) {
     Error("PSS(R)E parser: Failed to open file: " + quoted_filename);
   }
 
-  ExaGOLog(EXAGO_LOG_INFO, "Parsing PSS(R)E raw data file: " + quoted_filename);
-  auto nw = ParseNetwork(is);
-  nw.file_name = filename;
-  return nw;
+  return is;
 }
+
+Network::Network(const std::string &filename) : file_name(filename) {
+  auto is = TryOpenFile(file_name);
+  case_id = ParseCaseID(is);
+  auto parser = Parser{case_id.rev};
+  system_wide_data = parser.ParseSystemWideData(is);
+
+  buses = parser.ParseRecords<Bus>(is);
+  bus_mapping = std::make_unique<BusMapping>(buses, parser.ref_bus_names);
+
+  loads = parser.ParseRecords<Load>(is);
+  fixed_bus_shunts = parser.ParseRecords<FixedBusShunt>(is);
+  generators = parser.ParseRecords<Generator>(is);
+  branches = parser.ParseRecords<Branch>(is);
+  if (case_id.rev >= 34) {
+    system_switching_devices = parser.ParseRecords<SystemSwitchingDevice>(is);
+  }
+  transformers = parser.ParseRecords<Transformer>(is);
+  area_interchanges = parser.ParseRecords<AreaInterchange>(is);
+  two_terminal_dc_lines = parser.ParseRecords<TwoTerminalDCLine>(is);
+  vsc_dc_lines = parser.ParseRecords<VSCDCLine>(is);
+  impedance_corrections = parser.ParseRecords<ImpedanceCorrection>(is);
+  multi_terminal_dc_lines = parser.ParseRecords<MultiTerminalDCLine>(is);
+  multi_section_line_groups = parser.ParseRecords<MultiSectionLineGroup>(is);
+  zones = parser.ParseRecords<Zone>(is);
+  inter_area_transfers = parser.ParseRecords<InterAreaTransfer>(is);
+  owners = parser.ParseRecords<Owner>(is);
+  facts_devices = parser.ParseRecords<FACTSDevice>(is);
+  switched_shunts = parser.ParseRecords<SwitchedShunt>(is);
+  gne_devices = parser.ParseRecords<GNEDevice>(is);
+  induction_machines = parser.ParseRecords<InductionMachine>(is);
+  substations = parser.ParseRecords<Substation>(is);
+
+  ResolveBusIds();
+  ResolveDefaults();
+}
+
+Network ParseNetwork(const std::string &filename) { return Network(filename); }
 
 PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
   PetscErrorCode ierr;
@@ -890,7 +1123,7 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
   for (int i = 0; i < ps->maxbusnum + 1; i++) {
     ps->busext2intmap[i] = -1;
   }
-  for (const auto &[ext_i, int_i] : nw.bus_mapping.GetIdToIdMap()) {
+  for (const auto &[ext_i, int_i] : nw.bus_mapping->GetIdToIdMap()) {
     ps->busext2intmap[ext_i] = int_i;
   }
 
@@ -916,7 +1149,7 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
     dload.scale = sload.scale;
     dload.intrpt = sload.intrpt;
 
-    auto bus_ii = nw.bus_mapping.GetInternalIndex(dload.bus_i);
+    auto bus_ii = nw.bus_mapping->GetInternalIndex(dload.bus_i);
     dload.internal_i = bus_ii;
     auto &bus = ps->bus[bus_ii];
     bus.lidx[bus.nload] = i;
@@ -928,7 +1161,7 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
     if (shunt.status == 0) {
       continue;
     }
-    auto bus_ii = nw.bus_mapping.GetInternalIndex(shunt.i);
+    auto bus_ii = nw.bus_mapping->GetInternalIndex(shunt.i);
     if (ps->bus[bus_ii].nshunt > 0) {
       Warn("Bus " + std::to_string(shunt.i.id) +
            ": more than one fixed shunt at bus not supported");
@@ -967,7 +1200,7 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
     dgen.f1 = sgen.owners[0].fraction;
 
     dgen.initial_status = dgen.status;
-    auto bus_ii = nw.bus_mapping.GetInternalIndex(dgen.bus_i);
+    auto bus_ii = nw.bus_mapping->GetInternalIndex(dgen.bus_i);
     dgen.internal_i = bus_ii;
     auto &bus = ps->bus[bus_ii];
     bus.gidx[bus.ngen] = i;
@@ -987,7 +1220,8 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
         ss << "Generator at bus " << bus.bus_i << std::fixed
            << ": voltage setpoint (" << dgen.vs
            << ") different from bus voltage magnitude (" << bus.vm << ")";
-        Warn(ss.str());
+        // Warn(ss.str());
+        Error(ss.str());
       }
       bus.ngenON++;
       ps->NgenON++;
@@ -995,12 +1229,15 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
   }
 
   // lines
-  ps->Nline = ps->nline = nw.branches.size() + nw.transformers.size();
+  int nbranch = nw.branches.size();
+  int ntrans = nw.transformers.size();
+  int nttdc = nw.two_terminal_dc_lines.size();
+  ps->Nline = ps->nline = nbranch + ntrans + nttdc;
   ierr = PetscCalloc1(ps->Nline, &ps->line);
   CHKERRQ(ierr);
   auto configure_line = [&nw](auto &line) {
-    line.internal_i = nw.bus_mapping.GetInternalIndex(line.fbus);
-    line.internal_j = nw.bus_mapping.GetInternalIndex(line.tbus);
+    line.internal_i = nw.bus_mapping->GetInternalIndex(line.fbus);
+    line.internal_j = nw.bus_mapping->GetInternalIndex(line.tbus);
     line.tapratio = 1.0;
     line.phaseshift = 0.0;
 
@@ -1030,8 +1267,6 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
     line.ytt[0] = G;
     line.ytt[1] = B + Bc / 2.0;
   };
-  int nbranch = nw.branches.size();
-  int ntrans = nw.transformers.size();
   for (int i = 0; i < nbranch; ++i) {
     auto &dline = ps->line[i];
     auto &sline = nw.branches[i];
@@ -1090,6 +1325,11 @@ PetscErrorCode ConvertToPS(PS ps, const Network &nw) {
     // the rest are skipped
 
     configure_line(dline);
+  }
+  for (int i = 0; i < nttdc; ++i) {
+    auto &dline = ps->line[i + nbranch + ntrans];
+    auto &sline = nw.two_terminal_dc_lines[i];
+    // TODO: set up line as dc line
   }
 
   auto unsupported_contents_error = [&nw](const std::string &label) {

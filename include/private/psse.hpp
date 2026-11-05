@@ -3,6 +3,7 @@
 #include <array>
 #include <istream>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -22,12 +23,14 @@ template <typename T> inline constexpr bool IsInvalid(const T &val) noexcept {
 struct CaseID {
   int ic{0};
   double sbase{100.0};
-  int rev{34};
+  int rev{33};
   int xfrrat;
   int nxfrat;
   double basfrq;
   std::array<std::string, 3> extra;
 };
+
+struct SystemWideData {};
 
 struct Bus {
   std::size_t i;
@@ -115,7 +118,7 @@ struct Generator {
 struct Branch {
   BusRef i;
   BusRef j;
-  std::string ckt;
+  std::string ckt{"1"};
   double r;
   double x;
   double b{0.0};
@@ -194,13 +197,128 @@ struct AreaInterchange {
   std::string arname{};
 };
 
-struct TwoTerminalDCLine {};
+struct TwoTerminalDCLine {
+  struct Converter {
+    BusRef ip;
+    std::size_t nb;
+    double anmx;
+    double anmn;
+    double rc;
+    double xc;
+    double ebas;
+    double tr{1.0};
+    double tap{1.0};
+    double tmx{1.5};
+    double tmn{0.51};
+    double stp{0.00625};
+    BusRef ic{0};
+    BusRef ifrom{0};
+    BusRef ito{0};
+    int id{1};
+    double xcap{0.0};
+    std::size_t nd{0};
+  };
 
-struct VSCDCLine {};
+  enum class Code { R, I };
+
+  std::string name;
+  int mdc{0};
+  double rdc;
+  double setvl;
+  double vschd;
+  double vcmod{0.0};
+  double rcomp{0.0};
+  double delti{0.0};
+  Code meter{Code::I};
+  double dcvmin{0.0};
+  std::size_t cccitmx{20};
+  double cccacc{1.0};
+
+  Converter rectifier;
+  Converter inverter;
+};
+
+struct VSCDCLine {
+  struct Converter {
+    BusRef ibus;
+    int type;
+    int mode{1};
+    double dcset;
+    double acset{1.0};
+    double aloss{0.0};
+    double bloss{0.0};
+    double minloss{0.0};
+    double smax{0.0};
+    double imax{0.0};
+    double pwf{1.0};
+    double maxq{9999.0};
+    double minq{-9999.0};
+    BusRef vsreg{};
+    double rmpct{100.0};
+    std::size_t nreg{0};
+  };
+
+  std::string name;
+  int mdc{1};
+  double rdc;
+  std::array<Ownership, 4> owners{Ownership{1}, {}, {}, {}};
+  std::array<Converter, 2> converters;
+};
 
 struct ImpedanceCorrection {};
 
-struct MultiTerminalDCLine {};
+struct MultiTerminalDCLine {
+  struct Converter {
+    BusRef ib;
+    std::size_t n;
+    double angmx;
+    double angmn;
+    double rc;
+    double xc;
+    double ebas;
+    double tr{1.0};
+    double tap{1.0};
+    double tpmx{1.5};
+    double tpmn{0.51};
+    double tstp{0.00625};
+    double setvl;
+    double dcpf{1.0};
+    double marg{0.0};
+    int cnvcod{1};
+  };
+
+  struct DCBus {
+    std::size_t idc;
+    BusRef ib{};
+    std::size_t area{1};
+    std::size_t zone{1};
+    std::string dcname{};
+    std::size_t idc2{0};
+    double rgrnd{0.0};
+    std::size_t owner{1};
+  };
+
+  struct DCLink {
+    std::size_t idc;
+    std::size_t jdc;
+    std::string ckt{"1"};
+    int met{1};
+    double rdc;
+    double ldc{1.0};
+  };
+
+  std::string name;
+  std::size_t nconv;
+  std::size_t ndcbs;
+  std::size_t ndcln;
+  int mdc{0};
+  BusRef vconv;
+  double vcmod{0.0};
+  BusRef vconvn{};
+  std::vector<Converter> converters;
+  std::vector<DCBus> dc_buses;
+  std::vector<DCLink> dc_links;
+};
 
 struct MultiSectionLineGroup {};
 
@@ -242,11 +360,73 @@ struct GNEDevice {};
 
 struct InductionMachine {};
 
+struct Substation {};
+
+namespace opf {
+struct ChangeCode {
+  int icode;
+};
+
+struct BusVoltageConstraint {
+  BusRef bus;
+  double vnmax{9999.0};
+  double vnmin{-9999.0};
+  double vemax{9999.0};
+  double vemin{-9999.0};
+  int ltyp{1};
+  double slpen{1.0};
+};
+
+struct AdjustableBusShunt {};
+struct BusLoad {};
+struct AdjustableBusLoadTable {};
+struct GeneratorDispatch {};
+struct ActivePowerDispatchTable {};
+struct GenerationReserve {};
+struct GenerationReactiveCapability {};
+struct AdjustableBranchReactance {};
+
+struct CoordinatePair {
+  double x;
+  double y;
+};
+
+struct PiecewiseLinearCostTable {
+  std::size_t ltbl;
+  std::string label{};
+  std::size_t npairs{0};
+  std::vector<CoordinatePair> coords;
+};
+
+struct PiecewiseQuadraticCostTable {
+  std::size_t qtbl;
+  std::string label{};
+  double cost{0.0};
+  std::size_t npairs{0};
+  std::vector<CoordinatePair> coords;
+};
+
+struct PolyExpCostCurveTable {
+  std::size_t ptbl;
+  std::string label{};
+  double cost{0.0};
+  double costlin{0.0};
+  double costquad{0.0};
+  double costexp{0.0};
+  double expn{0.0};
+};
+
+struct PeriodReserveConstraint {};
+struct BranchFlowConstraint {};
+struct InterfaceFlowConstraint {};
+struct LinearConstraintDependency {};
+} // namespace opf
+
 class BusMapping {
 public:
   struct Optional {
     operator bool() { return value; }
-    bool value{false};
+    bool value{true};
   };
 
   BusMapping(std::vector<Bus> &buses, bool require_unique_names);
@@ -277,42 +457,43 @@ private:
   std::unordered_map<std::string, std::size_t> name_map_;
 };
 
+struct Parser;
+
 struct Network {
-  Network(bool ref_bus_names, CaseID &&, std::vector<Bus> &&,
-          std::vector<Load> &&, std::vector<FixedBusShunt> &&,
-          std::vector<Generator> &&, std::vector<Branch> &&,
-          std::vector<Transformer> &&, std::vector<AreaInterchange> &&,
-          std::vector<Zone> &&, std::vector<Owner> &&,
-          std::vector<SwitchedShunt> &&);
+  Network(const std::string &filename);
 
   void ResolveBusIds();
   void ResolveDefaults();
 
-  std::string file_name;
+  const std::string &FileName() const { return file_name; }
+
+  const std::string file_name;
   CaseID case_id;
+  SystemWideData system_wide_data;
   std::vector<Bus> buses;
-  BusMapping bus_mapping;
+  std::unique_ptr<BusMapping> bus_mapping;
   std::vector<Load> loads;
   std::vector<FixedBusShunt> fixed_bus_shunts;
   std::vector<Generator> generators;
   std::vector<Branch> branches;
-  // std::vector<SystemSwitchingDevice> system_switching_devices;
+  std::vector<SystemSwitchingDevice> system_switching_devices;
   std::vector<Transformer> transformers;
   std::vector<AreaInterchange> area_interchanges;
-  // std::vector<TwoTerminalDCLine> two_terminal_dc_lines;
-  // std::vector<VSCDCLine> vsc_dc_lines;
-  // std::vector<ImpedanceCorrection> impedance_corrections;
-  // std::vector<MultiTerminalDCLine> multi_terminal_dc_lines;
-  // std::vector<MultiSectionLineGroup> multi_section_line_groups;
+  std::vector<TwoTerminalDCLine> two_terminal_dc_lines;
+  std::vector<VSCDCLine> vsc_dc_lines;
+  std::vector<ImpedanceCorrection> impedance_corrections;
+  std::vector<MultiTerminalDCLine> multi_terminal_dc_lines;
+  std::vector<MultiSectionLineGroup> multi_section_line_groups;
   std::vector<Zone> zones;
-  // std::vector<InterAreaTransfer> inter_area_transfers;
+  std::vector<InterAreaTransfer> inter_area_transfers;
   std::vector<Owner> owners;
-  // std::vector<FACTSDevice> facts_devices;
+  std::vector<FACTSDevice> facts_devices;
   std::vector<SwitchedShunt> switched_shunts;
-  // std::vector<GNEDevice> gne_devices;
+  std::vector<GNEDevice> gne_devices;
+  std::vector<InductionMachine> induction_machines;
+  std::vector<Substation> substations;
 };
 
-Network ParseNetwork(std::istream &is);
 Network ParseNetwork(const std::string &filename);
 
 PetscErrorCode ConvertToPS(PS ps, const Network &nw);

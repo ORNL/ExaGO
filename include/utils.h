@@ -124,9 +124,11 @@ inline void ExaGOLog(MPI_Comm comm, int level, std::string fmt,
     switch (level) {
     case EXAGO_LOG_ERROR:
       logger->error(fmt, args...);
+      logger->flush();
       break;
     case EXAGO_LOG_WARN:
       logger->warn(fmt, args...);
+      logger->flush();
       break;
     default:
       /*
