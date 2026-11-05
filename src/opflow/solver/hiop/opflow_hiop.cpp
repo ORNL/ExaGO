@@ -435,6 +435,8 @@ PetscErrorCode OPFLOWSolverSetUp_HIOP(OPFLOW opflow) {
   ierr = PetscStrcmp(opflow->modelname, OPFLOWMODEL_PBPOLRAJAHIOP,
                      &ismodelpbpolrajahiop);
   CHKERRQ(ierr);
+#else
+  ismodelpbpolrajahiop = false;
 #endif
   if (!ismodelpbpolhiop && !ismodelpbpolrajahiop) {
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP,
