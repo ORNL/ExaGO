@@ -49,6 +49,7 @@ from agentigrid.exago_parsers import (
     results_summary_for_app,
 )
 from agentigrid.exago_parsers.matpower_model import MATNetwork
+from agentigrid.rag import build_retriever
 from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 from agentigrid.exago_engine import topology
 from agentigrid.exago_engine import contingency
@@ -787,6 +788,13 @@ class AgentLoopController:
     ) -> None:
         self._config = config
         self._backend: LLMBackend = create_backend(config.llm)
+        # Optional retrieval grounding (off by default). AGENTIGRID_RAG_MODE is one
+        # of off | basic | corrective (AGENTIGRID_RAG=1/0 still maps to basic/off).
+        # Every mode exposes the same .enabled / .retrieve() surface, and "off"
+        # needs none of the optional RAG dependencies.
+        self._retriever = build_retriever(
+            host=os.environ.get("OLLAMA_HOST") or getattr(config.llm, "ollama_host", None) or "http://localhost:11434",
+        )
         self._executor = SimulationExecutor(config.exago, config.output)
         self._journal = SearchJournal()
         self._quiet = quiet
@@ -1478,7 +1486,22 @@ class AgentLoopController:
         )
         self._error_feedback = None  # consumed
 
+        # Retrieval grounds the generation step only; the deterministic validator
+        # never sees it. A failed or empty retrieval leaves the prompt unchanged.
+        _retrieved = self._retriever.retrieve(goal) if self._retriever.enabled else ""
+        if _retrieved:
+            user_prompt = (
+                "=== Section B: Reference Material (retrieved) ===\n"
+                f"{_retrieved}\n\n{user_prompt}"
+            )
+
         if self._on_phase:
+            if self._retriever.enabled:
+                # "rag_retrieved:<refs>:<top score>" feeds the UI's grounding caption
+                # (0 refs under corrective = context withheld).
+                _scores = [float(x) for x in re.findall(r"score (\d+\.\d+)", _retrieved)]
+                _top = max(_scores) if _scores else 0.0
+                self._on_phase(iteration, f"rag_retrieved:{_retrieved.count('[ref ')}:{_top:.2f}")
             self._on_phase(iteration, "llm_request")
 
         response = self._backend.complete(system_prompt, user_prompt)
@@ -5037,6 +5060,19 @@ class AgentLoopController:
     @log_scope(logger, "ExaGO finalization")
     def _finalize(self, session: SearchSession, elapsed_seconds: float) -> None:
         """Print summary and save journal."""
+        _rag_enabled = self._retriever.enabled
+        self._journal.rag_enabled = _rag_enabled
+        try:
+            from agentigrid.rag import resolve_rag_mode, resolve_crag_grader
+            _desc = getattr(self._retriever, "describe", None)
+            self._journal.rag_config = {
+                **(_desc() if callable(_desc) else {}),
+                "mode_env": resolve_rag_mode(),
+                "grader_env": resolve_crag_grader(),
+            }
+        except Exception:
+            self._journal.rag_config = None
+        session.rag_enabled = _rag_enabled
         tokens_before_analysis = self._ledger.total
         if self._pending_explore is not None:      # session ended right after an explore
             dirs, best = self._pending_explore

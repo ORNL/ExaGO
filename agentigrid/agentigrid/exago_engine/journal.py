@@ -1140,6 +1140,10 @@ class SearchJournal:
             data["token_usage"] = self.token_usage
         if self.llm_settings is not None:
             data["llm_settings"] = self.llm_settings
+        if getattr(self, "rag_enabled", None) is not None:
+            data["rag_enabled"] = self.rag_enabled
+        if getattr(self, "rag_config", None) is not None:
+            data["rag_config"] = self.rag_config
         if getattr(self, "discarded_actions", None):
             data["discarded_actions"] = self.discarded_actions
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
