@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <complex>
 #include <istream>
 #include <limits>
 #include <memory>
@@ -265,7 +266,15 @@ struct VSCDCLine {
   std::array<Converter, 2> converters;
 };
 
-struct ImpedanceCorrection {};
+struct ImpedanceCorrectionTable {
+  struct Correction {
+    double t{0.0};
+    std::complex<double> f{0.0};
+  };
+
+  std::size_t i;
+  std::vector<Correction> table;
+};
 
 struct MultiTerminalDCLine {
   struct Converter {
@@ -320,21 +329,55 @@ struct MultiTerminalDCLine {
   std::vector<DCLink> dc_links;
 };
 
-struct MultiSectionLineGroup {};
+struct MultiSectionLineGroup {
+  BusRef i;
+  BusRef j;
+  std::string id{"&1"};
+  int met{1};
+  std::vector<BusRef> dum;
+};
 
 struct Zone {
   std::size_t i;
   std::string zoname{};
 };
 
-struct InterAreaTransfer {};
+struct InterAreaTransfer {
+  std::size_t arfrom;
+  std::size_t arto;
+  char trid{'1'};
+  double ptran{0.0};
+};
 
 struct Owner {
   std::size_t i;
   std::string owname{};
 };
 
-struct FACTSDevice {};
+struct FACTSDevice {
+  std::string name;
+  BusRef i;
+  BusRef j{};
+  int mode{1};
+  double pdes{0.0};
+  double qdes{0.0};
+  double vset{1.0};
+  double shmx{9999.0};
+  double trmx{9999.0};
+  double vtmn{0.9};
+  double vtmx{1.1};
+  double vsmx{1.0};
+  double imx{0.0};
+  double linx{0.05};
+  double rmpct{100.0};
+  std::size_t owner{1};
+  double set1{0.0};
+  double set2{0.0};
+  int vsref{0};
+  BusRef fcreg{0};
+  std::string mname{};
+  std::size_t nreg{0};
+};
 
 struct SwitchedShunt {
   struct Block {
@@ -353,7 +396,7 @@ struct SwitchedShunt {
   std::string rmidnt{};
   double binit{0.0};
   std::array<Block, 8> blocks{};
-  BusRef nreg{0, ""};
+  std::size_t nreg{0};
 };
 
 struct GNEDevice {};
@@ -481,7 +524,7 @@ struct Network {
   std::vector<AreaInterchange> area_interchanges;
   std::vector<TwoTerminalDCLine> two_terminal_dc_lines;
   std::vector<VSCDCLine> vsc_dc_lines;
-  std::vector<ImpedanceCorrection> impedance_corrections;
+  std::vector<ImpedanceCorrectionTable> impedance_correction_tables;
   std::vector<MultiTerminalDCLine> multi_terminal_dc_lines;
   std::vector<MultiSectionLineGroup> multi_section_line_groups;
   std::vector<Zone> zones;
