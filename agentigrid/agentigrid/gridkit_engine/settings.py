@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from agentigrid.config import AppConfig, GridkitConfig
+from agentigrid.gridkit_engine.sweep_metrics import CheckOptions
 
 _DEFAULTS = GridkitConfig()
 DEFAULT_BINARY_DIR = _DEFAULTS.binary_dir   # relative to cwd, like exago.binary_dir
@@ -29,6 +30,9 @@ class GridkitSettings:
     timeout_s: float = DEFAULT_TIMEOUT_S
     threads: Optional[int] = _DEFAULTS.threads   # per run; None = inherit the environment
     damping_in_verdict: bool = _DEFAULTS.damping_in_verdict
+    damping_method: str = _DEFAULTS.damping_method
+    final_voltage_window_s: float = _DEFAULTS.final_voltage_window_s
+    final_voltage_margin_pu: float = _DEFAULTS.final_voltage_margin_pu
     workers: int = 0                # 0 = auto: min(cpu count, MAX_AUTO_WORKERS)
     workdir: Path = Path("./workdir/gridkit")
     exago_workdir: Path = Path("./workdir/exago")   # where "latest_steady_state" is looked up
@@ -51,6 +55,12 @@ class GridkitSettings:
     def info_checks(self) -> frozenset[str]:
         """Checks computed and reported but kept out of the verdict (status "info")."""
         return frozenset() if self.damping_in_verdict else frozenset({"damping"})
+
+    @property
+    def check_options(self) -> CheckOptions:
+        """How the damping and final-voltage checks are computed (all off by default)."""
+        return CheckOptions(self.damping_method, float(self.final_voltage_window_s),
+                            float(self.final_voltage_margin_pu))
 
     def subprocess_env(self) -> Optional[dict[str, str]]:
         """Environment for a GridKit process: ours with the thread variables set
@@ -79,6 +89,9 @@ class GridkitSettings:
             timeout_s=float(gk.timeout),
             threads=gk.threads,
             damping_in_verdict=gk.damping_in_verdict,
+            damping_method=gk.damping_method,
+            final_voltage_window_s=gk.final_voltage_window_s,
+            final_voltage_margin_pu=gk.final_voltage_margin_pu,
             workdir=Path(cfg.output.workdir) / "gridkit",
             exago_workdir=Path(cfg.output.workdir) / "exago",
             logs_dir=Path(cfg.output.logs_dir) / "gridkit",

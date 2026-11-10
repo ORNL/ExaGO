@@ -11,6 +11,13 @@ Check signature:
 
 A check can be made informational (gridkit.damping_in_verdict: false for damping):
 it is still computed and reported, with status "info", and never counts in a verdict.
+
+CheckOptions (gridkit config, all off by default) change HOW two checks are computed,
+never which checks exist, so the LLM sees the same check names; their descriptions
+change only when an option is switched on:
+  damping_method "modal"     robust matrix pencil instead of the peak method
+  final_voltage_window_s > 0 final voltage as the mean of the last window_s seconds
+  final_voltage_margin_pu > 0 final-voltage band widened by this margin
 """
 
 from __future__ import annotations
@@ -32,6 +39,30 @@ def _vm(series):
     return series.bus_variable("Vm")
 
 
+@dataclass(frozen=True)
+class CheckOptions:
+    """How the damping and final-voltage checks are computed (gridkit config)."""
+
+    damping_method: str = "peak"            # "peak" or "modal" (criteria.DAMPING_METHODS)
+    final_voltage_window_s: float = 0.0     # 0 = last sample
+    final_voltage_margin_pu: float = 0.0    # 0 = band exactly FINAL_V_MIN_PU-FINAL_V_MAX_PU
+
+    def is_default(self) -> bool:
+        return self == CheckOptions()
+
+    def to_dict(self) -> dict:
+        return {"damping_method": self.damping_method,
+                "final_voltage_window_s": self.final_voltage_window_s,
+                "final_voltage_margin_pu": self.final_voltage_margin_pu}
+
+
+DEFAULT_OPTIONS = CheckOptions()
+
+
+def _opts(ctx) -> CheckOptions:
+    return ctx.get("options", DEFAULT_OPTIONS)
+
+
 CHECKS: dict[str, tuple[Callable, dict[str, set[str]], str]] = {
     "angle_stability": (
         lambda s, ctx: criteria.check_angle_stability(s.t, _angles(s)),
@@ -50,12 +81,15 @@ CHECKS: dict[str, tuple[Callable, dict[str, set[str]], str]] = {
         "ComEd zone recovery envelope (PJM M-14B G.9.4)",
     ),
     "damping": (
-        lambda s, ctx: criteria.check_damping(s.t, _angles(s), ctx["clear_time_s"]),
+        lambda s, ctx: criteria.check_damping(s.t, _angles(s), ctx["clear_time_s"],
+                                              method=_opts(ctx).damping_method),
         {"machines": {"delta"}},
         "damping ratio >= 3% (PJM M-14B G.2.2); run >= 10 s",
     ),
     "final_voltage": (
-        lambda s, ctx: criteria.check_final_voltage(_vm(s)),
+        lambda s, ctx: criteria.check_final_voltage(
+            _vm(s), t=s.t, window_s=_opts(ctx).final_voltage_window_s,
+            margin_pu=_opts(ctx).final_voltage_margin_pu),
         {"buses": {"Vm"}},
         "bus voltages 0.90-1.10 pu at end of run",
     ),
@@ -69,15 +103,36 @@ INFO_NOTES: dict[str, str] = {
 }
 
 
-def info_label(name: str) -> str:
+def info_label(name: str, options: CheckOptions = DEFAULT_OPTIONS) -> str:
     """'damping (informational only: ...)'."""
+    if name == "damping" and options.damping_method == "modal":
+        return f"{name} (informational only (gridkit.damping_in_verdict: false); matrix pencil; " \
+               "not part of the verdict)"
     return f"{name} ({INFO_NOTES.get(name, 'informational only; not part of the verdict')})"
 
 
-def check_lines(info_only: frozenset[str] = frozenset()) -> list[str]:
+def describe(name: str, options: CheckOptions = DEFAULT_OPTIONS) -> str:
+    """Description of a check for the LLM; changes only when an option is on."""
+    desc = CHECKS[name][2]
+    if name == "damping" and options.damping_method == "modal":
+        return ("lowest damping ratio >= 3% (PJM M-14B G.2.2), by matrix pencil: a mode counts only if "
+                "found in two fitting windows (clearing + 1 s and + 2 s); modes and swings below "
+                f"{criteria.DAMPING_MIN_AMPLITUDE_DEG:g} deg count as settled; run >= 10 s")
+    if name == "final_voltage" and (options.final_voltage_window_s or options.final_voltage_margin_pu):
+        where = (f"mean of the last {options.final_voltage_window_s:g} s" if options.final_voltage_window_s
+                 else "end of run")
+        band = f"{criteria.FINAL_V_MIN_PU:.2f}-{criteria.FINAL_V_MAX_PU:.2f} pu"
+        if options.final_voltage_margin_pu:
+            band += f" with margin {options.final_voltage_margin_pu:g} pu"
+        return f"bus voltages {band}, {where}"
+    return desc
+
+
+def check_lines(info_only: frozenset[str] = frozenset(),
+                options: CheckOptions = DEFAULT_OPTIONS) -> list[str]:
     """One line per registered check for the LLM, informational ones marked as such."""
-    return [info_label(name) if name in info_only else f"{name}: {desc}"
-            for name, (_, _, desc) in CHECKS.items()]
+    return [info_label(name, options) if name in info_only else f"{name}: {describe(name, options)}"
+            for name in CHECKS]
 
 
 def get_check(name: str) -> Callable:
@@ -106,9 +161,10 @@ def as_info(result: CheckResult) -> CheckResult:
 
 
 def run_checks(series, names: list[str], clear_time_s: float,
-               info_only: frozenset[str] = frozenset()) -> list[CheckResult]:
+               info_only: frozenset[str] = frozenset(),
+               options: CheckOptions = DEFAULT_OPTIONS) -> list[CheckResult]:
     """Run the named checks; those in *info_only* come back with status "info"."""
-    ctx = {"clear_time_s": clear_time_s}
+    ctx = {"clear_time_s": clear_time_s, "options": options}
     results = [get_check(n)(series, ctx) for n in names]
     return [as_info(r) if r.name in info_only else r for r in results]
 
@@ -140,7 +196,8 @@ class FaultOutcome:
 MAX_INFO_LINES = 50
 
 
-def screen_verdict(subject: str, outcomes: list[FaultOutcome], study_note: str) -> str:
+def screen_verdict(subject: str, outcomes: list[FaultOutcome], study_note: str,
+                   options: CheckOptions = DEFAULT_OPTIONS) -> str:
     """Verdict line, table of every failure (never cut short), untested checks,
     informational checks, and the PJM tests skipped because GridKit lacks their elements."""
     n = len(outcomes)
@@ -176,7 +233,7 @@ def screen_verdict(subject: str, outcomes: list[FaultOutcome], study_note: str) 
             for c in o.checks if c.status == "info"]
     if info:
         names = sorted({c.name for _, c in info})
-        lines += ["", "INFORMATIONAL, not part of the verdict: " + "; ".join(info_label(n) for n in names)]
+        lines += ["", "INFORMATIONAL, not part of the verdict: " + "; ".join(info_label(n, options) for n in names)]
         lines += [f"  bus {bus}: {c.name} - {c.detail}" for bus, c in info[:MAX_INFO_LINES]]
         if len(info) > MAX_INFO_LINES:
             lines.append(f"  ... {len(info) - MAX_INFO_LINES} more (values in the journal)")

@@ -51,6 +51,7 @@ class GridkitJournal:
         self.token_usage: dict | None = None     # TokenLedger.to_dict(), set before export
         self.llm_settings: dict | None = None    # collect_llm_settings() of the run
         self.damping_in_verdict: bool = True     # gridkit.damping_in_verdict of the run
+        self.check_options: dict | None = None   # CheckOptions.to_dict() if any option is on
         self.termination_reason: str | None = None   # set before export
         self.llm_events: list[dict] = []         # failed LLM call attempts (backends/retry.py)
 
@@ -83,6 +84,7 @@ class GridkitJournal:
             "entries": [asdict(e) for e in self.entries],
             **({"token_usage": self.token_usage} if self.token_usage is not None else {}),
             **({"llm_settings": self.llm_settings} if self.llm_settings is not None else {}),
+            **({"check_options": self.check_options} if self.check_options is not None else {}),
         }
 
     def export_json(self, path: Path | None = None) -> Path:
