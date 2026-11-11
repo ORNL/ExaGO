@@ -418,10 +418,13 @@ def _check_damping_modal(
       pass        otherwise
     Modes with an amplitude below *min_amplitude_deg* are not considered.
     """
-    import numpy as np                      # only needed for this option
-    from agentigrid.gridkit_engine import modal
-
     src = "M-14B G.2.2 Acceptable Damping (3% margin); matrix pencil: AgentiGrid option"
+    try:
+        import numpy as np                  # only needed for this option (not a package requirement)
+        from agentigrid.gridkit_engine import modal
+    except ImportError:
+        return CheckResult("damping", "not_tested", None, min_ratio,
+                           "damping_method 'modal' needs numpy (pip install numpy)", src)
     if len(deltas) < 2:
         return CheckResult("damping", "not_tested", None, min_ratio,
                            "fewer than two machine angles recorded", src)
