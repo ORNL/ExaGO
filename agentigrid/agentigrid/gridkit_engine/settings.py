@@ -33,6 +33,8 @@ class GridkitSettings:
     damping_method: str = _DEFAULTS.damping_method
     final_voltage_window_s: float = _DEFAULTS.final_voltage_window_s
     final_voltage_margin_pu: float = _DEFAULTS.final_voltage_margin_pu
+    short_circuit_info: bool = _DEFAULTS.short_circuit_info
+    weak_bus_percentile: float = _DEFAULTS.weak_bus_percentile
     workers: int = 0                # 0 = auto: min(cpu count, MAX_AUTO_WORKERS)
     workdir: Path = Path("./workdir/gridkit")
     exago_workdir: Path = Path("./workdir/exago")   # where "latest_steady_state" is looked up
@@ -60,7 +62,8 @@ class GridkitSettings:
     def check_options(self) -> CheckOptions:
         """How the damping and final-voltage checks are computed (all off by default)."""
         return CheckOptions(self.damping_method, float(self.final_voltage_window_s),
-                            float(self.final_voltage_margin_pu))
+                            float(self.final_voltage_margin_pu), bool(self.short_circuit_info),
+                            float(self.weak_bus_percentile))
 
     def subprocess_env(self) -> Optional[dict[str, str]]:
         """Environment for a GridKit process: ours with the thread variables set
@@ -92,6 +95,8 @@ class GridkitSettings:
             damping_method=gk.damping_method,
             final_voltage_window_s=gk.final_voltage_window_s,
             final_voltage_margin_pu=gk.final_voltage_margin_pu,
+            short_circuit_info=gk.short_circuit_info,
+            weak_bus_percentile=gk.weak_bus_percentile,
             workdir=Path(cfg.output.workdir) / "gridkit",
             exago_workdir=Path(cfg.output.workdir) / "exago",
             logs_dir=Path(cfg.output.logs_dir) / "gridkit",

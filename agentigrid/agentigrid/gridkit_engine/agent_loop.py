@@ -34,6 +34,7 @@ from agentigrid.gridkit_engine.journal import GridkitJournal, JournalEntry, outc
 from agentigrid.gridkit_engine.modifier import apply_modifications, prepare_fault_case, write_case
 from agentigrid.gridkit_engine.schema_description import command_schema_text
 from agentigrid.gridkit_engine.settings import GridkitSettings
+from agentigrid.gridkit_engine import ssc
 from agentigrid.gridkit_engine.sweep_metrics import (DEFAULT_OPTIONS, CheckOptions, FaultOutcome,
                                                      info_label, run_checks, screen_verdict)
 from agentigrid.gridkit_engine.validation import validate_fault_study
@@ -97,6 +98,7 @@ class GridkitAgentLoop:
         self._sleep: Callable[[float], None] = time.sleep   # retry waits (tests replace it)
         self._screen_cache: dict[str, tuple[int, str]] = {}
         self._starts: dict[str, _Start] = {}     # by FaultStudy.start_from
+        self._ssc_cache: dict[int, dict] = {}    # Ssc of all buses per voltage level, per start case
 
     def _print(self, msg: str) -> None:
         """Print progress message unless quiet mode is enabled."""
@@ -401,6 +403,13 @@ class GridkitAgentLoop:
             text = screen_verdict(self._subject(study), outcomes, note, self._settings.check_options)
             if check.warnings:
                 text += "\n\nWARNINGS:\n" + "\n".join(f"  {w}" for w in check.warnings)
+            ssc_info = None
+            if self._settings.short_circuit_info:
+                with log_scope(logger, "short-circuit strength", iteration=iteration, buses=len(outcomes)):
+                    ssc_info = ssc.strength(work, [o.bus for o in outcomes],
+                                            self._settings.weak_bus_percentile,
+                                            self._ssc_cache.setdefault(id(start.case), {}))
+                text += "\n\n" + "\n".join(ssc.report_lines(ssc_info))
             if len(outcomes) <= _FULL_TABLE_MAX:
                 text += "\n\n" + _outcome_table(outcomes, self._settings.check_options)
             self._print(f"[Iter {iteration}] {text.splitlines()[0]} ({elapsed:.1f} s)")
@@ -409,7 +418,8 @@ class GridkitAgentLoop:
             self._journal.add(JournalEntry(
                 iteration, "fault_screen", description, request=data,
                 verdict=text.splitlines()[0], result_text=text,
-                rows=[outcome_row(o, r.job.run_dir) for o, r in zip(outcomes, results)],
+                rows=[_with_ssc(outcome_row(o, r.job.run_dir), ssc_info, o.bus)
+                      for o, r in zip(outcomes, results)],
                 elapsed_s=elapsed, llm_reasoning=str(data.get("reasoning", "")), run_dir=str(iter_dir),
             ))
             return text, None
@@ -476,6 +486,13 @@ def _exago_label(source: SteadyStateSource) -> str:
     """Short name of an ExaGO start for verdict lines."""
     return (f"the latest ExaGO steady state ({source.application.upper()} iteration "
             f"{source.iteration}, {source.journal.name})")
+
+
+def _with_ssc(row: dict, info: Optional[dict], bus: int) -> dict:
+    """Journal row with the short-circuit strength of its bus, when that option is on."""
+    if info is None:
+        return row
+    return {**row, "short_circuit": info.get(bus, {"error": info.get("error", "bus not found")})}
 
 
 def _outcome_table(outcomes: list[FaultOutcome], options: CheckOptions = DEFAULT_OPTIONS) -> str:

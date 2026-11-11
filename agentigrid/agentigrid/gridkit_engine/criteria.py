@@ -465,7 +465,8 @@ def _check_damping_modal(
         return CheckResult("damping", "not_tested", None if worst is None else worst[0], min_ratio,
                            f"not determined for {', '.join(undetermined[:5])}: a mode below "
                            f"{100 * min_ratio:g}% seen in one fitting window only{low}; "
-                           "run longer", src, data)
+                           "the record is too short: repeat this bus with tmax_s = 30 and report "
+                           "both results (PJM test period is 10-15 s)", src, data)
     if worst is None:
         return CheckResult("damping", "pass", None, min_ratio,
                            f"no confirmed mode of {min_amplitude_deg} deg or more below "

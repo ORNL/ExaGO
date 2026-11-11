@@ -198,3 +198,89 @@ def test_descriptions_change_only_when_on():
     assert any(line.startswith("damping: lowest damping ratio >= 3%") and "matrix pencil" in line for line in on)
     assert "final_voltage: bus voltages 0.90-1.10 pu with margin 1e-05 pu, mean of the last 3 s" in on
     assert [line.split(":")[0] for line in on] == [line.split(":")[0] for line in check_lines()]
+
+
+# ---------------- short-circuit strength as information (patch v2) ----------------
+
+def _three_bus_case():
+    """Source bus 3 (machine Xdpp 0.02 pu) feeding bus 1 through 0.01+j0.10 pu and bus 2 through j0.05 pu."""
+    return {"buses": [{"number": n, "name": f"B{n}", "params": {"kv": 138.0}, "init": {"Vr": 1.0, "Vi": 0.0}}
+                      for n in (1, 2, 3)],
+            "devices": [
+                {"class": "Branch", "ports": {"bus1": 3, "bus2": 1}, "params": {"R": 0.01, "X": 0.10, "B": 0.0}},
+                {"class": "Branch", "ports": {"bus1": 3, "bus2": 2}, "params": {"R": 0.0, "X": 0.05, "B": 0.0}},
+                {"class": "Genrou", "ports": {"bus": 3}, "params": {"mva": 100.0, "Ra": 0.0, "Xdpp": 0.02}},
+                {"class": "BusFault", "ports": {"bus": 1}, "params": {}}]}
+
+
+def test_ssc_off_by_default():
+    s = GridkitSettings.from_config(load_config(None))
+    assert s.short_circuit_info is False and s.check_options.short_circuit_info is False
+    assert s.check_options.is_default()
+
+
+def test_ssc_config_carried(tmp_path):
+    cfg = load_config(_write(tmp_path, {"short_circuit_info": True, "weak_bus_percentile": 10}))
+    o = GridkitSettings.from_config(cfg).check_options
+    assert o.short_circuit_info is True and o.weak_bus_percentile == 10.0 and not o.is_default()
+    with pytest.raises(ValueError):
+        load_config(_write(tmp_path, {"weak_bus_percentile": 0}))
+
+
+def test_ssc_three_bus_by_hand():
+    pytest.importorskip("scipy")
+    from agentigrid.gridkit_engine import ssc
+    info = ssc.strength(_three_bus_case(), [1, 2], weak_percentile=50.0)
+    # Zth(1) = 0.01 + j(0.10 + 0.02), Zth(2) = j(0.05 + 0.02), Zth(3) = j0.02
+    assert info[1]["zth_pu"] == pytest.approx(abs(complex(0.01, 0.12)), rel=1e-9)
+    assert info[1]["ssc_mva"] == pytest.approx(100 / abs(complex(0.01, 0.12)), rel=1e-9)
+    assert info[1]["x_over_r"] == pytest.approx(12.0, rel=1e-9)
+    assert info[2]["ssc_mva"] == pytest.approx(100 / 0.07, rel=1e-9)
+    assert info[1]["n_same_kv"] == 3
+    assert info[1]["percentile"] == 0.0 and info[1]["weak"] is True          # weakest of the three
+    assert info[2]["percentile"] == pytest.approx(100 / 3) and info[2]["weak"] is True
+    lines = ssc.report_lines(info)
+    assert lines[0].startswith("SHORT-CIRCUIT STRENGTH (information only, not part of the verdict)")
+    assert any(line.startswith("  bus 1: Ssc 830 MVA") for line in lines)
+    assert "does not predict the outcome of the stability checks" in lines[-1]
+
+
+def test_ssc_cache_reused():
+    pytest.importorskip("scipy")
+    from agentigrid.gridkit_engine import ssc
+    cache = {}
+    a = ssc.strength(_three_bus_case(), [1], cache=cache)
+    assert 138.0 in cache and len(cache[138.0]) == 3
+    b = ssc.strength(_three_bus_case(), [1], cache=cache)
+    assert a == b
+
+
+def test_ssc_missing_scipy_reported(monkeypatch):
+    from agentigrid.gridkit_engine import ssc
+
+    def no_scipy(case):
+        raise ImportError("no scipy", name="scipy")
+    monkeypatch.setattr(ssc, "_ybus_lu", no_scipy)
+    info = ssc.strength(_three_bus_case(), [1])
+    assert "error" in info and "scipy" in info["error"]
+    assert "not available" in "\n".join(ssc.report_lines(info))
+
+
+def test_modal_undetermined_asks_for_30_s(monkeypatch):
+    """Undetermined at 15 s: the message tells the LLM to repeat the bus with tmax_s = 30."""
+    from agentigrid.gridkit_engine import modal
+    monkeypatch.setattr(modal, "damping_ratio_modal_robust",
+                        lambda *a, **k: (0.045, [(0.72, 0.045, 2.0)], "undetermined"))
+    r = criteria.check_damping(T, _deltas([(0.05, 0.7, 4.0)]), CLEAR, method="modal")
+    assert r.status == "not_tested"
+    assert "repeat this bus with tmax_s = 30" in r.detail and "report both results" in r.detail
+    assert r.data["undetermined"]
+
+
+def test_journal_row_gets_ssc_only_when_on():
+    loop = pytest.importorskip("agentigrid.gridkit_engine.agent_loop")
+    row = {"bus": 1, "status": "pass"}
+    assert loop._with_ssc(row, None, 1) is row                       # option off: row unchanged
+    info = {1: {"ssc_mva": 830.5}}
+    assert loop._with_ssc(row, info, 1)["short_circuit"] == {"ssc_mva": 830.5}
+    assert "error" in loop._with_ssc(row, {"error": "not available"}, 1)["short_circuit"]

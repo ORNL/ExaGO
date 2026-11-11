@@ -18,6 +18,8 @@ change only when an option is switched on:
   damping_method "modal"     robust matrix pencil instead of the peak method
   final_voltage_window_s > 0 final voltage as the mean of the last window_s seconds
   final_voltage_margin_pu > 0 final-voltage band widened by this margin
+  short_circuit_info true    short-circuit strength of the faulted buses reported as
+                             information (gridkit_engine/ssc.py); never part of a verdict
 """
 
 from __future__ import annotations
@@ -46,6 +48,8 @@ class CheckOptions:
     damping_method: str = "peak"            # "peak" or "modal" (criteria.DAMPING_METHODS)
     final_voltage_window_s: float = 0.0     # 0 = last sample
     final_voltage_margin_pu: float = 0.0    # 0 = band exactly FINAL_V_MIN_PU-FINAL_V_MAX_PU
+    short_circuit_info: bool = False        # report Ssc of the faulted buses (information only)
+    weak_bus_percentile: float = 5.0        # weak = weakest p % of the buses at the same voltage
 
     def is_default(self) -> bool:
         return self == CheckOptions()
@@ -53,7 +57,9 @@ class CheckOptions:
     def to_dict(self) -> dict:
         return {"damping_method": self.damping_method,
                 "final_voltage_window_s": self.final_voltage_window_s,
-                "final_voltage_margin_pu": self.final_voltage_margin_pu}
+                "final_voltage_margin_pu": self.final_voltage_margin_pu,
+                "short_circuit_info": self.short_circuit_info,
+                "weak_bus_percentile": self.weak_bus_percentile}
 
 
 DEFAULT_OPTIONS = CheckOptions()
