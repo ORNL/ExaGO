@@ -18,6 +18,9 @@ change only when an option is switched on:
   damping_method "modal"     robust matrix pencil instead of the peak method
   final_voltage_window_s > 0 final voltage as the mean of the last window_s seconds
   final_voltage_margin_pu > 0 final-voltage band widened by this margin
+  final_voltage_pre_fault_delta_pu > 0  final voltage judged relative to the pre-fault value:
+                             no new violation, and no violation (or value at a limit) worsened
+                             by more than this
   short_circuit_info true    short-circuit strength of the faulted buses reported as
                              information (gridkit_engine/ssc.py); never part of a verdict
 """
@@ -50,6 +53,7 @@ class CheckOptions:
     final_voltage_margin_pu: float = 0.0    # 0 = band exactly FINAL_V_MIN_PU-FINAL_V_MAX_PU
     short_circuit_info: bool = False        # report Ssc of the faulted buses (information only)
     weak_bus_percentile: float = 5.0        # weak = weakest p % of the buses at the same voltage
+    final_voltage_pre_fault_delta_pu: float = 0.0   # > 0: final voltage relative to the pre-fault value
 
     def is_default(self) -> bool:
         return self == CheckOptions()
@@ -59,7 +63,8 @@ class CheckOptions:
                 "final_voltage_window_s": self.final_voltage_window_s,
                 "final_voltage_margin_pu": self.final_voltage_margin_pu,
                 "short_circuit_info": self.short_circuit_info,
-                "weak_bus_percentile": self.weak_bus_percentile}
+                "weak_bus_percentile": self.weak_bus_percentile,
+                "final_voltage_pre_fault_delta_pu": self.final_voltage_pre_fault_delta_pu}
 
 
 DEFAULT_OPTIONS = CheckOptions()
@@ -95,7 +100,8 @@ CHECKS: dict[str, tuple[Callable, dict[str, set[str]], str]] = {
     "final_voltage": (
         lambda s, ctx: criteria.check_final_voltage(
             _vm(s), t=s.t, window_s=_opts(ctx).final_voltage_window_s,
-            margin_pu=_opts(ctx).final_voltage_margin_pu),
+            margin_pu=_opts(ctx).final_voltage_margin_pu,
+            pre_fault_delta_pu=_opts(ctx).final_voltage_pre_fault_delta_pu),
         {"buses": {"Vm"}},
         "bus voltages 0.90-1.10 pu at end of run",
     ),
@@ -124,13 +130,19 @@ def describe(name: str, options: CheckOptions = DEFAULT_OPTIONS) -> str:
         return ("lowest damping ratio >= 3% (PJM M-14B G.2.2), by matrix pencil: a mode counts only if "
                 "found in two fitting windows (clearing + 1 s and + 2 s); modes and swings below "
                 f"{criteria.DAMPING_MIN_AMPLITUDE_DEG:g} deg count as settled; run >= 10 s")
-    if name == "final_voltage" and (options.final_voltage_window_s or options.final_voltage_margin_pu):
+    if name == "final_voltage" and (options.final_voltage_window_s or options.final_voltage_margin_pu
+                                    or options.final_voltage_pre_fault_delta_pu):
         where = (f"mean of the last {options.final_voltage_window_s:g} s" if options.final_voltage_window_s
                  else "end of run")
         band = f"{criteria.FINAL_V_MIN_PU:.2f}-{criteria.FINAL_V_MAX_PU:.2f} pu"
         if options.final_voltage_margin_pu:
             band += f" with margin {options.final_voltage_margin_pu:g} pu"
-        return f"bus voltages {band}, {where}"
+        text = f"bus voltages {band}, {where}"
+        if options.final_voltage_pre_fault_delta_pu:
+            text += (f"; judged relative to the pre-fault value: the fault must not create a violation, "
+                     f"nor worsen a voltage already at or beyond a limit before the fault by more than "
+                     f"{options.final_voltage_pre_fault_delta_pu:g} pu")
+        return text
     return desc
 
 

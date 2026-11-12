@@ -115,6 +115,7 @@ DEFAULTS: dict[str, Any] = {
         "final_voltage_margin_pu": 0.0,
         "short_circuit_info": False,
         "weak_bus_percentile": 5.0,
+        "final_voltage_pre_fault_delta_pu": 0.0,
         "study": {
             "tmax": 15.0,
             "dt_monitor": 0.01,
@@ -301,6 +302,7 @@ class GridkitConfig:
     final_voltage_margin_pu: float = 0.0   # > 0: final-voltage band widened by this (e.g. 1e-5)
     short_circuit_info: bool = False       # true: report Ssc of the faulted buses (information only)
     weak_bus_percentile: float = 5.0       # weak bus = weakest p % of the buses at the same voltage
+    final_voltage_pre_fault_delta_pu: float = 0.0   # > 0: final voltage relative to the pre-fault value (e.g. 1e-3)
     study: GridkitStudyConfig = field(default_factory=GridkitStudyConfig)
     fault: GridkitFaultConfig = field(default_factory=GridkitFaultConfig)
 
@@ -467,7 +469,8 @@ def _build_gridkit(raw: dict, root: Path) -> GridkitConfig:
                          final_voltage_window_s=float(base.final_voltage_window_s),
                          final_voltage_margin_pu=float(base.final_voltage_margin_pu),
                          short_circuit_info=bool(base.short_circuit_info),
-                         weak_bus_percentile=float(base.weak_bus_percentile), **parts)
+                         weak_bus_percentile=float(base.weak_bus_percentile),
+                         final_voltage_pre_fault_delta_pu=float(base.final_voltage_pre_fault_delta_pu), **parts)
 
 
 def _build_retry(raw: Optional[dict]) -> RetryConfig:
@@ -610,6 +613,12 @@ def _validate(cfg: AppConfig) -> None:
                          f"not '{cfg.gridkit.damping_method}'")
     if cfg.gridkit.final_voltage_window_s < 0 or cfg.gridkit.final_voltage_margin_pu < 0:
         raise ValueError("gridkit.final_voltage_window_s and final_voltage_margin_pu must be >= 0")
+    if cfg.gridkit.final_voltage_pre_fault_delta_pu < 0:
+        raise ValueError("gridkit.final_voltage_pre_fault_delta_pu must be >= 0")
+    if cfg.gridkit.final_voltage_pre_fault_delta_pu > 0.01:
+        logger.warning("gridkit.final_voltage_pre_fault_delta_pu=%s pu is large; it is meant for tiny "
+                       "post-fault movements of buses held at a limit (e.g. 1e-3).",
+                       cfg.gridkit.final_voltage_pre_fault_delta_pu)
     if not 0 < cfg.gridkit.weak_bus_percentile < 100:
         raise ValueError("gridkit.weak_bus_percentile must be between 0 and 100")
     if cfg.gridkit.final_voltage_window_s >= study.tmax:

@@ -1,4 +1,4 @@
-"""gridkit.damping_method / final_voltage_window_s / final_voltage_margin_pu (all off by default).
+"""gridkit.damping_method / final_voltage_window_s / final_voltage_margin_pu / final_voltage_pre_fault_delta_pu (all off by default).
 
 The options change HOW the damping and final-voltage checks are computed, never which
 checks exist. With the defaults everything must be exactly as before.
@@ -284,3 +284,66 @@ def test_journal_row_gets_ssc_only_when_on():
     info = {1: {"ssc_mva": 830.5}}
     assert loop._with_ssc(row, info, 1)["short_circuit"] == {"ssc_mva": 830.5}
     assert "error" in loop._with_ssc(row, {"error": "not available"}, 1)["short_circuit"]
+
+
+# ---------------- final voltage relative to the pre-fault value (patch v3) ----------------
+
+def _held(v0, v_end):
+    """Bus at v0 before the fault, a dip during the fault, ending at v_end."""
+    return [v0 if t < 1.0 else (0.5 if t < CLEAR else v_end) for t in T]
+
+
+def test_pre_fault_off_by_default():
+    s = GridkitSettings.from_config(load_config(None))
+    assert s.final_voltage_pre_fault_delta_pu == 0.0
+    assert s.check_options.final_voltage_pre_fault_delta_pu == 0.0 and s.check_options.is_default()
+
+
+def test_pre_fault_bus_held_at_limit_passes():
+    # held at 1.10 by the OPF, ends 5e-5 pu higher: a "violation" only because of the operating point
+    v = {1: [1.0] * len(T), 2: _held(1.10, 1.10005)}
+    assert criteria.check_final_voltage(v, t=T, window_s=3.0, margin_pu=1e-5).status == "fail"
+    r = criteria.check_final_voltage(v, t=T, window_s=3.0, margin_pu=1e-5, pre_fault_delta_pu=1e-3)
+    assert r.status == "pass"
+    assert r.data["n_outside"] == 1 and r.data["n_violations"] == 0 and r.data["n_outside_as_before_fault"] == 1
+    assert "relative to the pre-fault value" in r.detail
+
+
+def test_pre_fault_new_violation_fails():
+    v = {1: [1.0] * len(T), 2: _held(1.05, 1.12)}            # inside before, outside after
+    r = criteria.check_final_voltage(v, t=T, window_s=3.0, margin_pu=1e-5, pre_fault_delta_pu=1e-3)
+    assert r.status == "fail" and r.data["n_violations"] == 1 and "worst: bus 2" in r.detail
+
+
+def test_pre_fault_worsened_beyond_delta_fails():
+    v = {1: [1.0] * len(T), 2: _held(1.10, 1.103)}            # at the limit, then 3e-3 pu higher
+    assert criteria.check_final_voltage(v, t=T, window_s=3.0, pre_fault_delta_pu=1e-3).status == "fail"
+    assert criteria.check_final_voltage(v, t=T, window_s=3.0, pre_fault_delta_pu=5e-3).status == "pass"
+
+
+def test_pre_fault_lower_limit_symmetric():
+    v = {1: [1.0] * len(T), 2: _held(0.90, 0.8995), 3: _held(0.95, 0.89)}
+    r = criteria.check_final_voltage(v, t=T, window_s=3.0, pre_fault_delta_pu=1e-3)
+    assert r.status == "fail" and r.data["n_violations"] == 1 and r.data["n_outside_as_before_fault"] == 1
+    del v[3]
+    assert criteria.check_final_voltage(v, t=T, window_s=3.0, pre_fault_delta_pu=1e-3).status == "pass"
+
+
+def test_pre_fault_config_and_description(tmp_path):
+    cfg = load_config(_write(tmp_path, {"final_voltage_window_s": 3.0, "final_voltage_margin_pu": 1e-5,
+                                        "final_voltage_pre_fault_delta_pu": 1e-3}))
+    o = GridkitSettings.from_config(cfg).check_options
+    assert o.final_voltage_pre_fault_delta_pu == 1e-3 and not o.is_default()
+    assert o.to_dict()["final_voltage_pre_fault_delta_pu"] == 1e-3
+    line = [x for x in check_lines(frozenset(), o) if x.startswith("final_voltage:")][0]
+    assert "relative to the pre-fault value" in line and "0.001 pu" in line
+    with pytest.raises(ValueError):
+        load_config(_write(tmp_path, {"final_voltage_pre_fault_delta_pu": -1e-3}))
+
+
+def test_pre_fault_through_the_registry():
+    s = _Series(_deltas([(0.07, 0.40, 4.0)]), {1: [1.0] * len(T), 2: _held(1.10, 1.10005)})
+    v2 = {c.name: c for c in run_checks(s, ["final_voltage"], CLEAR, frozenset(), CheckOptions("peak", 3.0, 1e-5))}
+    v3 = {c.name: c for c in run_checks(s, ["final_voltage"], CLEAR, frozenset(),
+                                        CheckOptions("peak", 3.0, 1e-5, final_voltage_pre_fault_delta_pu=1e-3))}
+    assert v2["final_voltage"].status == "fail" and v3["final_voltage"].status == "pass"

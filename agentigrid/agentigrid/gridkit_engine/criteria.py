@@ -259,6 +259,7 @@ def check_final_voltage(
     t: Optional[Sequence[float]] = None,
     window_s: float = 0.0,
     margin_pu: float = 0.0,
+    pre_fault_delta_pu: float = 0.0,
 ) -> CheckResult:
     """Bus voltages at the end of the run within the steady-state band.
 
@@ -270,6 +271,14 @@ def check_final_voltage(
       margin_pu > 0  the band widened to vmin - margin_pu ... vmax + margin_pu, e.g.
                      10 x the ACOPF tolerance, so a voltage held at a limit only within
                      the solver tolerance is not reported as a violation.
+      pre_fault_delta_pu > 0
+                     judged relative to the pre-fault value (first sample, as the angle
+                     check): the fault must not create a violation, nor worsen a voltage
+                     that was already at or beyond a limit before the fault by more than
+                     this, i.e. each bus must end within
+                     min(vmin - margin, V_pre - d) ... max(vmax + margin, V_pre + d).
+                     A bus that the operating point (e.g. the AC OPF) holds at a limit is
+                     then not reported because of tiny post-fault movements.
     """
     src = "M-14B Att. I (band: AgentiGrid default)"
     if not vms:
@@ -286,14 +295,32 @@ def check_final_voltage(
     lo_lim, hi_lim = vmin - margin_pu, vmax + margin_pu
     lo_bus = min(finals, key=finals.get)
     hi_bus = max(finals, key=finals.get)
-    ok = finals[lo_bus] >= lo_lim and finals[hi_bus] <= hi_lim
     band = f"band {vmin}-{vmax} pu" if margin_pu == 0 else \
         f"band {vmin}-{vmax} pu with margin {margin_pu:g} pu ({lo_lim:.6g}-{hi_lim:.6g} pu)"
+    outside = [b for b, v in finals.items() if v < lo_lim or v > hi_lim]
+    if pre_fault_delta_pu > 0:
+        pre = {bus: v[0] for bus, v in vms.items()}
+        bad = [b for b in outside
+               if finals[b] > max(hi_lim, pre[b] + pre_fault_delta_pu)
+               or finals[b] < min(lo_lim, pre[b] - pre_fault_delta_pu)]
+        ok = not bad
+        held = len(outside) - len(bad)
+        band += (f"; relative to the pre-fault value (tolerance {pre_fault_delta_pu:g} pu): "
+                 f"{len(bad)} bus(es) violate it, {held} outside the band only as before the fault")
+        if bad:
+            w = max(bad, key=lambda b: abs(finals[b] - pre[b]))
+            band += f" (worst: bus {w}, {num(pre[w], '.4f')} -> {num(finals[w], '.4f')} pu)"
+    else:
+        ok = finals[lo_bus] >= lo_lim and finals[hi_bus] <= hi_lim
     data = {"lowest_pu": finals[lo_bus], "lowest_bus": lo_bus,
             "highest_pu": finals[hi_bus], "highest_bus": hi_bus, "vmin_pu": vmin, "vmax_pu": vmax}
-    if use_window or margin_pu:
+    if use_window or margin_pu or pre_fault_delta_pu:
         data.update({"window_s": window_s if use_window else 0.0, "margin_pu": margin_pu,
-                     "n_outside": sum(1 for v in finals.values() if v < lo_lim or v > hi_lim)})
+                     "n_outside": len(outside)})
+    if pre_fault_delta_pu > 0:
+        data.update({"pre_fault_delta_pu": pre_fault_delta_pu, "n_violations": len(bad),
+                     "n_outside_as_before_fault": held,
+                     "max_abs_change_from_pre_fault_pu": max((abs(finals[b] - pre[b]) for b in finals), default=0.0)})
     return CheckResult(
         "final_voltage", "pass" if ok else "fail", finals[lo_bus], vmin,
         f"{where}: lowest {num(finals[lo_bus], '.3f', ' pu')} (bus {lo_bus}), "
