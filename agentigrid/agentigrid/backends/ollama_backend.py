@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.backends.json_extract import extract_json
 from agentigrid.config import LLMConfig
@@ -83,14 +84,16 @@ class OllamaBackend(LLMBackend):
             kwargs["format"] = "json"
 
         try:
-            response = self._client.chat(**kwargs)
+            with log_scope(logger, "LLM API request", backend=self.name(), model=self._config.model):
+                response = self._client.chat(**kwargs)
 
-            raw_text = response.get("message", {}).get("content", "")
+            with log_scope(logger, "LLM response parsing", backend=self.name(), model=self._config.model):
+                raw_text = response.get("message", {}).get("content", "")
 
-            prompt_tokens = response.get("prompt_eval_count")
-            completion_tokens = response.get("eval_count")
+                prompt_tokens = response.get("prompt_eval_count")
+                completion_tokens = response.get("eval_count")
 
-            json_data, json_error = extract_json(raw_text)
+                json_data, json_error = extract_json(raw_text)
 
             return LLMResponse(
                 raw_text=raw_text,

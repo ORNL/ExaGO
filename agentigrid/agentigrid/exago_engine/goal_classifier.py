@@ -58,7 +58,8 @@ def build_classification_prompts(
         termination_reason: How the search ended (completed, max_iterations, etc.).
         stats: dict from ``SearchJournal.summary_stats()`` (before any override).
         journal_formatted: Output of ``SearchJournal.format_detailed()``.
-        total_tokens: Total prompt + completion tokens used during the search.
+        total_tokens: Prompt + completion tokens of every LLM call made before this
+            one (all phases; the classification call cannot count itself).
         objective_registry: Optional list of tracked objective dicts.
         preference_history: Optional list of preference change dicts.
         application: ExaGO application name (e.g., "opflow", "tcopflow", "sopflow").
@@ -138,7 +139,7 @@ def build_classification_prompts(
         f"\n"
         f"Lowest-cost feasible: {stats['best_objective']} "
         f"({_best_loc})\n"
-        f"Tokens used: ~{total_tokens:,}\n"
+        f"Tokens used before this analysis: ~{total_tokens:,}\n"
         f"\n"
         f"=== Detailed Journal ===\n"
         f"{journal_formatted}\n"

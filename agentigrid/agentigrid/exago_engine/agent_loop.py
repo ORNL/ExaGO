@@ -17,9 +17,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.backends import create_backend
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.config import AppConfig
+from agentigrid.token_usage import TokenLedger
 from agentigrid.exago_engine.commands import parse_command
 from agentigrid.exago_engine.executor import SimulationExecutor, SimulationResult
 from agentigrid.exago_engine.explore import (
@@ -736,8 +738,9 @@ class SearchSession:
     end_time: Optional[str] = None
     termination_reason: str = ""
     final_findings: Optional[dict] = None
-    total_prompt_tokens: int = 0
+    total_prompt_tokens: int = 0        # all LLM calls of the session (every phase)
     total_completion_tokens: int = 0
+    token_ledger: TokenLedger = field(default_factory=TokenLedger)
     goal_classification: Optional[dict] = None
     analysis_text: Optional[str] = None
     enforced_vmin: Optional[float] = None
@@ -754,6 +757,21 @@ class SearchSession:
 
 class AgentLoopController:
     """Drives the iterative LLM-driven search."""
+
+    @property
+    def _total_prompt_tokens(self) -> int:
+        """Prompt tokens of every LLM call so far (all phases)."""
+        return self._ledger.total_prompt
+
+    @property
+    def _total_completion_tokens(self) -> int:
+        """Completion tokens of every LLM call so far (all phases)."""
+        return self._ledger.total_completion
+
+    @property
+    def token_ledger(self) -> TokenLedger:
+        """Per-call token record of this session."""
+        return self._ledger
 
     def __init__(
         self,
@@ -798,8 +816,8 @@ class AgentLoopController:
         self._latest_results_text: Optional[str] = None
         self._error_feedback: Optional[str] = None
         self._consecutive_parse_failures = 0
-        self._total_prompt_tokens = 0
-        self._total_completion_tokens = 0
+        self._ledger = TokenLedger()        # every LLM call of the session, by phase
+        self._ledger_iteration: Optional[int] = None
         self._opflow_results_cache: dict[int, OPFLOWResult] = {}
         self._scopflow_num_contingencies: int = 0
         self._tcopflow_num_steps: int = 0
@@ -990,6 +1008,7 @@ class AgentLoopController:
     # Main entry point
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "ExaGO session")
     def run(self, base_case: Path, goal: str) -> SearchSession:
         """Execute the full search loop."""
         session_start = time.monotonic()
@@ -1000,22 +1019,24 @@ class AgentLoopController:
             config=self._config,
             journal=self._journal,
             start_time=datetime.now().isoformat(),
+            token_ledger=self._ledger,
         )
 
         # 1. Parse base case
         logger.info("Parsing base case: %s", base_case)
-        self._base_network = parse_matpower(base_case)
-        self._current_network = self._base_network
-        # REVIEW: model base-case wind as curtailable for SOPFLOW
-        # so scenarios with sub-nameplate wind are feasible (see the method + the
-        # search.sopflow_curtailable_wind_base flag). No-op for non-SOPFLOW / disabled.
-        self._normalize_sopflow_wind_base()
-        net_summary_text = network_summary(
-            self._base_network,
-            max_generators=self._config.report.network_summary_max_generators,
-        )
-        net_metadata_text = network_metadata(self._base_network)
-        self._network_metadata_text = net_metadata_text
+        with log_scope(logger, "ExaGO case preparation", case_file=base_case):
+            self._base_network = parse_matpower(base_case)
+            self._current_network = self._base_network
+            # REVIEW: model base-case wind as curtailable for SOPFLOW
+            # so scenarios with sub-nameplate wind are feasible (see the method + the
+            # search.sopflow_curtailable_wind_base flag). No-op for non-SOPFLOW / disabled.
+            self._normalize_sopflow_wind_base()
+            net_summary_text = network_summary(
+                self._base_network,
+                max_generators=self._config.report.network_summary_max_generators,
+            )
+            net_metadata_text = network_metadata(self._base_network)
+            self._network_metadata_text = net_metadata_text
 
         # 1b. Run OPFLOW benchmark at session start (if enabled)
         benchmark_text: Optional[str] = None
@@ -1228,7 +1249,8 @@ class AgentLoopController:
                 session.termination_reason = "user_stopped"
                 self._print("\nSearch stopped by user.")
                 break
-            action_type, should_continue = self._iteration(iteration, goal)
+            with log_scope(logger, "ExaGO iteration", iteration=iteration):
+                action_type, should_continue = self._iteration(iteration, goal)
             # Notify callback after each iteration
             if self._on_iteration:
                 latest_entry = self._journal.latest
@@ -1283,6 +1305,7 @@ class AgentLoopController:
     ) -> tuple[str, bool]:
         """Execute one iteration. Returns (action_type, should_continue)."""
         self._current_goal = goal
+        self._ledger_iteration = iteration       # for token records of calls made below
         # Drain the steering queue at the iteration boundary
         new_directives: list[dict] = []
         while True:
@@ -1328,13 +1351,13 @@ class AgentLoopController:
             self._on_phase(iteration, "llm_request")
 
         response = self._backend.complete(system_prompt, user_prompt)
+        self._ledger.record("search", response, iteration,
+                            prompt_chars=len(system_prompt) + len(user_prompt))
         logger.debug("LLM raw response: %s", response.raw_text[:500])
 
         # Track tokens
         pt = response.prompt_tokens or 0
         ct = response.completion_tokens or 0
-        self._total_prompt_tokens += pt
-        self._total_completion_tokens += ct
         if pt or ct:
             self._print(
                 f"[Iter {iteration}] Tokens: {pt} prompt + {ct} completion "
@@ -1369,7 +1392,8 @@ class AgentLoopController:
         self._batch_best = None
         self._executor.begin_batch()
         try:
-            return self._dispatch_action(action, iteration, data)
+            with log_scope(logger, "ExaGO action", iteration=iteration, action=action):
+                return self._dispatch_action(action, iteration, data)
         finally:
             self._prune_saved_solutions(action, self._executor.end_batch())
 
@@ -1695,6 +1719,7 @@ class AgentLoopController:
                 return True
         return False
 
+    @log_scope(logger, "ExaGO variant exploration")
     def _handle_explore(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -2693,6 +2718,7 @@ class AgentLoopController:
             result["pf_tan_phi"] = tan_phi
         return result
 
+    @log_scope(logger, "ExaGO boundary sweep")
     def _handle_boundary_sweep(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -2901,6 +2927,7 @@ class AgentLoopController:
 
         return "sweep", True
 
+    @log_scope(logger, "ExaGO contingency screen")
     def _run_contingency_screen(
         self,
         net: MATNetwork,
@@ -3346,6 +3373,7 @@ class AgentLoopController:
         self._print(f"[Iter {iteration}] {verdict}")
         return "sweep", True
 
+    @log_scope(logger, "ExaGO reserve screen")
     def _handle_reserve_screen(
         self, iteration: int, data: dict
     ) -> tuple[str, bool]:
@@ -3544,6 +3572,7 @@ class AgentLoopController:
         )
         return "sweep", True
 
+    @log_scope(logger, "ExaGO reserve minimization")
     def _run_reserve_minimization(
         self, iteration: int, net: MATNetwork, vmin: float, vmax: float,
     ) -> "reserve_search.ReserveMinResult":
@@ -3722,6 +3751,7 @@ class AgentLoopController:
             )
         return "\n".join(lines)
 
+    @log_scope(logger, "ExaGO relief phase")
     def _run_relief_phase(
         self,
         iteration: int,
@@ -4678,6 +4708,8 @@ class AgentLoopController:
             context = self._latest_results_text or "No results available."
             user = f"Question: {query}\n\nCurrent results:\n{context}"
             response = self._backend.complete(system, user)
+            self._ledger.record("search", response, self._ledger_iteration,
+                                prompt_chars=len(system) + len(user))
             return response.raw_text
         except Exception as exc:
             logger.warning("LLM fallback for analysis failed: %s", exc)
@@ -4698,6 +4730,7 @@ class AgentLoopController:
     # Multi-objective helpers
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "Initial objective extraction")
     def _extract_initial_objectives(self, goal: str) -> None:
         """Use the LLM to extract tracked objectives from the initial goal."""
         try:
@@ -4707,6 +4740,8 @@ class AgentLoopController:
                 context="initial_goal",
             )
             response = self._backend.complete(sys_prompt, user_prompt)
+            self._ledger.record("objective_extraction", response, 0,
+                                prompt_chars=len(sys_prompt) + len(user_prompt))
             parsed = parse_objective_extraction(response.raw_text)
             if parsed:
                 for obj_data in parsed:
@@ -4730,6 +4765,7 @@ class AgentLoopController:
         except Exception as exc:
             logger.warning("Failed to extract initial objectives: %s", exc)
 
+    @log_scope(logger, "Steering objective extraction")
     def _extract_objectives_from_steering(self, directive: str, iteration: int) -> None:
         """Extract any new objectives from a steering directive."""
         try:
@@ -4739,6 +4775,8 @@ class AgentLoopController:
                 context="steering_directive",
             )
             response = self._backend.complete(sys_prompt, user_prompt)
+            self._ledger.record("steering", response, iteration,
+                                prompt_chars=len(sys_prompt) + len(user_prompt))
             parsed = parse_objective_extraction(response.raw_text)
             if parsed:
                 for obj_data in parsed:
@@ -4777,6 +4815,7 @@ class AgentLoopController:
     # Prompt assembly
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "ExaGO prompt assembly")
     def _assemble_prompt(
         self,
         goal: str,
@@ -4825,9 +4864,10 @@ class AgentLoopController:
     # Finalization
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "ExaGO finalization")
     def _finalize(self, session: SearchSession, elapsed_seconds: float) -> None:
         """Print summary and save journal."""
-        total_tokens = self._total_prompt_tokens + self._total_completion_tokens
+        tokens_before_analysis = self._ledger.total
         if self._pending_explore is not None:      # session ended right after an explore
             dirs, best = self._pending_explore
             self._pending_explore = None
@@ -4844,13 +4884,15 @@ class AgentLoopController:
                 stats=raw_stats,
                 # Bounded digest avoids context overflow on large sweeps.
                 journal_formatted=self._journal.format_for_classification(),
-                total_tokens=total_tokens,
+                total_tokens=tokens_before_analysis,
                 objective_registry=self._journal.objective_registry.to_dict_list(),
                 preference_history=self._journal.objective_registry.history,
                 application=self._config.search.application,
                 near_optimal_abs_tol=self._config.report.near_optimal_abs_tol,
             )
             response = self._backend.complete(sys_prompt, user_prompt)
+            self._ledger.record("analysis", response,
+                                prompt_chars=len(sys_prompt) + len(user_prompt))
             analysis_text = response.raw_text
             valid_iters = {e.iteration for e in self._journal.entries}
             goal_classification = parse_goal_classification(analysis_text, valid_iters)
@@ -4870,6 +4912,8 @@ class AgentLoopController:
         )
 
         # Store on session for downstream consumers (GUI, tests)
+        session.total_prompt_tokens = self._total_prompt_tokens
+        session.total_completion_tokens = self._total_completion_tokens
         session.goal_classification = goal_classification
         session.analysis_text = analysis_text
         session.objective_registry_data = self._journal.objective_registry.to_dict_list()
@@ -4893,12 +4937,8 @@ class AgentLoopController:
             f"(of max {self._config.search.max_iterations})"
         )
         print(f"  Duration:       {elapsed_seconds:.1f} seconds")
-        if total_tokens:
-            print(
-                f"  Tokens used:    ~{total_tokens:,} "
-                f"(prompt: {self._total_prompt_tokens:,}, "
-                f"completion: {self._total_completion_tokens:,})"
-            )
+        if len(self._ledger):
+            print(f"  {self._ledger.summary_text()}")
         print(f"  Termination:    {session.termination_reason}")
 
         # Goal-aware best-solution line
@@ -5014,6 +5054,7 @@ class AgentLoopController:
                 self._config.output.workdir / f"journal_{timestamp}.{fmt}"
             )
             journal_path.parent.mkdir(parents=True, exist_ok=True)
+            self._journal.token_usage = self._ledger.to_dict()
             if fmt == "csv":
                 self._journal.export_csv(journal_path)
             else:
@@ -5024,6 +5065,7 @@ class AgentLoopController:
     # Session save/resume
     # ------------------------------------------------------------------
 
+    @log_scope(logger, "ExaGO session resume")
     def resume_from(self, save_dir: Path) -> SearchSession:
         """Resume a search from a saved session checkpoint.
 
@@ -5080,25 +5122,30 @@ class AgentLoopController:
         else:
             self._tcopflow_profile_overrides = {}
 
-        # Restore token counts
-        self._total_prompt_tokens = saved["total_prompt_tokens"]
-        self._total_completion_tokens = saved["total_completion_tokens"]
+        # Restore token counts (sessions saved before per-call accounting: totals only)
+        if saved.get("token_usage"):
+            self._ledger = TokenLedger.from_dict(saved["token_usage"])
+        else:
+            self._ledger = TokenLedger.from_legacy_totals(
+                saved["total_prompt_tokens"], saved["total_completion_tokens"],
+            )
 
         # Parse base case and restore networks
         base_case = saved["base_case_path"]
         goal = saved["goal"]
         self._current_goal = goal
 
-        self._base_network = parse_matpower(base_case)
-        self._current_network = saved["current_network"] or self._base_network
+        with log_scope(logger, "ExaGO case preparation", case_file=base_case):
+            self._base_network = parse_matpower(base_case)
+            self._current_network = saved["current_network"] or self._base_network
 
-        # Rebuild system prompt
-        net_summary_text = network_summary(
-            self._base_network,
-            max_generators=self._config.report.network_summary_max_generators,
-        )
-        net_metadata_text = network_metadata(self._base_network)
-        self._network_metadata_text = net_metadata_text
+            # Rebuild system prompt
+            net_summary_text = network_summary(
+                self._base_network,
+                max_generators=self._config.report.network_summary_max_generators,
+            )
+            net_metadata_text = network_metadata(self._base_network)
+            self._network_metadata_text = net_metadata_text
         # Restore load_factor from journal if saved
         if self._journal.load_factor is not None:
             self._session_load_factor = self._journal.load_factor
@@ -5154,6 +5201,7 @@ class AgentLoopController:
             config=self._config,
             journal=self._journal,
             start_time=datetime.now().isoformat(),
+            token_ledger=self._ledger,
         )
 
         # Continue the agent loop from last_iteration + 1
@@ -5163,7 +5211,8 @@ class AgentLoopController:
                 session.termination_reason = "user_stopped"
                 self._print("\nSearch stopped by user.")
                 break
-            action_type, should_continue = self._iteration(iteration, goal)
+            with log_scope(logger, "ExaGO iteration", iteration=iteration):
+                action_type, should_continue = self._iteration(iteration, goal)
             if self._on_iteration:
                 latest_entry = self._journal.latest
                 if latest_entry:
@@ -5258,6 +5307,7 @@ class AgentLoopController:
             current_network=self._current_network,
             total_prompt_tokens=self._total_prompt_tokens,
             total_completion_tokens=self._total_completion_tokens,
+            token_usage=self._ledger.to_dict(),
             last_iteration=last_iteration,
             enforced_vmin=enforced_vmin,
             enforced_vmax=enforced_vmax,

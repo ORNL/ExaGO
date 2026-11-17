@@ -6,6 +6,7 @@ import logging
 import os
 from typing import Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.backends.json_extract import extract_json
 from agentigrid.config import LLMConfig
@@ -54,23 +55,25 @@ class AnthropicBackend(LLMBackend):
         temp = temperature if temperature is not None else self._config.temperature
 
         try:
-            response = self._client.messages.create(
-                model=self._config.model,
-                max_tokens=self._config.max_tokens,
-                temperature=temp,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
+            with log_scope(logger, "LLM API request", backend=self.name(), model=self._config.model):
+                response = self._client.messages.create(
+                    model=self._config.model,
+                    max_tokens=self._config.max_tokens,
+                    temperature=temp,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
 
-            raw_text = ""
-            for block in response.content:
-                if block.type == "text":
-                    raw_text += block.text
+            with log_scope(logger, "LLM response parsing", backend=self.name(), model=self._config.model):
+                raw_text = ""
+                for block in response.content:
+                    if block.type == "text":
+                        raw_text += block.text
 
-            prompt_tokens = getattr(response.usage, "input_tokens", None)
-            completion_tokens = getattr(response.usage, "output_tokens", None)
+                prompt_tokens = getattr(response.usage, "input_tokens", None)
+                completion_tokens = getattr(response.usage, "output_tokens", None)
 
-            json_data, json_error = extract_json(raw_text)
+                json_data, json_error = extract_json(raw_text)
 
             return LLMResponse(
                 raw_text=raw_text,
