@@ -203,20 +203,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--tool",
-        choices=["exago", "gridkit"],
+        choices=["exago", "gridkit", "hil", "router"],
         default="exago",
-        help="Simulation tool: exago (steady state, .m case) or gridkit "
-             "(transient stability, .case.json case). Default: exago",
+        help="Simulation tool: exago (steady state, .m case), gridkit "
+             "(transient stability, .case.json case), hil (switching on a Typhoon "
+             "virtual HIL, Typhoon .tse model) or router (one goal, several tools: "
+             "the ExaGO .m case plus --hil-model and/or --gridkit-case; the agent "
+             "switches between the tools as the goal asks). Default: exago",
+    )
+    parser.add_argument(
+        "--hil-model",
+        default=None,
+        metavar="TSE",
+        help="router: the Typhoon schematic (.tse) for the HIL tool (overrides hil.model)",
+    )
+    parser.add_argument(
+        "--watch-scenario",
+        default=None,
+        metavar="JSON",
+        help="router: watch a running HIL (no ExaGO): the scenario file with the report "
+             "interval, the duration and the SCADA inputs to set at fixed times; give only the goal",
+    )
+    parser.add_argument(
+        "--gridkit-case",
+        default=None,
+        metavar="CASE_JSON",
+        help="router: the GridKit case (.case.json) for the GridKit tool",
     )
     parser.add_argument(
         "--from-exago",
         action="store_true",
         default=False,
-        help="GridKit only: start from the most recent ExaGO steady state "
-             "(last simulation of the newest journal in workdir/exago) instead of "
-             "the case's own operating point, for every fault screen. Without it, "
-             "the LLM chooses per fault screen (start_from), e.g. when the goal "
-             "asks for the most recent steady state.",
+        help="GridKit and HIL: start from (GridKit) or compare with (HIL) the most "
+             "recent ExaGO steady state (last simulation of the newest journal in "
+             "workdir/exago), for every study. Without it, the LLM chooses per study "
+             "(start_from), e.g. when the goal asks for the most recent steady state.",
     )
     parser.add_argument(
         "--version",
@@ -474,6 +495,159 @@ def run_gridkit(cfg: AppConfig, args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def run_hil(cfg: AppConfig, args: argparse.Namespace) -> None:
+    """Run a hardware-in-the-loop switching study (``--tool hil``)."""
+    from agentigrid.hil_engine.agent_loop import HilAgentLoop
+    from agentigrid.hil_engine.network import ModelError, load_network
+    from agentigrid.hil_engine.settings import HilSettings
+
+    if args.resume:
+        raise SystemExit("--resume is not available with --tool hil")
+    model = Path(args.base_case) if args.base_case else cfg.hil.model
+    settings = HilSettings.from_config(cfg, model=model)
+    setup_logging(settings.logs_dir, verbose=cfg.output.verbose)
+    if model is None or args.goal is None:
+        raise SystemExit("A Typhoon model (.tse, as base_case or hil.model) and a goal are required")
+    if not Path(model).exists():
+        logger.error("Typhoon model does not exist: %s", model)
+        sys.exit(1)
+    if args.dry_run:
+        net = load_network(model)
+        print(f"HIL settings: {settings}")
+        print(f"Ties: {net.tie_names()}")
+        return
+    quiet = getattr(args, "quiet", False) or False
+    if not quiet:
+        print("=" * 60)
+        print("  AgentiGrid — switching on the HIL (Typhoon virtual HIL)")
+        print("=" * 60)
+        print(f"  Backend:        {cfg.llm.backend} ({cfg.llm.model})")
+        print(f"  Model:          {model}")
+        print(f"  Goal:           {args.goal}")
+        print(f"  Max iterations: {settings.max_iterations}")
+        print("=" * 60)
+    try:
+        session = HilAgentLoop(cfg, settings=settings, quiet=quiet).run(
+            model, args.goal, from_exago=args.from_exago)
+    except ModelError as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
+    if session.termination_reason in ("llm_error", "parse_failures", "hil_error"):
+        sys.exit(1)
+
+
+def run_router(cfg: AppConfig, args: argparse.Namespace) -> None:
+    """One goal, several tools (``--tool router``): ExaGO plus the HIL and/or GridKit."""
+    from agentigrid.backends import create_backend
+    from agentigrid.exago_engine.executor import SimulationExecutor
+    from agentigrid.gridkit_engine.settings import GridkitSettings
+    from agentigrid.hil_engine.network import ModelError
+    from agentigrid.hil_engine.settings import HilSettings
+    from agentigrid.router_engine.adapters.exago import APPLICATIONS, ExagoAdapter
+    from agentigrid.router_engine.adapters.gridkit import GridkitAdapter
+    from agentigrid.router_engine.adapters.hil import HilAdapter
+    from agentigrid.router_engine.agent_loop import DEFAULT_MAX_TURNS, RouterAgentLoop
+
+    if args.resume:
+        raise SystemExit("--resume is not available with --tool router")
+    if args.watch_scenario:
+        return _run_router_watch(cfg, args)
+    if args.base_case is None or args.goal is None:
+        raise SystemExit("--tool router needs an ExaGO case (.m) and a goal; add --hil-model and/or "
+                         "--gridkit-case for the other tools")
+    case = Path(args.base_case)
+    hil_model = Path(args.hil_model) if args.hil_model else cfg.hil.model
+    gk_case = Path(args.gridkit_case) if args.gridkit_case else None
+    max_turns = args.max_iter if args.max_iter is not None else DEFAULT_MAX_TURNS
+    setup_logging(Path(cfg.output.logs_dir) / "router", verbose=cfg.output.verbose)
+    executor = SimulationExecutor(cfg.exago, cfg.output)
+    binaries = {}
+    for app in APPLICATIONS:
+        try:
+            binaries[app] = executor.resolve_binary(app)
+        except FileNotFoundError:
+            pass
+    quiet = getattr(args, "quiet", False) or False
+    backend = None if args.dry_run else create_backend(cfg.llm)
+    adapters = [ExagoAdapter(case, binaries)]
+    if hil_model:
+        adapters.append(HilAdapter(Path(hil_model), HilSettings.from_config(cfg, model=hil_model)))
+    if gk_case:
+        adapters.append(GridkitAdapter(gk_case, GridkitSettings.from_config(cfg), cfg=cfg, backend=backend))
+    if args.dry_run:
+        for a in adapters:
+            print(f"{a.title}: {a.ready() or 'ready'}")
+        print(f"Turn limit: {max_turns}")
+        return
+    if not quiet:
+        print("=" * 60)
+        print("  AgentiGrid — one goal, several tools (router)")
+        print("=" * 60)
+        print(f"  Backend:     {cfg.llm.backend} ({cfg.llm.model})")
+        print(f"  ExaGO case:  {case}")
+        if hil_model:
+            print(f"  HIL model:   {hil_model}")
+        if gk_case:
+            print(f"  GridKit:     {gk_case}")
+        print(f"  Goal:        {args.goal}")
+        print(f"  Turn limit:  {max_turns}")
+        print("=" * 60)
+    loop = RouterAgentLoop(cfg, adapters, max_turns=max_turns, backend=backend, quiet=quiet)
+    try:
+        session = loop.run(args.goal)
+    except ModelError as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
+    if session.termination_reason in ("llm_error", "parse_failures", "error"):
+        sys.exit(1)
+
+
+def _run_router_watch(cfg: AppConfig, args: argparse.Namespace) -> None:
+    """``--tool router --watch-scenario <json> --hil-model <tse> "<goal>"``: watch a running HIL, no ExaGO."""
+    from agentigrid.backends import create_backend
+    from agentigrid.hil_engine.network import ModelError
+    from agentigrid.hil_engine.settings import HilSettings
+    from agentigrid.router_engine.adapters.hil_watch import HilWatchAdapter, WatchScenario
+    from agentigrid.router_engine.agent_loop import DEFAULT_MAX_TURNS, RouterAgentLoop
+
+    goal = args.goal or args.base_case          # only the goal is given in watch mode
+    if not goal or (args.goal and args.base_case):
+        raise SystemExit("--watch-scenario: give the goal only (no ExaGO case) and --hil-model")
+    hil_model = Path(args.hil_model) if args.hil_model else cfg.hil.model
+    if not hil_model:
+        raise SystemExit("--watch-scenario needs --hil-model (or hil.model in the config)")
+    scenario = WatchScenario.load(Path(args.watch_scenario))
+    max_turns = args.max_iter if args.max_iter is not None else max(DEFAULT_MAX_TURNS, scenario.n_reports + 6)
+    setup_logging(Path(cfg.output.logs_dir) / "router", verbose=cfg.output.verbose)
+    quiet = getattr(args, "quiet", False) or False
+    settings = HilSettings.from_config(cfg, model=hil_model, rest_state="stopped")
+    adapter = HilWatchAdapter(Path(hil_model), settings, scenario)
+    if args.dry_run:
+        print(f"{adapter.title}: {adapter.ready() or 'ready'}")
+        print(f"Scenario: {scenario.name}, {scenario.n_reports} reports every {scenario.report_interval_s:g} s")
+        print(f"Turn limit: {max_turns}")
+        return
+    backend = create_backend(cfg.llm)
+    if not quiet:
+        print("=" * 60)
+        print("  AgentiGrid — watch a running HIL (router, no ExaGO)")
+        print("=" * 60)
+        print(f"  Backend:     {cfg.llm.backend} ({cfg.llm.model})")
+        print(f"  HIL model:   {hil_model}")
+        print(f"  Scenario:    {args.watch_scenario}")
+        print(f"  Goal:        {goal}")
+        print(f"  Turn limit:  {max_turns}")
+        print("=" * 60)
+    loop = RouterAgentLoop(cfg, [adapter], max_turns=max_turns, backend=backend, quiet=quiet)
+    try:
+        session = loop.run(goal)
+    except ModelError as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
+    if session.termination_reason in ("llm_error", "parse_failures", "error"):
+        sys.exit(1)
+
+
 def run_regenerate_report(argv: list[str] | None = None) -> None:
     """Offline `regenerate-report` subcommand: rebuild analysis+PDF from a journal.
 
@@ -533,7 +707,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     # Validate required positional args when not in resume mode
-    if not args.resume and not getattr(args, "dry_run", False):
+    if not args.resume and not getattr(args, "dry_run", False) and not args.watch_scenario:
         if args.base_case is None or args.goal is None:
             parser.error("base_case and goal are required (unless --resume is used)")
 
@@ -542,6 +716,12 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.tool == "gridkit":
         run_gridkit(cfg, args)
+        return
+    if args.tool == "hil":
+        run_hil(cfg, args)
+        return
+    if args.tool == "router":
+        run_router(cfg, args)
         return
     cfg = exago_output(cfg)
 

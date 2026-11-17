@@ -264,7 +264,15 @@ class GridkitAgentLoop:
             self._print(f"[Iter {iteration}] {text}")
             self._starts[start_from] = start
             return start
-        path = write_case(case, self._session_dir / "from_exago.case.json")
+        start = self._start_from_case(case, notes, source, iteration, "from_exago.case.json",
+                                      "the latest ExaGO steady state")
+        self._starts[start_from] = start
+        return start
+
+    def _start_from_case(self, case: dict, notes: list[str], source: SteadyStateSource, iteration: int,
+                         file_name: str, what: str) -> _Start:
+        """Write *case* (built from *source*), check it with a no-fault run, return the start."""
+        path = write_case(case, self._session_dir / file_name)
         emap = build_element_map(case, path)
         source_text = "\n".join([f"Operating point: {source.describe()}.", *(f"  {n}" for n in notes)])
         self._journal.add(JournalEntry(iteration, "steady_state", "operating point from ExaGO",
@@ -272,11 +280,53 @@ class GridkitAgentLoop:
         self._print(f"[Iter {iteration}] {source_text}")
         base_text, ok = self._run_base_case(
             case, emap, self._session_dir / f"iter_{iteration:03d}_steady_state_base",
-            iteration, "no fault, from the latest ExaGO steady state",
+            iteration, f"no fault, from {what}",
         )
-        start = _Start(case, emap, _exago_label(source), ok, f"{source_text}\n{base_text}")
-        self._starts[start_from] = start
-        return start
+        return _Start(case, emap, _exago_label(source), ok, f"{source_text}\n{base_text}")
+
+    # ------------------------------------------------------------------
+    # One study at a time, driven from outside (the router, --tool router):
+    # no LLM loop here, the caller picks the steady state and the study.
+    def open_external(self, case_file: Path | str, goal: str, session_dir: Path) -> None:
+        """Prepare the GridKit case for fault screens requested one by one."""
+        case_file = Path(case_file)
+        self._goal = goal
+        self._source_case_file = case_file
+        self._case = load_case(case_file)
+        self._emap, _ = create_element_map(case_file, session_dir)
+        self._case_name = self._emap.get("case_name") or case_file.stem
+        self._session_dir = session_dir
+        self._journal = GridkitJournal(goal, case_file, session_dir)
+        self._session = GridkitSession(goal=goal, case_file=case_file, session_dir=session_dir)
+        self._starts = {}
+        self._screen_cache = {}
+
+    def use_steady_state(self, source: SteadyStateSource, iteration: int, name: str) -> tuple[bool, str]:
+        """Make *source* the operating point of the next fault screens (start_from
+        latest_steady_state). Returns (usable, how it was built and checked)."""
+        try:
+            case, notes = build_from_exago(load_case(self._source_case_file), source)
+        except SteadyStateError as exc:
+            text = f"The ExaGO steady state {name} cannot be used: {exc}"
+            self._starts = {"latest_steady_state": _Start(None, None, name, False, text)}
+            return False, text
+        start = self._start_from_case(case, notes, source, iteration, f"from_exago_{name}.case.json",
+                                      f"ExaGO steady state {name}")
+        self._starts = {"latest_steady_state": start}
+        self._screen_cache = {}
+        return start.ok, start.text
+
+    def fault_screen(self, iteration: int, data: dict) -> tuple[Optional[str], Optional[str]]:
+        """One fault screen from the operating point set by use_steady_state:
+        (result text, error feedback)."""
+        return self._handle_fault_screen(iteration, data)
+
+    def network_text(self) -> str:
+        """The network summary the GridKit system prompt shows (after open_external)."""
+        return network_summary(self._emap)
+
+    def export_journal(self) -> Path:
+        return self._journal.export_json()
 
     def _user_prompt(self, goal: str, latest: Optional[str], feedback: Optional[str], iteration: int) -> str:
         parts = [f"GOAL: {goal}", "", "HISTORY", self._journal.digest() or "(none)"]

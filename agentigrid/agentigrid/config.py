@@ -116,6 +116,22 @@ DEFAULTS: dict[str, Any] = {
             "start": 1.0,
         },
     },
+    "hil": {
+        "typhoon_dir": "/opt/typhoon/typhoon_hil_control_center_2026.3",
+        "model": None,
+        "compiled_model": None,
+        "device": "HIL602+",
+        "configuration_id": "2",
+        "t_exec": 400.0e-6,
+        "settle_s": 5.0,
+        "read_samples": 20,
+        "read_interval_s": 0.25,
+        "tol_pct": 0.05,
+        "tol_deg": 0.15,
+        "rest_state": "meshed",
+        "close_started_thcc": True,
+        "startup_timeout": 300,
+    },
 }
 
 SAVE_SOLUTIONS = ("all", "best", "newest", "none")
@@ -269,6 +285,26 @@ class GridkitConfig:
 
 
 @dataclass(frozen=True)
+class HilConfig:
+    """Typhoon HIL (virtual HIL) for hardware-in-the-loop switching studies."""
+
+    typhoon_dir: Path = Path("/opt/typhoon/typhoon_hil_control_center_2026.3")
+    model: Optional[Path] = None            # Typhoon schematic (.tse); the CLI case argument wins
+    compiled_model: Optional[Path] = None   # .cpd; defaults to "<model> Target files/<model>.cpd"
+    device: str = "HIL602+"                 # virtual device the model is compiled for
+    configuration_id: str = "2"
+    t_exec: float = 400.0e-6                # model's signal-processing execution rate, s
+    settle_s: float = 5.0                   # wait after a start or a switch command, s
+    read_samples: int = 20                  # readings averaged per bus (20 x 0.25 s = 5 s window)
+    read_interval_s: float = 0.25
+    tol_pct: float = 0.05                   # ExaGO vs HIL, magnitude (TLM coupling gap, step 3b)
+    tol_deg: float = 0.15                   # ExaGO vs HIL, angle
+    rest_state: str = "meshed"              # state the simulation is left in: meshed | radial | stopped
+    close_started_thcc: bool = True         # close a THCC this session started
+    startup_timeout: float = 300            # s to wait for THCC to answer
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Top-level immutable configuration for AgentiGrid."""
 
@@ -279,6 +315,7 @@ class AppConfig:
     output: OutputConfig
     report: ReportConfig = field(default_factory=ReportConfig)
     gridkit: GridkitConfig = field(default_factory=GridkitConfig)
+    hil: HilConfig = field(default_factory=HilConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -394,8 +431,15 @@ def load_config(
 
     gridkit = _build_gridkit(merged["gridkit"], config_root)
 
+    hil_raw = merged.get("hil") or {}
+    unknown = set(hil_raw) - {f.name for f in fields(HilConfig)}
+    if unknown:
+        logger.warning("Unknown key(s) in hil config: %s (ignored)", sorted(unknown))
+    hil = _build_section(HilConfig, {**DEFAULTS["hil"], **hil_raw}, config_root,
+                         {"typhoon_dir", "model", "compiled_model"})
+
     cfg = AppConfig(exago=exago, data=data, llm=llm, search=search, output=output, report=report,
-                    gridkit=gridkit)
+                    gridkit=gridkit, hil=hil)
 
     _validate(cfg)
     return cfg
