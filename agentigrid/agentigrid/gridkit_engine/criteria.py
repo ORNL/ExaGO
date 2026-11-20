@@ -79,6 +79,7 @@ DAMPING_MIN_AMPLITUDE_DEG = 1.0       # smaller swings count as settled (raised 
                                       #   beating modes gave false fits; mode separation
                                       #   (Prony/matrix pencil) deferred)
 DAMPING_MIN_PEAKS = 3                 # fewer peaks: not enough to measure
+DAMPING_METHODS = ("peak", "modal")   # AgentiGrid option gridkit.damping_method (default "peak")
 DAMPING_MIN_RUN_S = 10.0              # M-14B G.2.2 test period 10-15 s; a 5 s run gave
                                       #   false failures on IEEE39 that vanish at 10-15 s
 
@@ -255,22 +256,76 @@ def check_final_voltage(
     vms: Mapping[object, Sequence[float]],
     vmin: float = FINAL_V_MIN_PU,
     vmax: float = FINAL_V_MAX_PU,
+    t: Optional[Sequence[float]] = None,
+    window_s: float = 0.0,
+    margin_pu: float = 0.0,
+    pre_fault_delta_pu: float = 0.0,
 ) -> CheckResult:
-    """Bus voltages at the end of the run within the steady-state band."""
+    """Bus voltages at the end of the run within the steady-state band.
+
+    Default: the last sample of every bus, band vmin-vmax (unchanged behaviour).
+    AgentiGrid options (both off by default):
+      window_s > 0   the mean of each bus voltage over the last *window_s* seconds
+                     (needs *t*) instead of the last sample, so an oscillation that is
+                     still present does not decide the result by its phase;
+      margin_pu > 0  the band widened to vmin - margin_pu ... vmax + margin_pu, e.g.
+                     10 x the ACOPF tolerance, so a voltage held at a limit only within
+                     the solver tolerance is not reported as a violation.
+      pre_fault_delta_pu > 0
+                     judged relative to the pre-fault value (first sample, as the angle
+                     check): the fault must not create a violation, nor worsen a voltage
+                     that was already at or beyond a limit before the fault by more than
+                     this, i.e. each bus must end within
+                     min(vmin - margin, V_pre - d) ... max(vmax + margin, V_pre + d).
+                     A bus that the operating point (e.g. the AC OPF) holds at a limit is
+                     then not reported because of tiny post-fault movements.
+    """
     src = "M-14B Att. I (band: AgentiGrid default)"
     if not vms:
         return CheckResult("final_voltage", "not_tested", None, None, "no bus voltages recorded", src)
-    finals = {bus: v[-1] for bus, v in vms.items()}
+    use_window = window_s > 0 and t is not None and len(t) > 1
+    if use_window:
+        t_from = t[-1] - window_s
+        k0 = next(i for i, ti in enumerate(t) if ti >= t_from - 1e-12)
+        finals = {bus: sum(v[k0:]) / len(v[k0:]) for bus, v in vms.items()}
+        where = f"mean of the last {window_s:g} s"
+    else:
+        finals = {bus: v[-1] for bus, v in vms.items()}
+        where = "end of run"
+    lo_lim, hi_lim = vmin - margin_pu, vmax + margin_pu
     lo_bus = min(finals, key=finals.get)
     hi_bus = max(finals, key=finals.get)
-    ok = finals[lo_bus] >= vmin and finals[hi_bus] <= vmax
+    band = f"band {vmin}-{vmax} pu" if margin_pu == 0 else \
+        f"band {vmin}-{vmax} pu with margin {margin_pu:g} pu ({lo_lim:.6g}-{hi_lim:.6g} pu)"
+    outside = [b for b, v in finals.items() if v < lo_lim or v > hi_lim]
+    if pre_fault_delta_pu > 0:
+        pre = {bus: v[0] for bus, v in vms.items()}
+        bad = [b for b in outside
+               if finals[b] > max(hi_lim, pre[b] + pre_fault_delta_pu)
+               or finals[b] < min(lo_lim, pre[b] - pre_fault_delta_pu)]
+        ok = not bad
+        held = len(outside) - len(bad)
+        band += (f"; relative to the pre-fault value (tolerance {pre_fault_delta_pu:g} pu): "
+                 f"{len(bad)} bus(es) violate it, {held} outside the band only as before the fault")
+        if bad:
+            w = max(bad, key=lambda b: abs(finals[b] - pre[b]))
+            band += f" (worst: bus {w}, {num(pre[w], '.4f')} -> {num(finals[w], '.4f')} pu)"
+    else:
+        ok = finals[lo_bus] >= lo_lim and finals[hi_bus] <= hi_lim
+    data = {"lowest_pu": finals[lo_bus], "lowest_bus": lo_bus,
+            "highest_pu": finals[hi_bus], "highest_bus": hi_bus, "vmin_pu": vmin, "vmax_pu": vmax}
+    if use_window or margin_pu or pre_fault_delta_pu:
+        data.update({"window_s": window_s if use_window else 0.0, "margin_pu": margin_pu,
+                     "n_outside": len(outside)})
+    if pre_fault_delta_pu > 0:
+        data.update({"pre_fault_delta_pu": pre_fault_delta_pu, "n_violations": len(bad),
+                     "n_outside_as_before_fault": held,
+                     "max_abs_change_from_pre_fault_pu": max((abs(finals[b] - pre[b]) for b in finals), default=0.0)})
     return CheckResult(
         "final_voltage", "pass" if ok else "fail", finals[lo_bus], vmin,
-        f"end of run: lowest {num(finals[lo_bus], '.3f', ' pu')} (bus {lo_bus}), "
-        f"highest {num(finals[hi_bus], '.3f', ' pu')} (bus {hi_bus}), band {vmin}-{vmax} pu",
-        src,
-        {"lowest_pu": finals[lo_bus], "lowest_bus": lo_bus,
-         "highest_pu": finals[hi_bus], "highest_bus": hi_bus, "vmin_pu": vmin, "vmax_pu": vmax},
+        f"{where}: lowest {num(finals[lo_bus], '.3f', ' pu')} (bus {lo_bus}), "
+        f"highest {num(finals[hi_bus], '.3f', ' pu')} (bus {hi_bus}), {band}",
+        src, data,
     )
 
 
@@ -316,11 +371,18 @@ def check_damping(
     min_amplitude_deg: float = DAMPING_MIN_AMPLITUDE_DEG,
     min_peaks: int = DAMPING_MIN_PEAKS,
     min_run_s: float = DAMPING_MIN_RUN_S,
+    method: str = "peak",
 ) -> CheckResult:
     """Damping ratio of each machine's angle relative to the machine average.
 
     Measured after fault clearing; the worst machine decides.
+    method "peak" (default): decay of the peak envelope (damping_ratio).
+    method "modal" (AgentiGrid option): robust matrix pencil, see _check_damping_modal.
     """
+    if method not in DAMPING_METHODS:
+        raise ValueError(f"damping method '{method}' unknown; use one of {DAMPING_METHODS}")
+    if method == "modal":
+        return _check_damping_modal(t, deltas, clear_time_s, min_ratio, min_amplitude_deg, min_run_s)
     src = "M-14B G.2.2 Acceptable Damping (3% margin)"
     if len(deltas) < 2:
         return CheckResult("damping", "not_tested", None, min_ratio,
@@ -360,6 +422,89 @@ def check_damping(
     status = "pass" if ok else ("fail" if zeta < min_ratio else "not_tested")
     return CheckResult("damping", status, zeta, min_ratio, detail, src,
                        {"ratio": zeta, "machine": nm, "unmeasured": unmeasured})
+
+
+def _check_damping_modal(
+    t: Sequence[float],
+    deltas: Mapping[str, Sequence[float]],
+    clear_time_s: float,
+    min_ratio: float,
+    min_amplitude_deg: float,
+    min_run_s: float,
+) -> CheckResult:
+    """Damping by the robust matrix pencil (modal.damping_ratio_modal_robust).
+
+    Same signal as the peak method: each machine's angle relative to the machine
+    average, in degrees; machines whose largest swing after clearing is below
+    *min_amplitude_deg* count as settled. For every other machine the matrix pencil
+    is fitted in two windows (clearing + 1 s and + 2 s); a mode counts only if it is
+    found in both (|df| <= 0.05 Hz, |dzeta| <= 1.5 points). Status:
+      fail        a confirmed mode has a damping ratio below *min_ratio*
+      not_tested  no confirmed mode below *min_ratio*, but for some machine a mode
+                  below *min_ratio* was seen in one window only ("undetermined")
+      pass        otherwise
+    Modes with an amplitude below *min_amplitude_deg* are not considered.
+    """
+    src = "M-14B G.2.2 Acceptable Damping (3% margin); matrix pencil: AgentiGrid option"
+    try:
+        import numpy as np                  # only needed for this option (not a package requirement)
+        from agentigrid.gridkit_engine import modal
+    except ImportError:
+        return CheckResult("damping", "not_tested", None, min_ratio,
+                           "damping_method 'modal' needs numpy (pip install numpy)", src)
+    if len(deltas) < 2:
+        return CheckResult("damping", "not_tested", None, min_ratio,
+                           "fewer than two machine angles recorded", src)
+    if not t or t[-1] < min_run_s:
+        return CheckResult("damping", "not_tested", None, min_ratio,
+                           f"run ends at {t[-1] if t else 0:g} s; damping needs at least "
+                           f"{min_run_s:g} s", src)
+    tt = np.asarray(t, float)
+    names = list(deltas)
+    D = np.asarray([deltas[n] for n in names], float).T
+    rel = np.degrees(D - D.mean(axis=1, keepdims=True))
+    k = tt >= clear_time_s
+    worst: Optional[tuple[float, str, float]] = None
+    undetermined: list[str] = []
+    measured = 0
+    for j, nm in enumerate(names):
+        seg = rel[k, j]
+        if len(seg) < 5:
+            continue
+        level = seg[int(0.8 * len(seg)):].mean()
+        if np.max(np.abs(seg - level)) < min_amplitude_deg:
+            continue  # settled: nothing to damp
+        measured += 1
+        zeta, modes, status = modal.damping_ratio_modal_robust(
+            tt, rel[:, j], clear_time_s, min_amplitude=min_amplitude_deg, threshold=min_ratio)
+        if status == "undetermined":
+            undetermined.append(nm)
+        if zeta is not None and (worst is None or zeta < worst[0]):
+            f = min(modes, key=lambda m: m[1])[0] if modes else float("nan")
+            worst = (zeta, nm, f)
+    data = {"method": "modal", "machines_measured": measured, "undetermined": undetermined}
+    if worst is not None:
+        data.update({"ratio": worst[0], "machine": worst[1], "frequency_hz": worst[2]})
+    if worst is not None and worst[0] < min_ratio:
+        return CheckResult("damping", "fail", worst[0], min_ratio,
+                           f"lowest confirmed damping ratio {num(100 * worst[0], '.1f', '%')} "
+                           f"(machine {worst[1]}, {worst[2]:.2f} Hz; matrix pencil)", src, data)
+    if undetermined:
+        low = "" if worst is None else \
+            f"; lowest confirmed {num(100 * worst[0], '.1f', '%')} (machine {worst[1]})"
+        return CheckResult("damping", "not_tested", None if worst is None else worst[0], min_ratio,
+                           f"not determined for {', '.join(undetermined[:5])}: a mode below "
+                           f"{100 * min_ratio:g}% seen in one fitting window only{low}; "
+                           "the record is too short: repeat this bus with tmax_s = 30 and report "
+                           "both results (PJM test period is 10-15 s)", src, data)
+    if worst is None:
+        return CheckResult("damping", "pass", None, min_ratio,
+                           f"no confirmed mode of {min_amplitude_deg} deg or more below "
+                           f"{100 * min_ratio:g}% ({measured} machines swing >= {min_amplitude_deg} deg; "
+                           "matrix pencil)", src, data)
+    return CheckResult("damping", "pass", worst[0], min_ratio,
+                       f"lowest confirmed damping ratio {num(100 * worst[0], '.1f', '%')} "
+                       f"(machine {worst[1]}, {worst[2]:.2f} Hz; matrix pencil)", src, data)
 
 
 # Pre-fault steady state: the no-fault run of the case copy must stay still,

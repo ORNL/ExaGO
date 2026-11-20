@@ -34,7 +34,9 @@ from agentigrid.gridkit_engine.journal import GridkitJournal, JournalEntry, outc
 from agentigrid.gridkit_engine.modifier import apply_modifications, prepare_fault_case, write_case
 from agentigrid.gridkit_engine.schema_description import command_schema_text
 from agentigrid.gridkit_engine.settings import GridkitSettings
-from agentigrid.gridkit_engine.sweep_metrics import FaultOutcome, info_label, run_checks, screen_verdict
+from agentigrid.gridkit_engine import ssc
+from agentigrid.gridkit_engine.sweep_metrics import (DEFAULT_OPTIONS, CheckOptions, FaultOutcome,
+                                                     info_label, run_checks, screen_verdict)
 from agentigrid.gridkit_engine.validation import validate_fault_study
 from agentigrid.gridkit_parsers.case_parser import (
     MACHINE_CLASSES, build_element_map, create_element_map, load_case,
@@ -96,6 +98,7 @@ class GridkitAgentLoop:
         self._sleep: Callable[[float], None] = time.sleep   # retry waits (tests replace it)
         self._screen_cache: dict[str, tuple[int, str]] = {}
         self._starts: dict[str, _Start] = {}     # by FaultStudy.start_from
+        self._ssc_cache: dict[int, dict] = {}    # Ssc of all buses per voltage level, per start case
 
     def _print(self, msg: str) -> None:
         """Print progress message unless quiet mode is enabled."""
@@ -138,9 +141,14 @@ class GridkitAgentLoop:
         self._session = session
         self._journal.llm_settings = collect_llm_settings(self._cfg.llm, self._backend)
         self._journal.damping_in_verdict = self._settings.damping_in_verdict
+        opts = self._settings.check_options
+        if not opts.is_default():
+            self._journal.check_options = opts.to_dict()
         self._print(format_llm_settings(self._journal.llm_settings))
         if not self._settings.damping_in_verdict:
-            self._print(f"[Session] {info_label('damping')} (gridkit.damping_in_verdict: false)")
+            self._print(f"[Session] {info_label('damping', opts)} (gridkit.damping_in_verdict: false)")
+        if not opts.is_default():
+            self._print(f"[Session] check options: {opts.to_dict()}")
         if source_text:
             session.steady_state = steady_state.describe()
             self._journal.add(JournalEntry(0, "steady_state", "operating point from ExaGO",
@@ -169,7 +177,7 @@ class GridkitAgentLoop:
                                             _starting_state_line(steady_state)]))
         system_prompt = build_system_prompt(
             command_schema_text(self._settings.fault_start_s, self._settings.tmax_s,
-                                self._settings.info_checks),
+                                self._settings.info_checks, self._settings.check_options),
             net_text, base_text,
         )
         latest: Optional[str] = None
@@ -392,18 +400,26 @@ class GridkitAgentLoop:
                     f"({criteria.num(study.duration_s(), '.3f', ' s')}), R = {study.R:g} pu, X = {study.X:g} pu, "
                     f"{study.tmax_s:g} s simulated, GridKit {study.application}, "
                     f"starting from {start.label}")
-            text = screen_verdict(self._subject(study), outcomes, note)
+            text = screen_verdict(self._subject(study), outcomes, note, self._settings.check_options)
             if check.warnings:
                 text += "\n\nWARNINGS:\n" + "\n".join(f"  {w}" for w in check.warnings)
+            ssc_info = None
+            if self._settings.short_circuit_info:
+                with log_scope(logger, "short-circuit strength", iteration=iteration, buses=len(outcomes)):
+                    ssc_info = ssc.strength(work, [o.bus for o in outcomes],
+                                            self._settings.weak_bus_percentile,
+                                            self._ssc_cache.setdefault(id(start.case), {}))
+                text += "\n\n" + "\n".join(ssc.report_lines(ssc_info))
             if len(outcomes) <= _FULL_TABLE_MAX:
-                text += "\n\n" + _outcome_table(outcomes)
+                text += "\n\n" + _outcome_table(outcomes, self._settings.check_options)
             self._print(f"[Iter {iteration}] {text.splitlines()[0]} ({elapsed:.1f} s)")
 
             self._screen_cache[key] = (iteration, text)
             self._journal.add(JournalEntry(
                 iteration, "fault_screen", description, request=data,
                 verdict=text.splitlines()[0], result_text=text,
-                rows=[outcome_row(o, r.job.run_dir) for o, r in zip(outcomes, results)],
+                rows=[_with_ssc(outcome_row(o, r.job.run_dir), ssc_info, o.bus)
+                      for o, r in zip(outcomes, results)],
                 elapsed_s=elapsed, llm_reasoning=str(data.get("reasoning", "")), run_dir=str(iter_dir),
             ))
             return text, None
@@ -412,7 +428,8 @@ class GridkitAgentLoop:
         checks = []
         if res.status.csv_found and res.status.csv_rows:
             series = read_results(res.csv_path, wmap)
-            checks = run_checks(series, study.checks, clear, self._settings.info_checks)
+            checks = run_checks(series, study.checks, clear, self._settings.info_checks,
+                                self._settings.check_options)
         return FaultOutcome(res.job.bus, res.status, checks)
 
     def _subject(self, study: FaultStudy) -> str:
@@ -471,7 +488,14 @@ def _exago_label(source: SteadyStateSource) -> str:
             f"{source.iteration}, {source.journal.name})")
 
 
-def _outcome_table(outcomes: list[FaultOutcome]) -> str:
+def _with_ssc(row: dict, info: Optional[dict], bus: int) -> dict:
+    """Journal row with the short-circuit strength of its bus, when that option is on."""
+    if info is None:
+        return row
+    return {**row, "short_circuit": info.get(bus, {"error": info.get("error", "bus not found")})}
+
+
+def _outcome_table(outcomes: list[FaultOutcome], options: CheckOptions = DEFAULT_OPTIONS) -> str:
     """Every fault, one row: result and the main check values."""
     def val(o: FaultOutcome, name: str, fmt: str, unit: str = "", scale: float = 1.0) -> str:
         c = next((c for c in o.checks if c.name == name), None)
@@ -490,5 +514,5 @@ def _outcome_table(outcomes: list[FaultOutcome]) -> str:
             f"{val(o, 'voltage_recovery', '.3f', ' pu'):>28} | {val(o, 'damping', '.1f', '%', 100):>28}"
         )
     if damping_info:
-        lines.append(f"Result does not include damping: {info_label('damping')}.")
+        lines.append(f"Result does not include damping: {info_label('damping', options)}.")
     return "\n".join(lines)
