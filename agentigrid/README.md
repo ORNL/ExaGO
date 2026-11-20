@@ -265,6 +265,35 @@ agentigrid ./data/exago/examples/case_ACTIVSg200.m \
 
 In stress test mode, the LLM always uses fresh mode (each contingency tested independently from the base case), starts with the most loaded lines, and can escalate to N-2 combinations. The post-search report ranks contingencies by severity: infeasibility > voltage violations > high line loading > cost increase.
 
+## Token Accounting
+
+Every LLM call of a session is counted (ExaGO and GridKit), each under one phase:
+
+| Phase | Calls |
+|---|---|
+| `objective_extraction` | objectives read from the goal at startup |
+| `search` | every call inside the iteration loop, including explore/select, the `analyze` fallback and retries after a reply that was not JSON (all GridKit calls) |
+| `analysis` | post-search analysis and goal classification (CLI, or the GUI when it runs it) |
+| `steering` | objectives read from a steering directive |
+| `report` | analysis regenerated for a PDF from a saved journal |
+| `other` | anything else |
+
+The per-call record (phase, iteration, model, backend, prompt and completion tokens, and the
+prompt/completion length in characters, `prompt_chars` / `completion_chars`, and the usage
+details described under [LLM backend options](#llm-backend-options)) and the
+per-phase totals are written as a top-level `token_usage` block to the journal JSON (ExaGO
+`workdir/journal_*.json`, GridKit `workdir/gridkit/session_*/journal.json`) and to saved
+sessions. Usage a backend did not report stays `null` per call and is counted in
+`calls_without_usage`. The final console summary shows the total, the number of calls and
+the breakdown, for example
+`Tokens: 26,105 total (24,100 prompt + 2,005 completion) in 4 LLM calls; objective extraction 1,190, search 19,497, analysis 5,418`;
+the PDF report and the GUI show the same.
+
+From this version on, `total_prompt_tokens` / `total_completion_tokens` and every printed
+total include **all phases**. Earlier versions counted search calls only; that number is
+`token_usage.by_phase.search` (sessions saved by an earlier version resume with their old
+total as one `search` entry).
+
 ## Session Save/Resume
 
 Searches can be saved to disk and resumed later — useful for long runs, interrupted sessions, or exploring different strategies from the same checkpoint.
@@ -489,6 +518,43 @@ export ANTHROPIC_API_KEY="your-key-here"
 # or
 export OPENAI_API_KEY="your-key-here"
 ```
+
+### LLM backend options
+
+Backends: `anthropic`, `openai` (also any OpenAI-compatible endpoint via `openai_base_url`),
+`ollama` / `ollama-cloud`. In the `llm:` section, or with `--set llm.<key>=<value>`:
+
+| Key | Default | Effect |
+|---|---|---|
+| `temperature` | `0.3` | sent with every request; `null` (`--set llm.temperature=null`) sends no temperature, for models that reject it. No automatic fallback: a rejected value surfaces as `OpenAI API error: ...` |
+| `reasoning_effort` | `null` | sent only when set: `reasoning_effort` for `openai` (incl. Gemini: `low`/`medium`/`high`), `think` for `ollama` (`"none"` turns thinking off; skipped with a warning if the installed `ollama` client has no `think`); not supported for `anthropic` (warning) |
+| `max_tokens` | `4096` | completion limit |
+
+Gemini through Google's OpenAI-compatible endpoint:
+```yaml
+llm:
+  backend: "openai"
+  model: "gemini-3.8-flash"
+  openai_base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  api_key_env: "GEMINI_API_KEY"
+  reasoning_effort: "medium"
+```
+
+**Usage details.** Besides prompt and completion tokens, each call records `reasoning_tokens`,
+the provider's own `api_total_tokens`, `reasoning_tokens_derived` and `billable_output_tokens`
+(journal `token_usage`, per call and summed per phase; `calls_with_total_mismatch` counts calls
+whose provider total differs from prompt + completion). OpenAI reports reasoning as a sub-count of
+`completion_tokens`, so billable output = completion. Gemini's OpenAI-compatible endpoint counts
+thinking only in `total_tokens`; the difference is recorded as derived reasoning tokens and added:
+billable output = completion + reasoning. The console summary then reads e.g.
+`... 1,162 completion (+ 3,410 reasoning = 4,572 billable output)`. `completion_tokens` and
+`total_tokens` keep their meaning.
+
+**Run settings.** Both journals (ExaGO and GridKit) get a top-level `llm_settings` block, and the same
+line is printed at session start: backend, model, endpoint host, the temperature and reasoning parameter
+actually sent, `max_tokens`, the `openai` / `ollama` / `anthropic` package versions and, for Ollama
+(tags are not pinned), the model digest as in `ollama list` (`null` if it cannot be read). API keys are
+never recorded.
 
 ## Testing
 

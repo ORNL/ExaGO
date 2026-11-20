@@ -180,7 +180,9 @@ def parse_matpower(path: Path) -> MATNetwork:
     if not path.exists():
         raise FileNotFoundError(f"MATPOWER file not found: {path}")
 
-    text = path.read_text(encoding="utf-8")
+    # Exported cases may carry non-UTF-8 bytes in comments (e.g. Windows curly
+    # quotes in citations); replace them rather than reject the file.
+    text = path.read_text(encoding="utf-8", errors="replace")
 
     # --- Function name ---
     m = _FUNC_RE.search(text)

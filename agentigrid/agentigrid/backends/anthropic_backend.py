@@ -6,8 +6,10 @@ import logging
 import os
 from typing import Optional
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.backends.json_extract import extract_json
+from agentigrid.backends.retry import error_fields
 from agentigrid.config import LLMConfig
 
 logger = logging.getLogger("agentigrid.backends.anthropic")
@@ -34,7 +36,14 @@ class AnthropicBackend(LLMBackend):
                 config.api_key_env,
             )
 
-        self._client = anthropic.Anthropic(api_key=api_key)
+        # No SDK retries: agentigrid.backends.retry retries and logs every attempt.
+        self._client = anthropic.Anthropic(api_key=api_key, max_retries=0)
+        if config.reasoning_effort is not None:
+            # Extended thinking needs a token budget, not an effort level: not mapped.
+            logger.warning(
+                "llm.reasoning_effort=%r is not supported by the Anthropic backend; "
+                "nothing is sent", config.reasoning_effort,
+            )
 
     def name(self) -> str:
         """Return the backend name."""
@@ -43,6 +52,10 @@ class AnthropicBackend(LLMBackend):
     def supports_json_mode(self) -> bool:
         """Anthropic does not have a native JSON output mode."""
         return False
+
+    def endpoint(self) -> Optional[str]:
+        """Base URL of the Anthropic client."""
+        return str(self._client.base_url)
 
     def complete(
         self,
@@ -54,23 +67,27 @@ class AnthropicBackend(LLMBackend):
         temp = temperature if temperature is not None else self._config.temperature
 
         try:
-            response = self._client.messages.create(
-                model=self._config.model,
-                max_tokens=self._config.max_tokens,
-                temperature=temp,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
+            with log_scope(logger, "LLM API request", backend=self.name(), model=self._config.model):
+                kwargs: dict = {
+                    "model": self._config.model,
+                    "max_tokens": self._config.max_tokens,
+                    "system": system_prompt,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                }
+                if temp is not None:             # temperature: null -> not sent
+                    kwargs["temperature"] = temp
+                response = self._client.messages.create(**kwargs)
 
-            raw_text = ""
-            for block in response.content:
-                if block.type == "text":
-                    raw_text += block.text
+            with log_scope(logger, "LLM response parsing", backend=self.name(), model=self._config.model):
+                raw_text = ""
+                for block in response.content:
+                    if block.type == "text":
+                        raw_text += block.text
 
-            prompt_tokens = getattr(response.usage, "input_tokens", None)
-            completion_tokens = getattr(response.usage, "output_tokens", None)
+                prompt_tokens = getattr(response.usage, "input_tokens", None)
+                completion_tokens = getattr(response.usage, "output_tokens", None)
 
-            json_data, json_error = extract_json(raw_text)
+                json_data, json_error = extract_json(raw_text)
 
             return LLMResponse(
                 raw_text=raw_text,
@@ -91,6 +108,7 @@ class AnthropicBackend(LLMBackend):
                 json_error=error_msg,
                 model=self._config.model,
                 backend=self.name(),
+                **error_fields(exc),
                 prompt_tokens=None,
                 completion_tokens=None,
             )

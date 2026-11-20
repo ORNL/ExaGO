@@ -22,6 +22,7 @@ from reportlab.platypus import (
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+from agentigrid.logging_setup import log_scope
 from agentigrid.exago_engine.agent_loop import SearchSession
 from agentigrid.exago_engine.journal import describe_contingency_scope, is_solve_iteration
 from agentigrid.exago_parsers.opflow_results import OPFLOWResult
@@ -39,7 +40,20 @@ except ModuleNotFoundError:
         reserve_trajectory_chart,
     )
 
-logger = logging.getLogger("launcher.report_generator")
+
+def _token_usage_line(session: SearchSession) -> str:
+    """'Token usage: <total> in <n> LLM calls (<per-phase breakdown>)' for the summary."""
+    total = session.total_prompt_tokens + session.total_completion_tokens
+    if total <= 0:
+        return "Token usage: N/A"
+    ledger = getattr(session, "token_ledger", None)
+    if ledger is not None and len(ledger) and ledger.total == total:
+        n = len(ledger)
+        return f"Token usage: {total:,} in {n} LLM call{'s' if n != 1 else ''} ({ledger.breakdown_text()})"
+    return f"Token usage: {total:,}"
+
+
+logger = logging.getLogger("agentigrid.launcher.report_generator")
 
 # ── Font Registration ────────────────────────────────────────────────────────
 
@@ -82,6 +96,7 @@ def _register_fonts():
 
 # ── Chart Export Helper ──────────────────────────────────────────────────────
 
+@log_scope(logger, "Report chart export")
 def _export_chart_image(fig, width_px: int = 800, height_px: int = 400) -> bytes | None:
     """Export a Plotly figure to PNG bytes.
 
@@ -215,6 +230,7 @@ class ReportGenerator:
             ),
         }
 
+    @log_scope(logger, "PDF report generation")
     def generate(
         self,
         session: SearchSession,
@@ -555,7 +571,6 @@ class ReportGenerator:
         start = datetime.fromisoformat(session.start_time)
         end = datetime.fromisoformat(session.end_time) if session.end_time else datetime.now()
         duration = end - start
-        total_tokens = session.total_prompt_tokens + session.total_completion_tokens
 
         # Reserve shortcut — checked before the contingency/sweep shortcuts
         if contingency_entry is not None and getattr(contingency_entry, "reserve_meta", None):
@@ -602,7 +617,7 @@ class ReportGenerator:
                 f"Total iterations: {stats['total_iterations']}",
                 f"Duration: {duration.total_seconds():.0f}s",
                 f"Termination: {session.termination_reason}",
-                (f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A"),
+                _token_usage_line(session),
             ])
             for line in res_lines:
                 elements.append(Paragraph(self._escape_xml(line), s["body"]))
@@ -648,7 +663,7 @@ class ReportGenerator:
                 f"Total iterations: {stats['total_iterations']}",
                 f"Duration: {duration.total_seconds():.0f}s",
                 f"Termination: {session.termination_reason}",
-                (f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A"),
+                _token_usage_line(session),
             ])
             for line in cont_lines:
                 elements.append(Paragraph(self._escape_xml(line), s["body"]))
@@ -686,7 +701,7 @@ class ReportGenerator:
                 f"Total iterations: {stats['total_iterations']}",
                 f"Duration: {duration.total_seconds():.0f}s",
                 f"Termination: {session.termination_reason}",
-                f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A",
+                _token_usage_line(session),
             ]
             for line in sweep_lines:
                 elements.append(Paragraph(self._escape_xml(line), s["body"]))
@@ -726,7 +741,7 @@ class ReportGenerator:
         lines.extend([
             f"Duration: {duration.total_seconds():.0f}s",
             f"Termination: {session.termination_reason}",
-            f"Token usage: {total_tokens:,}" if total_tokens > 0 else "Token usage: N/A",
+            _token_usage_line(session),
         ])
 
         if stats["best_objective"] is not None:

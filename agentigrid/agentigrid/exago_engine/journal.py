@@ -217,6 +217,15 @@ class SearchJournal:
         self.session_best: Optional[dict] = None
         # load_factor: session-level load scaling factor (updated by set_load_factor action).
         self.load_factor: Optional[float] = None
+        # token_usage: TokenLedger.to_dict() of the session, set before export.
+        self.token_usage: Optional[dict] = None
+        # llm_settings: collect_llm_settings() of the run (backend, model, parameters sent).
+        self.llm_settings: Optional[dict] = None
+        # llm_events: one dict per failed LLM call attempt (phase, iteration, attempt,
+        # error_kind, error, wait_s, outcome = retry / api_error / quota_exhausted, time).
+        self.llm_events: list[dict] = []
+        # termination_reason of the session, set before export.
+        self.termination_reason: Optional[str] = None
 
     def update_session_best(
         self,
@@ -1122,6 +1131,14 @@ class SearchJournal:
             data["session_best"] = self.session_best
         if self.load_factor is not None:
             data["load_factor"] = self.load_factor
+        if self.token_usage is not None:
+            data["token_usage"] = self.token_usage
+        if self.llm_settings is not None:
+            data["llm_settings"] = self.llm_settings
+        if self.termination_reason is not None:
+            data["termination_reason"] = self.termination_reason
+        if self.llm_events:
+            data["llm_events"] = self.llm_events
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info("Journal exported to %s (%d entries)", path, len(self._entries))
 
