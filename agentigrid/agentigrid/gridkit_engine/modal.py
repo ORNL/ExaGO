@@ -90,7 +90,9 @@ def damping_ratio_modal_robust(t, x, t_clear, windows=(1.0, 2.0), f_tol=0.05, ze
         return None, [], "settled"
     confirmed, used_a, used_b = [], set(), set()
     for i, (f1, z1, a1) in enumerate(a):
-        match = [(j, m) for j, m in enumerate(b) if abs(m[0] - f1) <= f_tol and abs(m[1] - z1) <= zeta_tol]
+        # A mode of window b confirms at most one mode of window a.
+        match = [(j, m) for j, m in enumerate(b)
+                 if j not in used_b and abs(m[0] - f1) <= f_tol and abs(m[1] - z1) <= zeta_tol]
         if match:
             j, (f2, z2, a2) = min(match, key=lambda jm: abs(jm[1][0] - f1))
             used_a.add(i)

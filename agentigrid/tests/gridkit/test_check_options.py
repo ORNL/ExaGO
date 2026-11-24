@@ -277,6 +277,25 @@ def test_modal_undetermined_asks_for_30_s(monkeypatch):
     assert r.data["undetermined"]
 
 
+def test_modal_one_b_mode_confirms_only_one_a_mode(monkeypatch):
+    """Two window-a modes near one window-b mode: only the closer one is confirmed,
+    the other stays unconfirmed (and, below the threshold, makes the result undetermined)."""
+    from agentigrid.gridkit_engine import modal
+    a = [(0.70, 0.050, 5.0), (0.72, 0.020, 4.0)]
+    b = [(0.705, 0.045, 5.0)]
+    fits = iter([(0.02, a), (0.045, b)] * 2)
+    monkeypatch.setattr(modal, "damping_ratio_modal", lambda *args, **kw: next(fits))
+    kw = dict(f_tol=0.05, zeta_tol=0.03)
+
+    zeta, confirmed, status = modal.damping_ratio_modal_robust(T, T, CLEAR, **kw)
+    assert len(confirmed) == 1
+    assert confirmed[0][0] == pytest.approx(0.7025) and confirmed[0][1] == pytest.approx(0.0475)
+    assert zeta == pytest.approx(0.0475) and status == "ok"
+
+    zeta, confirmed, status = modal.damping_ratio_modal_robust(T, T, CLEAR, threshold=0.03, **kw)
+    assert len(confirmed) == 1 and status == "undetermined"          # 0.72 Hz, 2 % seen in window a only
+
+
 def test_journal_row_gets_ssc_only_when_on():
     loop = pytest.importorskip("agentigrid.gridkit_engine.agent_loop")
     row = {"bus": 1, "status": "pass"}
