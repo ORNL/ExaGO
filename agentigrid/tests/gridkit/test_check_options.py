@@ -266,6 +266,30 @@ def test_ssc_missing_scipy_reported(monkeypatch):
     assert "not available" in "\n".join(ssc.report_lines(info))
 
 
+def test_ssc_zero_impedance_branch_reported_not_raised():
+    pytest.importorskip("scipy")
+    from agentigrid.gridkit_engine import ssc
+    case = _three_bus_case()
+    case["devices"][1]["params"].update(R=0.0, X=0.0)                # bus 3 - bus 2: zero impedance
+    cache = {}
+    info = ssc.strength(case, [1, 2], cache=cache)
+    assert set(info) == {"error"}
+    assert info["error"].startswith("not available (ZeroDivisionError")
+    assert cache == {}
+    lines = ssc.report_lines(info)
+    assert lines[1] == f"  {info['error']}"
+
+
+def test_ssc_unexpected_error_reported(monkeypatch):
+    from agentigrid.gridkit_engine import ssc
+
+    def singular(case):
+        raise RuntimeError("Factor is exactly singular")
+    monkeypatch.setattr(ssc, "_ybus_lu", singular)
+    info = ssc.strength(_three_bus_case(), [1])
+    assert info == {"error": "not available (RuntimeError: Factor is exactly singular)"}
+
+
 def test_modal_undetermined_asks_for_30_s(monkeypatch):
     """Undetermined at 15 s: the message tells the LLM to repeat the bus with tmax_s = 30."""
     from agentigrid.gridkit_engine import modal

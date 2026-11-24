@@ -74,16 +74,24 @@ def _zth(lu, idx: dict, buses: list[int], block: int = 200) -> dict:
 
 def strength(case: dict, buses: list[int], weak_percentile: float = 5.0,
              cache: Optional[dict] = None) -> dict:
-    """{bus: {...}} for the faulted buses; {"error": text} if numpy/scipy are missing.
+    """{bus: {...}} for the faulted buses; {"error": text} if numpy/scipy are missing or
+    the computation fails for any other reason (e.g. a zero-impedance branch or a
+    singular admittance matrix). It is information only, so it never raises.
 
     *cache* (a dict kept by the caller per network) stores the Ssc of all buses of a
     voltage level, so the percentile is computed once per network and level (about 2 s
     for 4,660 buses at 138 kV)."""
     try:
-        idx, lu = _ybus_lu(case)
+        return _strength(case, buses, weak_percentile, cache)
     except ImportError as e:
         return {"error": f"not available ({e.name or 'numpy/scipy'} missing)"}
-    kv = {b["number"]: round(float(b["params"]["kv"]), 1) for b in case["buses"]}
+    except Exception as e:                   # noqa: BLE001 — information only, never fatal
+        return {"error": f"not available ({type(e).__name__}: {e})"}
+
+
+def _strength(case: dict, buses: list[int], weak_percentile: float, cache: Optional[dict]) -> dict:
+    idx, lu = _ybus_lu(case)
+    kv ={b["number"]: round(float(b["params"]["kv"]), 1) for b in case["buses"]}
     cache = {} if cache is None else cache
     known = [b for b in buses if b in idx]
     z = _zth(lu, idx, known)
