@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from agentigrid.backends.retry import LLMCallFailed, complete_with_retry
 from agentigrid.config import AppConfig
 from agentigrid.token_usage import TokenLedger
 from agentigrid.exago_engine.goal_classifier import (
@@ -229,12 +230,21 @@ def regenerate_from_journal(
             near_optimal_abs_tol=config.report.near_optimal_abs_tol,
         )
         try:
-            resp = backend.complete(sys_p, user_p)
+            # Transient API errors are retried (llm.retry); a terminal error raises
+            # LLMCallFailed, which is not recorded in the ledger.
+            resp = complete_with_retry(backend, sys_p, user_p, config.llm.retry)
             ledger.record("report", resp, prompt_chars=len(sys_p) + len(user_p))
             analysis_text = resp.raw_text
             gc = parse_goal_classification(
                 analysis_text, {e.iteration for e in journal.entries}
             )
+        except LLMCallFailed as exc:
+            logger.warning(
+                "Analysis regeneration failed (%s after %d attempt(s): %s); "
+                "rendering PDF without it.", exc.termination, exc.attempts, exc.message[:300]
+            )
+            analysis_text = None
+            gc = None
         except Exception as exc:  # noqa: BLE001 — best-effort; PDF still renders
             logger.warning(
                 "Analysis regeneration failed (%s); rendering PDF without it.", exc

@@ -276,3 +276,90 @@ def test_report_token_line_shows_breakdown(tmp_path: Path):
     )
     session.total_prompt_tokens = session.total_completion_tokens = 0
     assert report_generator._token_usage_line(session) == "Token usage: N/A"
+
+
+# ---------------------------------------------------------------------------
+# GUI summary and report regeneration: llm.retry, no ledger entry for a failed call
+# ---------------------------------------------------------------------------
+
+def _api_error(kind: str) -> LLMResponse:
+    text = "OpenAI API error: Error code: 429 - quota" if kind == "quota" else "OpenAI API error: 503"
+    return LLMResponse(text, None, text, "test-model", "test", None, None, error_kind=kind)
+
+
+def _no_wait(session):
+    from dataclasses import replace
+    from agentigrid.config import RetryConfig
+
+    session.config = replace(session.config,
+                             llm=replace(session.config.llm, retry=RetryConfig(2, (0.0,))))
+    return session
+
+
+def test_gui_summary_analysis_retries_transient_errors(tmp_path: Path):
+    from launcher.session_manager import SessionManager
+
+    session = _no_wait(_stub_session(tmp_path))
+    backend = MockBackend([_api_error("transient"), _classification_response()])
+    with patch("launcher.session_manager.create_backend", return_value=backend):
+        text = SessionManager().get_summary_analysis(session)
+
+    assert len(backend.calls) == 2
+    assert text.startswith("Analysis.")
+    assert {p: a["calls"] for p, a in session.token_ledger.by_phase.items()} == {
+        "search": 1, "analysis": 1,
+    }
+
+
+def test_gui_summary_analysis_terminal_error_is_not_recorded(tmp_path: Path):
+    from launcher.session_manager import SessionManager
+
+    session = _no_wait(_stub_session(tmp_path))
+    backend = MockBackend([_api_error("quota"), _classification_response()])
+    manager = SessionManager()
+    with patch("launcher.session_manager.create_backend", return_value=backend):
+        text = manager.get_summary_analysis(session)
+
+    assert len(backend.calls) == 1                                  # quota is not retried
+    assert text.startswith("Summary analysis could not be generated: ") and "429" in text
+    assert {p: a["calls"] for p, a in session.token_ledger.by_phase.items()} == {"search": 1}
+    assert session.total_prompt_tokens == 1000 and session.total_completion_tokens == 200
+
+
+@pytest.mark.parametrize("responses, n_calls, phases", [
+    (["transient", "ok"], 2, {"search": 1, "report": 1}),
+    (["transient"], 3, {"search": 1}),                               # retries exhausted
+    (["quota"], 1, {"search": 1}),
+])
+def test_regenerate_report_retry_and_ledger(tmp_path: Path, responses, n_calls, phases):
+    from dataclasses import replace
+    from agentigrid.config import RetryConfig
+    from tests.journal.test_regenerate_report import _cfg
+
+    journal = SearchJournal()
+    session_ledger = TokenLedger()
+    session_ledger.record("search", _text_response("", 1000, 200), 1)
+    journal.token_usage = session_ledger.to_dict()
+    export = tmp_path / "journal.json"
+    journal.export_json(export)
+    cfg = _cfg(tmp_path)
+    cfg = replace(cfg, llm=replace(cfg.llm, retry=RetryConfig(2, (0.0,))))
+
+    backend = MockBackend([_text_response("no json here", 400, 100) if r == "ok" else _api_error(r)
+                           for r in responses])
+    captured = {}
+
+    class _SpyGenerator:
+        def generate(self, session, summary_text=None, **kwargs):
+            captured["session"], captured["summary_text"] = session, summary_text
+            return b"%PDF-1.4\n%%EOF"
+
+    with patch("agentigrid.exago_engine.regenerate_report._import_report_generator",
+               return_value=_SpyGenerator):
+        regenerate_from_journal(journal_json_path=export, config=cfg, backend=backend,
+                                out_dir=tmp_path / "out", goal="g", generate_analysis=True)
+
+    session = captured["session"]
+    assert len(backend.calls) == n_calls
+    assert {p: a["calls"] for p, a in session.token_ledger.by_phase.items()} == phases
+    assert (captured["summary_text"] is None) == ("report" not in phases)

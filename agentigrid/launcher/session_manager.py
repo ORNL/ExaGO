@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from agentigrid.backends import create_backend
+from agentigrid.backends.retry import LLMCallFailed, complete_with_retry
 from agentigrid.config import load_config
 from agentigrid.exago_engine.agent_loop import AgentLoopController, SearchSession
 from agentigrid.exago_engine.goal_classifier import build_classification_prompts, parse_goal_classification
@@ -238,7 +239,10 @@ class SessionManager:
                 near_optimal_abs_tol=session.config.report.near_optimal_abs_tol,
             )
 
-            response = backend.complete(system_prompt, user_prompt)
+            # Transient API errors are retried (llm.retry); a terminal error raises
+            # LLMCallFailed and nothing is recorded in the ledger.
+            response = complete_with_retry(backend, system_prompt, user_prompt,
+                                           session.config.llm.retry)
             # Same ledger as the session the analysis belongs to.
             session.token_ledger.record("analysis", response,
                                         prompt_chars=len(system_prompt) + len(user_prompt))
@@ -252,6 +256,10 @@ class SessionManager:
 
             return raw_text
 
+        except LLMCallFailed as exc:
+            logger.warning("Summary analysis call failed (%s after %d attempt(s)): %s",
+                           exc.termination, exc.attempts, exc.message[:300])
+            return f"Summary analysis could not be generated: {exc}"
         except Exception as exc:
             logger.warning("Failed to generate summary analysis: %s", exc)
             return f"Summary analysis could not be generated: {exc}"
