@@ -750,6 +750,9 @@ class SearchSession:
     token_ledger: TokenLedger = field(default_factory=TokenLedger)
     goal_classification: Optional[dict] = None
     analysis_text: Optional[str] = None
+    # A terminal LLM API error of the post-search analysis call ("<termination>: <message>").
+    # It does not end or change the session: termination_reason stays as the search left it.
+    analysis_error: Optional[str] = None
     enforced_vmin: Optional[float] = None
     enforced_vmax: Optional[float] = None
     objective_registry_data: Optional[list[dict]] = None
@@ -4922,8 +4925,10 @@ class AgentLoopController:
             self._executor.prune_solutions(dirs, best)
 
         # --- Post-search goal classification via LLM ---
-        # Not after a terminal API error (no "best" result then); if this call itself
-        # fails for good, the session ends with that error.
+        # Not after a terminal API error (no "best" result then). If this call itself
+        # fails for good, the search result stands: termination_reason is unchanged, the
+        # error goes to session.analysis_error (and the journal), and the best iteration
+        # comes from the journal statistics.
         goal_classification: Optional[dict] = None
         analysis_text: Optional[str] = None
         try:
@@ -4951,7 +4956,10 @@ class AgentLoopController:
         except _SkipAnalysis:
             pass
         except LLMCallFailed as exc:
-            self._end_on_llm_failure(session, exc)
+            session.analysis_error = f"{exc.termination}: {exc.message}"
+            logger.warning("Post-search analysis call failed (%s after %d attempt(s)); "
+                           "best iteration from journal statistics: %s",
+                           exc.termination, exc.attempts, exc.message[:300])
         except Exception as exc:
             logger.warning("Post-search goal classification failed: %s", exc)
         api_failed = session.termination_reason in EXIT_CODES
@@ -4997,6 +5005,8 @@ class AgentLoopController:
         if len(self._ledger):
             print(f"  {self._ledger.summary_text()}")
         print(f"  Termination:    {session.termination_reason}")
+        if session.analysis_error:
+            print(f"  Analysis:       not generated ({session.analysis_error[:300]})")
 
         # Goal-aware best-solution line
         goal_type = stats.get("goal_type") or "cost_minimization"
@@ -5116,6 +5126,7 @@ class AgentLoopController:
             journal_path.parent.mkdir(parents=True, exist_ok=True)
             self._journal.token_usage = self._ledger.to_dict()
             self._journal.termination_reason = session.termination_reason
+            self._journal.analysis_error = session.analysis_error
             if fmt == "csv":
                 self._journal.export_csv(journal_path)
             else:

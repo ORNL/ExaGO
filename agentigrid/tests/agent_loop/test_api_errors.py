@@ -111,6 +111,33 @@ def test_quota_in_objective_extraction_stops_before_the_loop(tmp_path):
     assert journal["llm_events"][0]["phase"] == "objective_extraction"
 
 
+def test_analysis_call_failure_keeps_the_search_result(tmp_path, capsys, caplog):
+    # objectives, modify, complete; the post-search analysis call then hits the quota
+    session, controller, backend, waits, journal = _run(tmp_path, [
+        _objectives_response(), _make_llm_response(MODIFY), _make_llm_response(COMPLETE),
+        _err(E429Q, "quota")])
+    assert backend._call_count == 4
+    assert session.termination_reason == "completed" and session.error is None
+    assert session.analysis_error.startswith("quota_exhausted: ") and "429" in session.analysis_error
+    assert session.goal_classification is None and session.analysis_text is None
+    assert journal["termination_reason"] == "completed"
+    assert journal["analysis_error"] == session.analysis_error
+    assert [(e["phase"], e["outcome"]) for e in journal["llm_events"]] == [("analysis", "quota_exhausted")]
+    assert "Post-search analysis call failed" in caplog.text
+    out = capsys.readouterr().out
+    assert "Termination:    completed" in out
+    assert "Analysis:       not generated (quota_exhausted:" in out
+    assert "Best solution:  none" not in out
+    assert "Best objective" in out                                   # from the journal statistics
+    assert exit_for_termination(session.termination_reason) is None
+
+
+def test_no_analysis_error_field_when_the_call_succeeds(tmp_path):
+    session, controller, backend, waits, journal = _run(tmp_path, [
+        _objectives_response(), _make_llm_response(COMPLETE)])
+    assert session.analysis_error is None and "analysis_error" not in journal
+
+
 def test_real_parse_failures_are_not_completed(tmp_path):
     session, controller, backend, waits, journal = _run(tmp_path, [
         _objectives_response(), _make_llm_response(None, raw_text="not json")])

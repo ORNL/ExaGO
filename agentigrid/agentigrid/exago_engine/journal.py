@@ -226,6 +226,9 @@ class SearchJournal:
         self.llm_events: list[dict] = []
         # termination_reason of the session, set before export.
         self.termination_reason: Optional[str] = None
+        # analysis_error: terminal LLM API error of the post-search analysis call, if any
+        # ("<termination>: <message>"); it does not change termination_reason.
+        self.analysis_error: Optional[str] = None
 
     def update_session_best(
         self,
@@ -1137,6 +1140,8 @@ class SearchJournal:
             data["llm_settings"] = self.llm_settings
         if self.termination_reason is not None:
             data["termination_reason"] = self.termination_reason
+        if self.analysis_error is not None:
+            data["analysis_error"] = self.analysis_error
         if self.llm_events:
             data["llm_events"] = self.llm_events
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
