@@ -236,3 +236,33 @@ def test_real_openai_rate_limit_error_with_gemini_body():
                                 response=httpx.Response(429, request=req), body=None)
     assert error_fields(minute) == {"error_kind": TRANSIENT, "retry_after_s": pytest.approx(27.56563424)}
     assert error_fields(day)["error_kind"] == QUOTA
+
+
+def test_real_anthropic_errors():
+    """The SDK exceptions the anthropic backend really gets: 429 rate limit (with the
+    Retry-After header) and 529 overloaded are transient."""
+    httpx = pytest.importorskip("httpx")
+    anthropic = pytest.importorskip("anthropic")
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    rate = anthropic.RateLimitError(
+        message="Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': "
+                "'This request would exceed the rate limit for your organization of 50 requests per minute.'}}",
+        response=httpx.Response(429, request=req, headers={"retry-after": "12"}), body=None)
+    overloaded = anthropic.APIStatusError(
+        message="Error code: 529 - {'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'Overloaded'}}",
+        response=httpx.Response(529, request=req), body=None)
+    assert error_fields(rate) == {"error_kind": TRANSIENT, "retry_after_s": 12.0}
+    assert error_fields(overloaded) == {"error_kind": TRANSIENT, "retry_after_s": None}
+
+
+@pytest.mark.parametrize("error,status,kind", [
+    ("too many concurrent requests", 429, TRANSIENT),
+    ('{"error": "Service Temporarily Unavailable"}', 503, TRANSIENT),
+    ("you have reached your weekly usage limit, upgrade for higher limits", 429, QUOTA),
+])
+def test_real_ollama_response_error(error, status, kind):
+    """ollama.ResponseError (str(exc) = "<error> (status code: N)") as the ollama backend gets it."""
+    ollama = pytest.importorskip("ollama")
+    exc = ollama.ResponseError(error, status)
+    assert exc.status_code == status
+    assert classify_error(exc) == kind
