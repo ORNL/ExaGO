@@ -138,6 +138,19 @@ def test_no_analysis_error_field_when_the_call_succeeds(tmp_path):
     assert session.analysis_error is None and "analysis_error" not in journal
 
 
+def test_retry_notices_respect_quiet_session_end_does_not(tmp_path, capsys, caplog):
+    with caplog.at_level("INFO", logger="agentigrid"):
+        session, controller, backend, waits, journal = _run(tmp_path, [   # quiet=True
+            _objectives_response(), _err(E503, "transient")])
+    out = capsys.readouterr().out
+    assert "retry in" not in out                                       # --quiet: not printed
+    notices = [r for r in caplog.records if "retry in" in r.getMessage()]
+    assert len(notices) == 5 and all(r.levelname == "INFO" for r in notices)
+    assert "[LLM] Session ended: api_error after 6 attempt(s)" in out  # printed even with --quiet
+    ended = [r for r in caplog.records if "Session ended" in r.getMessage()]
+    assert len(ended) == 1 and ended[0].levelname == "WARNING"
+
+
 def test_real_parse_failures_are_not_completed(tmp_path):
     session, controller, backend, waits, journal = _run(tmp_path, [
         _objectives_response(), _make_llm_response(None, raw_text="not json")])

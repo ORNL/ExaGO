@@ -871,8 +871,10 @@ class AgentLoopController:
         def on_event(event: dict) -> None:
             self._journal.llm_events.append({"phase": phase, "iteration": iteration, **event})
             if event["outcome"] == "retry":
-                print(f"[LLM] {phase} call failed ({event['error_kind']}): {event['error'][:160]} "
-                      f"- retry in {event['wait_s']:g} s")
+                msg = (f"[LLM] {phase} call failed ({event['error_kind']}): {event['error'][:160]} "
+                       f"- retry in {event['wait_s']:g} s")
+                self._print(msg)                    # not with --quiet
+                logger.info(msg)
 
         response = complete_with_retry(self._backend, system, user, self._config.llm.retry,
                                        on_event=on_event, sleep=self._sleep)
@@ -883,7 +885,9 @@ class AgentLoopController:
         """End the session on a terminal LLM API error: never "completed", no best result."""
         session.termination_reason = exc.termination
         session.error = exc.message
-        print(f"[LLM] Session ended: {exc.termination} after {exc.attempts} attempt(s): {exc.message[:300]}")
+        msg = f"[LLM] Session ended: {exc.termination} after {exc.attempts} attempt(s): {exc.message[:300]}"
+        print(msg)                                  # always, also with --quiet
+        logger.warning(msg)
 
     def _run_iterations(self, session: "SearchSession", goal: str, first_iteration: int) -> None:
         """The agent loop from *first_iteration*; sets session.termination_reason."""

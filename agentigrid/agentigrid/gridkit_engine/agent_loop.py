@@ -198,8 +198,10 @@ class GridkitAgentLoop:
                     session.error = exc.message
                     self._journal.add(JournalEntry(iteration, "error", f"LLM call failed ({exc.termination})",
                                                    result_text=exc.message))
-                    print(f"[LLM] Session ended: {exc.termination} after {exc.attempts} attempt(s): "
-                          f"{exc.message[:300]}")
+                    msg = (f"[LLM] Session ended: {exc.termination} after {exc.attempts} attempt(s): "
+                           f"{exc.message[:300]}")
+                    print(msg, flush=True)          # always, also with --quiet
+                    logger.warning(msg)
                     break
                 session.total_prompt_tokens = session.token_ledger.total_prompt
                 session.total_completion_tokens = session.token_ledger.total_completion
@@ -238,8 +240,11 @@ class GridkitAgentLoop:
         def on_event(event: dict) -> None:
             self._journal.llm_events.append({"phase": "search", "iteration": iteration, **event})
             if event["outcome"] == "retry":
-                print(f"[LLM] search call failed ({event['error_kind']}): {event['error'][:160]} "
-                      f"- retry in {event['wait_s']:g} s")
+                msg = (f"[LLM] search call failed ({event['error_kind']}): {event['error'][:160]} "
+                       f"- retry in {event['wait_s']:g} s")
+                self._print(msg)                    # not with --quiet (then _print logs it)
+                if not self._quiet:
+                    logger.info(msg)
 
         response = complete_with_retry(self._backend, system, user, self._cfg.llm.retry,
                                        on_event=on_event, sleep=self._sleep)

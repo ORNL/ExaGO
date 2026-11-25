@@ -159,3 +159,17 @@ def test_quota_exhausted_not_retried(tmp_path):
     session = loop.run(IEEE39, "anything")
     assert session.termination_reason == "quota_exhausted"
     assert waits == [] and len(backend.prompts) == 1
+
+
+def test_retry_notices_respect_quiet_session_end_does_not(tmp_path, capsys, caplog):
+    loop, backend = _loop(tmp_path, [_err(E503, "transient")] * 6)     # quiet=True
+    loop._sleep = lambda s: None
+    with caplog.at_level("INFO", logger="agentigrid"):
+        loop.run(IEEE39, "anything")
+    out = capsys.readouterr().out
+    assert "retry in" not in out                                       # --quiet: not printed
+    notices = [r for r in caplog.records if "retry in" in r.getMessage()]
+    assert len(notices) == 5 and all(r.levelname == "INFO" for r in notices)
+    assert "[LLM] Session ended: api_error after 6 attempt(s)" in out  # printed even with --quiet
+    ended = [r for r in caplog.records if "Session ended" in r.getMessage()]
+    assert len(ended) == 1 and ended[0].levelname == "WARNING"
