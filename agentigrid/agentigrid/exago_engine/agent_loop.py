@@ -850,6 +850,8 @@ class AgentLoopController:
         # current action, and an explore's folders waiting for the next action.
         self._batch_best: Optional[Path] = None
         self._pending_explore: Optional[tuple[list[Path], Optional[Path]]] = None
+        # findings of the LLM's "complete" action (set by the complete handler)
+        self._final_findings: Optional[dict] = None
         # Sticky session-level load factor (Task 1)
         self._session_load_factor: Optional[float] = config.search.load_factor
         # Benchmark result computed at session start (Task 2)
@@ -4951,7 +4953,7 @@ class AgentLoopController:
                 application=self._config.search.application,
                 near_optimal_abs_tol=self._config.report.near_optimal_abs_tol,
                 latest_results_text=self._latest_results_text,
-                final_findings=getattr(self, "_final_findings", None),
+                final_findings=self._final_findings,
             )
             response = self._llm(sys_prompt, user_prompt, "analysis")
             analysis_text = response.raw_text
@@ -5051,7 +5053,7 @@ class AgentLoopController:
             print(f"  Search type:    {goal_type.replace('_', ' ')}")
 
         # Print findings if complete
-        findings = getattr(self, "_final_findings", None)
+        findings = self._final_findings
         if findings:
             session.final_findings = findings
             summary = findings.get("summary", "")
