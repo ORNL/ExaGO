@@ -262,3 +262,64 @@ class TestOpenAILive:
         assert isinstance(resp, LLMResponse)
         assert resp.raw_text
         assert resp.backend == "openai"
+
+
+# ===========================================================================
+# B12: a non-SDK exception inside complete() is logged with its traceback
+# ===========================================================================
+
+def _backend_with_client(kind: str, client):
+    with patch.dict(os.environ, {"TEST_API_KEY": "sk-test"}):
+        if kind == "openai":
+            from agentigrid.backends.openai_backend import OpenAIBackend as B
+        elif kind == "anthropic":
+            from agentigrid.backends.anthropic_backend import AnthropicBackend as B
+        else:
+            from agentigrid.backends.ollama_backend import OllamaBackend as B
+        backend = B(_dummy_config(backend=kind))
+    backend._client = client
+    return backend
+
+
+def _raise_from_call(kind: str, exc: BaseException) -> MagicMock:
+    client = MagicMock()
+    {"openai": client.chat.completions.create, "anthropic": client.messages.create,
+     "ollama": client.chat}[kind].side_effect = exc
+    return client
+
+
+@pytest.mark.skipif(not (_has_openai_pkg and _has_anthropic_pkg and _has_ollama_pkg),
+                    reason="needs openai, anthropic and ollama packages")
+@pytest.mark.parametrize("kind", ["openai", "anthropic", "ollama"])
+def test_parsing_bug_logged_with_traceback(kind, caplog):
+    backend = _backend_with_client(kind, _raise_from_call(kind, KeyError("choices")))
+    with caplog.at_level("ERROR", logger="agentigrid.backends"):
+        resp = backend.complete("system", "user")
+    assert resp.error_kind == "fatal" and "choices" in resp.raw_text      # response unchanged
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 1 and errors[0].exc_info is not None
+
+
+@pytest.mark.skipif(not (_has_openai_pkg and _has_anthropic_pkg and _has_ollama_pkg),
+                    reason="needs openai, anthropic and ollama packages")
+@pytest.mark.parametrize("kind", ["openai", "anthropic", "ollama"])
+def test_sdk_error_logged_without_traceback(kind, caplog):
+    import httpx
+    req = httpx.Request("POST", "https://example.invalid")
+    exc = {"openai": lambda: _openai.APIConnectionError(request=req),
+           "anthropic": lambda: _anthropic.APIConnectionError(request=req),
+           "ollama": lambda: _ollama.ResponseError("Service Unavailable", 503)}[kind]()
+    backend = _backend_with_client(kind, _raise_from_call(kind, exc))
+    with caplog.at_level("ERROR", logger="agentigrid.backends"):
+        resp = backend.complete("system", "user")
+    assert resp.error_kind == "transient"
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 1 and errors[0].exc_info is None
+
+
+def test_is_provider_error():
+    from agentigrid.backends.retry import is_provider_error
+    assert is_provider_error(ConnectionRefusedError("refused")) and is_provider_error(TimeoutError())
+    assert not is_provider_error(KeyError("x")) and not is_provider_error(AttributeError("y"))
+    if _has_ollama_pkg:
+        assert is_provider_error(_ollama.ResponseError("x", 500))

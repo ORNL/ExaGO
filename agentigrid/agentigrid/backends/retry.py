@@ -117,6 +117,19 @@ def classify_error(exc: BaseException) -> str:
     return FATAL
 
 
+# Exceptions from these packages (and the builtin network errors) come from the provider
+# or the transport; anything else raised inside a backend's try block is a bug in our code.
+_SDK_MODULES = ("openai", "anthropic", "ollama", "httpx", "httpcore")
+
+
+def is_provider_error(exc: BaseException) -> bool:
+    """True for an exception from a provider SDK or the HTTP transport (or a builtin
+    TimeoutError / ConnectionError); False for anything else, e.g. a parsing bug."""
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    return any((c.__module__ or "").split(".")[0] in _SDK_MODULES for c in type(exc).__mro__)
+
+
 def error_fields(exc: BaseException) -> dict[str, Any]:
     """The LLMResponse fields a backend sets for a failed call."""
     return {"error_kind": classify_error(exc), "retry_after_s": retry_after_s(exc)}

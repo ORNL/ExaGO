@@ -9,7 +9,7 @@ from typing import Optional
 from agentigrid.logging_setup import log_scope
 from agentigrid.backends.base import LLMBackend, LLMResponse
 from agentigrid.backends.json_extract import extract_json
-from agentigrid.backends.retry import error_fields
+from agentigrid.backends.retry import error_fields, is_provider_error
 from agentigrid.config import LLMConfig
 
 logger = logging.getLogger("agentigrid.backends.anthropic")
@@ -101,7 +101,10 @@ class AnthropicBackend(LLMBackend):
 
         except Exception as exc:
             error_msg = f"Anthropic API error: {exc}"
-            logger.error(error_msg)
+            if is_provider_error(exc):
+                logger.error(error_msg)
+            else:                            # a bug in our code: keep the traceback
+                logger.exception(error_msg)
             return LLMResponse(
                 raw_text=error_msg,
                 json_data=None,
