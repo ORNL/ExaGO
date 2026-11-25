@@ -64,9 +64,26 @@ def test_partial_response_objects_never_fail():
     json.dumps(ledger.to_dict())                        # no mock objects leak into the export
 
 
-def test_unknown_phase_rejected():
-    with pytest.raises(ValueError):
-        TokenLedger().record("planning", _resp(1, 1))
+def test_unknown_phase_counted_as_other(caplog):
+    ledger = TokenLedger()
+    ledger.record("search", _resp(10, 5))
+    with caplog.at_level("WARNING", logger="agentigrid.token_usage"):
+        ledger.record("planning", _resp(7, 3))                  # no exception after a paid call
+    assert [c["phase"] for c in ledger.calls] == ["search", "other"]
+    assert "Unknown token phase 'planning'" in caplog.text
+    assert ledger.total == 25 == sum(a["total_tokens"] for a in ledger.by_phase.values())
+
+
+def test_from_dict_unknown_phase_counted_as_other(caplog):
+    data = TokenLedger().to_dict()
+    data["per_call"] = [{"phase": "search", "prompt_tokens": 10, "completion_tokens": 5},
+                        {"phase": "planning", "prompt_tokens": 7, "completion_tokens": 3}]
+    with caplog.at_level("WARNING", logger="agentigrid.token_usage"):
+        ledger = TokenLedger.from_dict(data)
+    assert [c["phase"] for c in ledger.calls] == ["search", "other"]
+    assert "Unknown token phase 'planning'" in caplog.text
+    assert ledger.total == 25 == sum(a["total_tokens"] for a in ledger.by_phase.values())
+    assert ledger.by_phase["other"]["calls"] == 1
 
 
 def test_to_dict_round_trip():

@@ -7,9 +7,12 @@ inspected (journal ``token_usage`` block, console summary, report, GUI).
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from agentigrid.backends.base import LLMResponse
+
+logger = logging.getLogger("agentigrid.token_usage")
 
 # Phase names, in display order.
 #   objective_extraction  objectives read from the initial goal
@@ -55,11 +58,11 @@ class TokenLedger:
         *prompt_chars* is the length of system + user prompt (``None`` if the
         call site cannot provide it); ``completion_chars`` is the length of the
         response's ``raw_text``. Fields missing on *response* are recorded as
-        ``None``, so bookkeeping never fails on a partial response object.
+        ``None``, and an unknown *phase* is counted as "other" (with a warning),
+        so bookkeeping never fails after a paid call.
         """
         raw_text = getattr(response, "raw_text", None)
-        if phase not in PHASES:
-            raise ValueError(f"Unknown token phase '{phase}' (expected one of {PHASES})")
+        phase = _known_phase(phase)             # never raise after a paid call
         call = {
             "phase": phase,
             "iteration": iteration,
@@ -171,7 +174,7 @@ class TokenLedger:
         ledger = cls()
         for c in (data or {}).get("per_call", []):
             call = {
-                "phase": c.get("phase", "other"),
+                "phase": _known_phase(c.get("phase", "other")),
                 "iteration": c.get("iteration"),
                 "model": c.get("model"),
                 "backend": c.get("backend"),
@@ -236,6 +239,15 @@ class TokenLedger:
         if missing:
             text += f"; {missing} call{'s' if missing != 1 else ''} without usage data"
         return text
+
+
+def _known_phase(phase: Any) -> str:
+    """*phase* if it is one of :data:`PHASES`, else "other" (with a warning), so every
+    call is counted and the totals equal the sum of :attr:`TokenLedger.by_phase`."""
+    if phase in PHASES:
+        return phase
+    logger.warning("Unknown token phase %r (expected one of %s): counted as 'other'", phase, PHASES)
+    return "other"
 
 
 def _str_or_none(value: Any) -> Optional[str]:
