@@ -11,6 +11,8 @@ from typing import Any, Optional
 
 import yaml
 
+from agentigrid.gridkit_engine.criteria import DAMPING_METHODS
+
 logger = logging.getLogger("agentigrid.config")
 
 # ---------------------------------------------------------------------------
@@ -608,8 +610,8 @@ def _validate(cfg: AppConfig) -> None:
         )
 
     study, fault = cfg.gridkit.study, cfg.gridkit.fault
-    if cfg.gridkit.damping_method not in ("peak", "modal"):
-        raise ValueError(f"gridkit.damping_method must be 'peak' or 'modal', "
+    if cfg.gridkit.damping_method not in DAMPING_METHODS:
+        raise ValueError(f"gridkit.damping_method must be {' or '.join(repr(m) for m in DAMPING_METHODS)}, "
                          f"not '{cfg.gridkit.damping_method}'")
     if cfg.gridkit.final_voltage_window_s < 0 or cfg.gridkit.final_voltage_margin_pu < 0:
         raise ValueError("gridkit.final_voltage_window_s and final_voltage_margin_pu must be >= 0")

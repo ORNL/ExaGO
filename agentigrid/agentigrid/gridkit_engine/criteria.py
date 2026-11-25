@@ -122,7 +122,7 @@ def num(x: float, fmt: str, unit: str = "") -> str:
 
 
 def _series_after(t: Sequence[float], x: Sequence[float], t0: float) -> list[tuple[float, float]]:
-    return [(ti, xi) for ti, xi in zip(t, x) if ti >= t0]
+    return [(ti, xi) for ti, xi in zip(t, x, strict=True) if ti >= t0]
 
 
 def _unwrap_rad(x: Sequence[float]) -> list[float]:
@@ -238,7 +238,7 @@ def check_voltage_envelope(
     worst_margin, worst = math.inf, None
     for bus, v in vms.items():
         # The sample at the clearing time itself still holds the faulted value.
-        for ti, vi in ((ti, vi) for ti, vi in zip(t, v) if ti > clear_time_s + 1e-9):
+        for ti, vi in ((ti, vi) for ti, vi in zip(t, v, strict=True) if ti > clear_time_s + 1e-9):
             dt = ti - clear_time_s
             vmin = max(vm for ts, vm in envelope if dt >= ts)
             if vi - vmin < worst_margin:
@@ -357,7 +357,7 @@ def damping_ratio(t: Sequence[float], x: Sequence[float]) -> tuple[Optional[floa
     ln_a = [math.log(max(p, 1e-12)) for p in peaks]
     k_mean = sum(k) / len(k)
     a_mean = sum(ln_a) / len(ln_a)
-    slope = sum((ki - k_mean) * (ai - a_mean) for ki, ai in zip(k, ln_a)) / sum(
+    slope = sum((ki - k_mean) * (ai - a_mean) for ki, ai in zip(k, ln_a, strict=True)) / sum(
         (ki - k_mean) ** 2 for ki in k
     )
     d = -2.0 * slope  # two half cycles per cycle
@@ -399,7 +399,7 @@ def check_damping(
     worst: Optional[tuple[float, str]] = None
     unmeasured: list[str] = []
     for nm in names:
-        rel = [math.degrees(deltas[nm][i] - a) for i, a in zip(idx, avg)]
+        rel = [math.degrees(deltas[nm][i] - a) for i, a in zip(idx, avg, strict=True)]
         zeta, npk, largest = damping_ratio(tt, rel)
         if largest < min_amplitude_deg:
             continue  # settled: nothing to damp

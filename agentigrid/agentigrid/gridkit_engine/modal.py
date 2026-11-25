@@ -21,7 +21,7 @@ def matrix_pencil(y, dt, rel_sv_tol=1e-3, max_order=20):
     Z = np.vander(z, n, increasing=True).T
     amp = np.linalg.lstsq(Z, y.astype(complex), rcond=None)[0]
     modes = []
-    for l, a in zip(lam, amp):
+    for l, a in zip(lam, amp, strict=True):
         if l.imag <= 0:          # keep one of each conjugate pair
             continue
         w = abs(l)
