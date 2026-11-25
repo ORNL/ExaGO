@@ -67,5 +67,5 @@ def test_exago_journal_llm_settings(tmp_path: Path, monkeypatch, capsys):
     assert ledger.total_reasoning == 40 and ledger.calls_with_total_mismatch == 1
     out = capsys.readouterr().out
     assert out.count("LLM: openai test-model @ generativelanguage.googleapis.com") == 1
-    assert "(+ 40 reasoning = " in out
+    assert "prompt+completion (+40 reasoning)" in out
     assert SECRET not in out

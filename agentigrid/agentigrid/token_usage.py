@@ -93,7 +93,29 @@ class TokenLedger:
 
     @property
     def total(self) -> int:
+        """Prompt + completion tokens of all calls (journal ``total_tokens``).
+
+        It excludes reasoning tokens a provider reports outside ``completion_tokens``
+        (Gemini counts them only in its own ``total_tokens``); those are in
+        :attr:`total_reasoning` and :attr:`total_billable_output`. Reasoning a provider
+        counts inside ``completion_tokens`` (OpenAI) is included. Journals and the
+        AgentiGrid 4 sweep numbers use this definition: do not change it.
+        """
         return self.total_prompt + self.total_completion
+
+    @property
+    def reasoning_outside_completion(self) -> int:
+        """Reasoning tokens not included in :attr:`total` (Gemini-style reporting)."""
+        return self.total_billable_output - self.total_completion
+
+    def total_label(self) -> str:
+        """``"12,198 prompt+completion"``, plus ``" (+R reasoning)"`` for reasoning
+        tokens counted outside completion (not in :attr:`total`)."""
+        text = f"{self.total:,} prompt+completion"
+        extra = self.reasoning_outside_completion
+        if extra:
+            text += f" (+{extra:,} reasoning)"
+        return text
 
     @property
     def total_prompt_chars(self) -> int:
@@ -225,13 +247,9 @@ class TokenLedger:
     def summary_text(self) -> str:
         """One line for the console summary."""
         n = len(self.calls)
-        completion = f"{self.total_completion:,} completion"
-        extra = self.total_billable_output - self.total_completion
-        if extra:      # reasoning counted outside completion_tokens (e.g. Gemini)
-            completion += f" (+ {extra:,} reasoning = {self.total_billable_output:,} billable output)"
         text = (
-            f"Tokens: {self.total:,} total ({self.total_prompt:,} prompt + {completion}) "
-            f"in {n} LLM call{'s' if n != 1 else ''}"
+            f"Tokens: {self.total_label()} ({self.total_prompt:,} prompt + {self.total_completion:,} "
+            f"completion) in {n} LLM call{'s' if n != 1 else ''}"
         )
         if self.calls:
             text += f"; {self.breakdown_text()}"

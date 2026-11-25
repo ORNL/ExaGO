@@ -147,7 +147,7 @@ class TestExagoSessionTokens:
     def test_summary_line_printed(self, tmp_path: Path, capsys):
         _run_session(tmp_path)
         out = capsys.readouterr().out
-        assert ("Tokens: 1,630 total (1,130 prompt + 500 completion) in 7 LLM calls; "
+        assert ("Tokens: 1,630 prompt+completion (1,130 prompt + 500 completion) in 7 LLM calls; "
                 "objective extraction 70, search 490, analysis 1,000, steering 70") in out
 
 
@@ -272,7 +272,7 @@ def test_report_token_line_shows_breakdown(tmp_path: Path):
     session.total_prompt_tokens = session.token_ledger.total_prompt
     session.total_completion_tokens = session.token_ledger.total_completion
     assert report_generator._token_usage_line(session) == (
-        "Token usage: 1,600 in 2 LLM calls (search 1,200, analysis 400)"
+        "Token usage: 1,600 prompt+completion in 2 LLM calls (search 1,200, analysis 400)"
     )
     session.total_prompt_tokens = session.total_completion_tokens = 0
     assert report_generator._token_usage_line(session) == "Token usage: N/A"

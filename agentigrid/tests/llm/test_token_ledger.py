@@ -114,10 +114,10 @@ def test_from_dict_empty_and_legacy():
 def test_summary_text_format():
     text = _ledger().summary_text()
     assert text == (
-        "Tokens: 890 total (570 prompt + 320 completion) in 4 LLM calls; "
+        "Tokens: 890 prompt+completion (570 prompt + 320 completion) in 4 LLM calls; "
         "objective extraction 70, search 320, analysis 500"
     )
-    assert TokenLedger().summary_text() == "Tokens: 0 total (0 prompt + 0 completion) in 0 LLM calls"
+    assert TokenLedger().summary_text() == "Tokens: 0 prompt+completion (0 prompt + 0 completion) in 0 LLM calls"
 
 
 def test_phase_names():

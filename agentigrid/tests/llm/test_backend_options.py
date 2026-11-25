@@ -335,13 +335,17 @@ def test_ledger_aggregates_new_fields():
     assert ledger.total_completion == 55 and ledger.total == 145 + 55
 
 
-def test_summary_shows_billable_output_when_different():
+def test_summary_shows_reasoning_outside_completion():
     ledger = TokenLedger()
-    ledger.record("search", _r(15, 5, 45, 65, True), 1)
-    assert "5 completion (+ 45 reasoning = 50 billable output)" in ledger.summary_text()
+    ledger.record("search", _r(15, 5, 45, 65, True), 1)              # Gemini: 45 outside completion
+    assert ledger.summary_text().startswith("Tokens: 20 prompt+completion (+45 reasoning) (15 prompt + 5 completion)")
     plain = TokenLedger()
-    plain.record("search", _r(100, 40, 30, 140), 1)
-    assert "billable" not in plain.summary_text()
+    plain.record("search", _r(100, 40, 30, 140), 1)                  # OpenAI: 30 inside completion
+    assert plain.total_reasoning == 30 and "reasoning" not in plain.summary_text()
+    mixed = TokenLedger()
+    mixed.record("search", _r(15, 5, 45, 65, True), 1)
+    mixed.record("search", _r(100, 40, 30, 140), 2)
+    assert mixed.total_label() == "160 prompt+completion (+45 reasoning)"   # not +75
 
 
 def test_old_ledger_without_usage_details_loads():

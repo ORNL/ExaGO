@@ -42,15 +42,17 @@ except ModuleNotFoundError:
 
 
 def _token_usage_line(session: SearchSession) -> str:
-    """'Token usage: <total> in <n> LLM calls (<per-phase breakdown>)' for the summary."""
+    """'Token usage: <N> prompt+completion in <n> LLM calls (<per-phase breakdown>)' for the summary
+    (reasoning tokens counted outside completion are appended as '(+R reasoning)')."""
     total = session.total_prompt_tokens + session.total_completion_tokens
     if total <= 0:
         return "Token usage: N/A"
     ledger = getattr(session, "token_ledger", None)
     if ledger is not None and len(ledger) and ledger.total == total:
         n = len(ledger)
-        return f"Token usage: {total:,} in {n} LLM call{'s' if n != 1 else ''} ({ledger.breakdown_text()})"
-    return f"Token usage: {total:,}"
+        return (f"Token usage: {ledger.total_label()} in {n} LLM call{'s' if n != 1 else ''} "
+                f"({ledger.breakdown_text()})")
+    return f"Token usage: {total:,} prompt+completion"
 
 
 logger = logging.getLogger("agentigrid.launcher.report_generator")
