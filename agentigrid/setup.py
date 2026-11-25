@@ -21,6 +21,8 @@ setup(
         "openai>=1.0,<2",
         "anthropic>=0.30,<1",
         "ollama>=0.3,<1",
+        "numpy>=1.24",
+        "scipy>=1.10",
     ],
     entry_points={
         "console_scripts": [
