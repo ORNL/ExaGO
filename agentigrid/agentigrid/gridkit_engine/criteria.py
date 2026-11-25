@@ -160,6 +160,7 @@ def check_angle_stability(
     The steady-state spread is reported for information only.
     """
     src = "M-14B G.2.2 (angle limit: AgentiGrid default)"
+    # Never runs after a failed steady state: GridkitAgentLoop only screens from a start whose no-fault run passed check_steady_state (_Start.ok; run() ends with base_case_failed otherwise).
     if len(deltas) < 2:
         return CheckResult("angle_stability", "not_tested", None, limit_deg,
                            "fewer than two machine angles recorded", src)
