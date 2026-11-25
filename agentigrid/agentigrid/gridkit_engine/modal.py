@@ -40,11 +40,18 @@ def damping_ratio_modal(t, x, t_start, f_min=0.1, f_max=2.0, fs=20.0, min_amplit
     x = np.asarray(x, float)
     k = t >= t_start
     tt, xx = t[k], x[k]
+    # Repeated time stamps (GridKit writes the event times twice) would make the
+    # median step zero: keep the first sample of each time.
+    tt, first = np.unique(tt, return_index=True)
+    xx = xx[first]
     if len(tt) < 10:
         return None, []
-    step = max(1, int(round((1.0 / fs) / np.median(np.diff(tt)))))
+    dt0 = float(np.median(np.diff(tt)))
+    if not dt0 > 0:
+        return None, []
+    step = max(1, int(round((1.0 / fs) / dt0)))
     xx = xx[::step] - xx[::step].mean()
-    dt = np.median(np.diff(tt)) * step
+    dt = dt0 * step
     back = 0.0 if t_ref is None else max(0.0, tt[0] - t_ref)
     # Largest swing actually seen after t_ref (or t_start): a mode referred back
     # to t_ref can never be larger than that (caps spurious, heavily damped modes).

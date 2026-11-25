@@ -301,6 +301,27 @@ def test_modal_undetermined_asks_for_30_s(monkeypatch):
     assert r.data["undetermined"]
 
 
+def test_modal_repeated_time_stamps(monkeypatch):
+    """Duplicated rows (event times written twice, or every row twice) give the same
+    finite result as the clean series instead of a zero median step (OverflowError)."""
+    pytest.importorskip("numpy")
+    from agentigrid.gridkit_engine import modal
+    x = [math.degrees(_mode(t, 0.05, 0.7, 4.0)) for t in T]
+    ref, _ = modal.damping_ratio_modal(T, x, 1.0, t_ref=CLEAR)
+    assert ref == pytest.approx(0.05, abs=0.005)
+
+    i_f, i_c = T.index(1.0), min(range(len(T)), key=lambda i: abs(T[i] - CLEAR))
+    t_ev = T[:i_f] + [T[i_f]] + T[i_f:i_c] + [T[i_c]] + T[i_c:]       # fault and clearing rows twice
+    x_ev = x[:i_f] + [x[i_f]] + x[i_f:i_c] + [x[i_c]] + x[i_c:]
+    t_all = [t for t in T for _ in (0, 1)]                              # every row twice
+    x_all = [v for v in x for _ in (0, 1)]
+    for tt, xx in ((t_ev, x_ev), (t_all, x_all)):
+        z, modes = modal.damping_ratio_modal(tt, xx, 1.0, t_ref=CLEAR)
+        assert z == pytest.approx(ref, rel=1e-9) and modes
+
+    assert modal.damping_ratio_modal([1.0] * 50, list(range(50)), 0.0) == (None, [])
+
+
 def test_modal_one_b_mode_confirms_only_one_a_mode(monkeypatch):
     """Two window-a modes near one window-b mode: only the closer one is confirmed,
     the other stays unconfirmed (and, below the threshold, makes the result undetermined)."""
