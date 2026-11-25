@@ -98,7 +98,9 @@ class GridkitAgentLoop:
         self._sleep: Callable[[float], None] = time.sleep   # retry waits (tests replace it)
         self._screen_cache: dict[str, tuple[int, str]] = {}
         self._starts: dict[str, _Start] = {}     # by FaultStudy.start_from
-        self._ssc_cache: dict[int, dict] = {}    # Ssc of all buses per voltage level, per start case
+        # Ssc of all buses per voltage level, per start (keyed by its label, which names the
+        # case or ExaGO solution it was built from; reset at every session start).
+        self._ssc_cache: dict[str, dict] = {}
 
     def _print(self, msg: str) -> None:
         """Print progress message unless quiet mode is enabled."""
@@ -167,6 +169,7 @@ class GridkitAgentLoop:
                        _exago_label(steady_state) if steady_state else "the GridKit case's operating point",
                        base_ok, base_text)
         self._starts = {"case": start}
+        self._ssc_cache = {}
         if steady_state is not None:
             self._starts["latest_steady_state"] = start
         if not base_ok:
@@ -408,7 +411,7 @@ class GridkitAgentLoop:
                 with log_scope(logger, "short-circuit strength", iteration=iteration, buses=len(outcomes)):
                     ssc_info = ssc.strength(work, [o.bus for o in outcomes],
                                             self._settings.weak_bus_percentile,
-                                            self._ssc_cache.setdefault(id(start.case), {}))
+                                            self._ssc_cache.setdefault(start.label, {}))
                 text += "\n\n" + "\n".join(ssc.report_lines(ssc_info))
             if len(outcomes) <= _FULL_TABLE_MAX:
                 text += "\n\n" + _outcome_table(outcomes, self._settings.check_options)
