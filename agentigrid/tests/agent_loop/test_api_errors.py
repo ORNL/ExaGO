@@ -37,7 +37,7 @@ def _err(text: str, kind: str) -> LLMResponse:
     return LLMResponse(text, None, text, "test-model", "test", None, None, error_kind=kind)
 
 
-def _run(tmp_path: Path, responses: list[LLMResponse]):
+def _run(tmp_path: Path, responses: list[LLMResponse], quiet: bool = True):
     cfg = _make_config(tmp_path, max_iterations=6)
     cfg = replace(cfg, llm=replace(cfg.llm, retry=RetryConfig(5, (10, 30, 60, 120, 240))))
     backend = MockBackend(responses)
@@ -46,7 +46,7 @@ def _run(tmp_path: Path, responses: list[LLMResponse]):
         executor = MagicMock()
         executor.run.return_value = _make_sim_result(stdout=_sample_stdout(), success=True)
         exec_cls.return_value = executor
-        controller = AgentLoopController(cfg, quiet=True)
+        controller = AgentLoopController(cfg, quiet=quiet)
         waits: list[float] = []
         controller._sleep = waits.append
         session = controller.run(BASE_CASE, "Scale loads a little")
@@ -149,6 +149,16 @@ def test_retry_notices_respect_quiet_session_end_does_not(tmp_path, capsys, capl
     assert "[LLM] Session ended: api_error after 6 attempt(s)" in out  # printed even with --quiet
     ended = [r for r in caplog.records if "Session ended" in r.getMessage()]
     assert len(ended) == 1 and ended[0].levelname == "WARNING"
+
+
+def test_retry_notices_printed_once_without_quiet(tmp_path, capsys, caplog):
+    with caplog.at_level("DEBUG", logger="agentigrid"):
+        _run(tmp_path, [_objectives_response(), _err(E503, "transient"),
+                        _make_llm_response(MODIFY), _make_llm_response(COMPLETE)], quiet=False)
+    out = capsys.readouterr().out
+    assert out.count("retry in 10 s") == 1                             # printed
+    notices = [r for r in caplog.records if "retry in" in r.getMessage()]
+    assert len(notices) == 1 and notices[0].levelname == "DEBUG"       # log file only, not the console
 
 
 def test_real_parse_failures_are_not_completed(tmp_path):

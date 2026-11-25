@@ -876,7 +876,8 @@ class AgentLoopController:
                 msg = (f"[LLM] {phase} call failed ({event['error_kind']}): {event['error'][:160]} "
                        f"- retry in {event['wait_s']:g} s")
                 self._print(msg)                    # not with --quiet
-                logger.info(msg)
+                # Printed already: DEBUG reaches the log file but not the console (INFO).
+                (logger.info if self._quiet else logger.debug)(msg)
 
         response = complete_with_retry(self._backend, system, user, self._config.llm.retry,
                                        on_event=on_event, sleep=self._sleep)

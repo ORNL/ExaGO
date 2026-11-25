@@ -173,3 +173,15 @@ def test_retry_notices_respect_quiet_session_end_does_not(tmp_path, capsys, capl
     assert "[LLM] Session ended: api_error after 6 attempt(s)" in out  # printed even with --quiet
     ended = [r for r in caplog.records if "Session ended" in r.getMessage()]
     assert len(ended) == 1 and ended[0].levelname == "WARNING"
+
+
+def test_retry_notices_printed_once_without_quiet(tmp_path, capsys, caplog):
+    loop, backend = _loop(tmp_path, [_err(E503, "transient"), {"action": "complete", "summary": "s", "details": "d"}])
+    loop._quiet = False
+    loop._sleep = lambda s: None
+    with caplog.at_level("DEBUG", logger="agentigrid"):
+        loop.run(IEEE39, "anything")
+    out = capsys.readouterr().out
+    assert out.count("retry in 10 s") == 1                             # printed
+    notices = [r for r in caplog.records if "retry in" in r.getMessage()]
+    assert len(notices) == 1 and notices[0].levelname == "DEBUG"       # log file only, not the console

@@ -242,9 +242,9 @@ class GridkitAgentLoop:
             if event["outcome"] == "retry":
                 msg = (f"[LLM] search call failed ({event['error_kind']}): {event['error'][:160]} "
                        f"- retry in {event['wait_s']:g} s")
-                self._print(msg)                    # not with --quiet (then _print logs it)
+                self._print(msg)                    # not with --quiet (then _print logs it at INFO)
                 if not self._quiet:
-                    logger.info(msg)
+                    logger.debug(msg)               # printed already: log file only, not twice on the console
 
         response = complete_with_retry(self._backend, system, user, self._cfg.llm.retry,
                                        on_event=on_event, sleep=self._sleep)
