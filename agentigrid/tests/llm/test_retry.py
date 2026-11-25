@@ -218,6 +218,13 @@ def test_per_day_quota_stops_at_once():
     assert backend.calls == 1 and waits == []
 
 
+def test_429_inside_an_id_is_not_a_rate_limit():
+    """The text rule needs "429" as a word: a request id like req_a4290f plus quota
+    wording ("billing") is not a 429 quota error."""
+    assert classify_error(ValueError("request req_a4290f failed: check your billing settings")) == FATAL
+    assert classify_error(ValueError("Error code: 429 - check your billing settings")) == QUOTA
+
+
 def test_real_openai_rate_limit_error_with_gemini_body():
     """The SDK exception the openai backend really gets (str(exc) carries the body)."""
     httpx = pytest.importorskip("httpx")

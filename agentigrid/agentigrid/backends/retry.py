@@ -60,6 +60,8 @@ _UNIT_S = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0, None: 1.0}
 def _seconds(duration: str) -> float:
     """'1m30s' -> 90.0, '27.5s' -> 27.5, '20' -> 20.0."""
     return sum(float(n) * _UNIT_S[u or None] for n, u in _PART_RE.findall(duration) if n.strip("."))
+# "429" as a word ("Error code: 429"), not inside an id such as "req_a4290f".
+_HTTP_429_RE = re.compile(r"\b429\b")
 _TRANSIENT_WORDS = ("timed out", "timeout", "connection error", "connection refused",
                     "connection reset", "cannot connect", "temporarily unavailable",
                     "server disconnected", "remote end closed")
@@ -104,7 +106,7 @@ def classify_error(exc: BaseException) -> str:
     text = str(exc).lower()
     status = _status(exc)
     names = " ".join(c.__name__.lower() for c in type(exc).__mro__)
-    if (status == 429 or "429" in text) and any(w in text for w in _QUOTA_WORDS):
+    if (status == 429 or _HTTP_429_RE.search(text)) and any(w in text for w in _QUOTA_WORDS):
         return _quota_or_rate_limit(text, retry_after_s(exc))
     if status is not None and (status >= 500 or status in (408, 429)):
         return TRANSIENT
