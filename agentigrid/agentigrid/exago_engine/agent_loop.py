@@ -51,6 +51,7 @@ from agentigrid.exago_parsers import (
     results_summary_for_app,
 )
 from agentigrid.exago_parsers.matpower_model import MATNetwork
+from agentigrid.rag import build_query, build_retriever, resolve_query_mode
 from agentigrid.exago_parsers.opflow_results import OPFLOWResult
 from agentigrid.exago_engine import topology
 from agentigrid.exago_engine import contingency
@@ -765,6 +766,14 @@ class SearchSession:
     benchmark_result: Optional[dict] = None
 
 
+
+# Placed above retrieved references: corpus examples come from other networks.
+RAG_REFERENCE_CAUTION = (
+    "These references come from other networks and describe bus numbers instead of giving them. "
+    "Take every bus, branch and generator number from THIS network's data, never from a reference, "
+    "and never write angle brackets or placeholder words in a response."
+)
+
 class AgentLoopController:
     """Drives the iterative LLM-driven search."""
 
@@ -799,8 +808,25 @@ class AgentLoopController:
     ) -> None:
         self._config = config
         self._backend: LLMBackend = create_backend(config.llm)
+        # Optional retrieval grounding (off by default). AGENTIGRID_RAG_MODE is one
+        # of off | basic | corrective (AGENTIGRID_RAG=1/0 still maps to basic/off).
+        # Every mode exposes the same .enabled / .retrieve() surface, and "off"
+        # needs none of the optional RAG dependencies.
+        self._retriever = build_retriever(
+            host=os.environ.get("OLLAMA_HOST") or getattr(config.llm, "ollama_host", None) or "http://localhost:11434",
+        )
+        # A run that asked for retrieval must not silently run without it: stop
+        # here (RAGUnavailable) if the store is missing/empty or the embedder is down.
+        _preflight = getattr(self._retriever, "preflight", None)
+        if callable(_preflight):
+            _preflight()
+        # Query mode (AGENTIGRID_RAG_QUERY = goal | state | error) is resolved once
+        # per run; an unknown value raises here rather than silently running
+        # another configuration.
+        self._rag_query_mode = resolve_query_mode()
         self._executor = SimulationExecutor(config.exago, config.output)
         self._journal = SearchJournal()
+        self._journal.rag_log = []   # one record per retrieval (RAG on only)
         self._quiet = quiet
         self._on_iteration = on_iteration
         self._on_phase = on_phase
@@ -1402,9 +1428,32 @@ class AgentLoopController:
             steering_directives=self._active_steering_directives or None,
             current_iteration=iteration,
         )
+        _feedback_for_query = self._error_feedback
         self._error_feedback = None  # consumed
 
+        # Retrieval grounds the generation step only; the deterministic validator
+        # never sees it. A failed or empty retrieval leaves the prompt unchanged.
+        # The query is the goal text (default) or, with AGENTIGRID_RAG_QUERY=state /
+        # error, built from the latest solve and the previous iteration's errors.
+        _retrieved = ""
+        if self._retriever.enabled:
+            _query = build_query(self._rag_query_mode, goal, self._latest_opflow, _feedback_for_query)
+            _retrieved = self._retriever.retrieve(_query)
+            self._log_retrieval(iteration, _query, _retrieved)
+        if _retrieved:
+            user_prompt = (
+                "=== Section B: Reference Material (retrieved) ===\n"
+                f"{RAG_REFERENCE_CAUTION}\n"
+                f"{_retrieved}\n\n{user_prompt}"
+            )
+
         if self._on_phase:
+            if self._retriever.enabled:
+                # "rag_retrieved:<refs>:<top score>" feeds the UI's grounding caption
+                # (0 refs under corrective = context withheld).
+                _scores = [float(x) for x in re.findall(r"score (\d+\.\d+)", _retrieved)]
+                _top = max(_scores) if _scores else 0.0
+                self._on_phase(iteration, f"rag_retrieved:{_retrieved.count('[ref ')}:{_top:.2f}")
             self._on_phase(iteration, "llm_request")
 
         # A terminal API error raises LLMCallFailed: only a received answer gets here,
@@ -4922,9 +4971,46 @@ class AgentLoopController:
     # Finalization
     # ------------------------------------------------------------------
 
+    def _log_retrieval(self, iteration: int, query: str, injected: str) -> None:
+        """Journal what retrieval did in this iteration (rag_log): the query, the
+        scored hits, the grader's verdict and action, and a hash of the injected
+        block, so runs can be audited per iteration."""
+        if not getattr(self._retriever, "enabled", False):
+            return
+        try:
+            import hashlib
+            rec = {
+                "iteration": iteration,
+                "query_mode": self._rag_query_mode,
+                "query": query,
+                "query_sha256": hashlib.sha256(query.encode("utf-8")).hexdigest(),
+                "injected_chars": len(injected or ""),
+                "injected_sha256": hashlib.sha256(injected.encode("utf-8")).hexdigest() if injected else None,
+                **dict(getattr(self._retriever, "last_trace", {}) or {}),
+            }
+            self._journal.rag_log.append(rec)
+        except Exception as exc:  # telemetry must never break a run
+            logger.warning("Could not journal retrieval for iteration %s: %s", iteration, exc)
+
     @log_scope(logger, "ExaGO finalization")
     def _finalize(self, session: SearchSession, elapsed_seconds: float) -> None:
         """Print summary and save journal."""
+        _rag_enabled = self._retriever.enabled
+        self._journal.rag_enabled = _rag_enabled
+        try:
+            from agentigrid.rag import resolve_rag_mode, resolve_crag_grader
+            _desc = getattr(self._retriever, "describe", None)
+            _mode = resolve_rag_mode()
+            self._journal.rag_config = {
+                **(_desc() if callable(_desc) else {}),
+                "mode_env": _mode,
+                "query_mode": self._rag_query_mode,
+            }
+            if _mode == "corrective":   # the grader only exists in corrective mode
+                self._journal.rag_config["grader_env"] = resolve_crag_grader()
+        except Exception:
+            self._journal.rag_config = None
+        session.rag_enabled = _rag_enabled
         tokens_before_analysis = self._ledger.total
         if self._pending_explore is not None:      # session ended right after an explore
             dirs, best = self._pending_explore

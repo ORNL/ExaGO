@@ -4,6 +4,18 @@ This document records significant changes made by Claude Code, grouped by the pr
 
 ---
 
+## Optional retrieval grounding (RAG) (2026-11-26)
+
+Added the `agentigrid/rag/` package and wired it into the ExaGO agent loop. Off by default.
+
+- Modes `off` / `basic` / `corrective` (`AGENTIGRID_RAG_MODE`); retrieval query from the goal, the solver state or the last command errors (`AGENTIGRID_RAG_QUERY`); corrective refinement `strips` / `whole` (`AGENTIGRID_CRAG_REFINE`).
+- With RAG on, the run stops at start if the vector store is missing or empty or the embedding server does not answer.
+- The journal records `rag_config` (settings, corpus hash, embedding model) and `rag_log` (one record per retrieval).
+- Launcher: RAG selector under Advanced. Corpus tools in `rag/tools/`; `rag/corpus/` is a small demo corpus.
+- Tests in `tests/rag/`; usage in `docs/RAG_USAGE.md`.
+
+---
+
 ## C.2/C.3 corrections — metric gating, summary aggregation, predicate audit, sweep dedup (2026-06-23)
 
 Four contained fixes from the prompt-13/15/17 runs. No capability behavior changed (capacity numbers, dispatch results, metric/predicate definitions, and the C.1 binding identifier are untouched) — only how results are gated, summarized, audited, and deduplicated.
