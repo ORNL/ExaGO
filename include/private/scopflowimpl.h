@@ -115,9 +115,9 @@ struct _p_SCOPFLOW {
 
   PetscBool setupcalled; /* SCOPFLOWSetUp called? */
 
-  PetscBool converged; /* Convergence status */
-  PetscInt numiter;    /* Number of iterations */
-  PetscReal tolerance; /* Tolerance for SCOPFLOW */
+  PetscBool converged;        /* Convergence status */
+  PetscInt number_iterations; /* Number of iterations */
+  PetscReal tolerance;        /* Tolerance for SCOPFLOW */
 
   char netfile[PETSC_MAX_PATH_LEN]; /* Network data file */
   char pload[PETSC_MAX_PATH_LEN];   /* Pload data file */

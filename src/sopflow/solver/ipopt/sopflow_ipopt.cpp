@@ -268,7 +268,7 @@ Bool SOPFLOWSolverMonitor_IPOPT(ipindex alg_mod, ipindex iter_count,
   (void)ls_trials;
 
   SOPFLOW sopflow = (SOPFLOW)user_data;
-  sopflow->numiter = iter_count;
+  sopflow->number_iterations = iter_count;
   return 1;
 }
 

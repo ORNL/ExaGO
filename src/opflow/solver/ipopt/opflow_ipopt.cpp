@@ -367,7 +367,7 @@ Bool OPFLOWSolverMonitor_IPOPT(ipindex alg_mod, ipindex iter_count,
   (void)alpha_pr;
   (void)ls_trials;
   OPFLOW opflow = (OPFLOW)user_data;
-  opflow->numits = iter_count;
+  opflow->number_iterations = iter_count;
   return 1;
 }
 

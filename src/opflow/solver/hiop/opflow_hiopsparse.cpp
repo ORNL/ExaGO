@@ -589,7 +589,7 @@ bool OPFLOWHIOPSPARSEInterface::iterate_callback(
   (void)alpha_pr;
   (void)ls_trials;
 
-  opflow->numits = iter;
+  opflow->number_iterations = iter;
   return true;
 }
 

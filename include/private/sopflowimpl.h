@@ -123,9 +123,9 @@ struct _p_SOPFLOW {
 
   PetscBool setupcalled; /* SOPFLOWSetUp called? */
 
-  PetscBool converged; /* Convergence status */
-  PetscInt numiter;    /* Number of iterations */
-  PetscReal tolerance; /* Tolerance for SOPFLOW */
+  PetscBool converged;        /* Convergence status */
+  PetscInt number_iterations; /* Number of iterations */
+  PetscReal tolerance;        /* Tolerance for SOPFLOW */
 
   char netfile[PETSC_MAX_PATH_LEN]; /* Network data file */
   char ctgfile[PETSC_MAX_PATH_LEN]; /* Contingency data file */

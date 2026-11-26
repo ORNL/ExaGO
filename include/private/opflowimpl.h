@@ -252,7 +252,7 @@ struct _p_OPFLOW {
 
   PetscBool has_powersetpoint; /* Use real power set-point */
 
-  PetscInt numits; /* Number of solver iterations */
+  PetscInt number_iterations; /* Number of solver iterations */
 
   PetscInt nlinekvmon;    /* Number of line kv levels to monitor */
   PetscScalar *linekvmon; /* Line kv levels to monitor */
