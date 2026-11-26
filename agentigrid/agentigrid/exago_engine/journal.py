@@ -1144,6 +1144,12 @@ class SearchJournal:
             data["analysis_error"] = self.analysis_error
         if self.llm_events:
             data["llm_events"] = self.llm_events
+        if getattr(self, "rag_enabled", None) is not None:
+            data["rag_enabled"] = self.rag_enabled
+        if getattr(self, "rag_config", None) is not None:
+            data["rag_config"] = self.rag_config
+        if getattr(self, "rag_log", None):
+            data["rag_log"] = self.rag_log
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info("Journal exported to %s (%d entries)", path, len(self._entries))
 

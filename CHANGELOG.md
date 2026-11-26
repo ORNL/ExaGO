@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `llm.temperature: null` (no temperature sent); usage details per call (reasoning tokens, provider
   total, billable output; Gemini's thinking tokens derived from `total_tokens`); every journal
   records the run's `llm_settings` (incl. package versions and the Ollama model digest).
+- Optional retrieval grounding (RAG), off by default: before each LLM proposal, reference
+  material from a local vector store can be added to the prompt (`AGENTIGRID_RAG_MODE=basic` or
+  `corrective`; query from the goal, the solver state or the last errors via
+  `AGENTIGRID_RAG_QUERY`). A run with RAG on refuses to start if the store or the embedding
+  server is unavailable. The journal records the RAG settings and corpus hash (`rag_config`) and
+  each retrieval (`rag_log`). Corpus tools are in `agentigrid/rag/tools/`; `agentigrid/rag/corpus/`
+  is a small demo corpus. See `agentigrid/docs/RAG_USAGE.md`.
 
 ## [2.1]
 

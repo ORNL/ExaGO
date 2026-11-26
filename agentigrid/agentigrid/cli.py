@@ -418,11 +418,22 @@ def exit_for_termination(termination: str) -> None:
         sys.exit(1)
 
 
+def _exago_controller(cfg: AppConfig, quiet: bool):
+    """Create the ExaGO agent loop; exit 1 with a clear message when retrieval
+    (RAG) was requested but cannot work."""
+    from agentigrid.exago_engine.agent_loop import AgentLoopController
+    from agentigrid.rag import RAGUnavailable
+
+    try:
+        return AgentLoopController(cfg, quiet=quiet)
+    except RAGUnavailable as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
+
+
 def run_search(cfg: AppConfig, goal: str, quiet: bool = False) -> None:
     """Run the LLM-driven search loop."""
-    from agentigrid.exago_engine.agent_loop import AgentLoopController
-
-    controller = AgentLoopController(cfg, quiet=quiet)
+    controller = _exago_controller(cfg, quiet)
 
     # Start interactive steering listener if running in a TTY
     if sys.stdin.isatty():
@@ -594,8 +605,7 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(1)
         if not quiet:
             print(f"Resuming session from: {resume_dir}")
-        from agentigrid.exago_engine.agent_loop import AgentLoopController
-        controller = AgentLoopController(cfg, quiet=quiet)
+        controller = _exago_controller(cfg, quiet)
         if sys.stdin.isatty():
             _start_stdin_listener(controller)
         session = controller.resume_from(resume_dir)

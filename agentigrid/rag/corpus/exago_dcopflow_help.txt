@@ -1,0 +1,25 @@
+[source: exago dcopflow --help | binary: dcopflow | version: ExaGO 2.0.0 built on Sep  5 2026 | harvested: 2026-09-07 | auto-generated, review before trusting]
+dcopflow: ExaGO application. Version ExaGO 2.0.0 built on Sep  5 2026. Invoked as `dcopflow <options>`. See the option chunks below for flags.
+
+[source: exago dcopflow --help | binary: dcopflow | version: ExaGO 2.0.0 built on Sep  5 2026 | harvested: 2026-09-07 | auto-generated, review before trusting]
+ExaGO 2.0.0 built on Sep  5 2026
+
+[source: exago dcopflow --help | binary: dcopflow | version: ExaGO 2.0.0 built on Sep  5 2026 | harvested: 2026-09-07 | auto-generated, review before trusting]
+Arguments for %s:
+	-help
+		Print help message (type: flag)
+
+[source: exago dcopflow --help | binary: dcopflow | version: ExaGO 2.0.0 built on Sep  5 2026 | harvested: 2026-09-07 | auto-generated, review before trusting]
+	-version
+		Print version information (type: flag)
+
+[source: exago dcopflow --help | binary: dcopflow | version: ExaGO 2.0.0 built on Sep  5 2026 | harvested: 2026-09-07 | auto-generated, review before trusting]
+	-config
+		Print configuration options used to build ExaGO (type: flag)
+
+[source: exago dcopflow --help | binary: dcopflow | version: ExaGO 2.0.0 built on Sep  5 2026 | harvested: 2026-09-07 | auto-generated, review before trusting]
+	-options_file
+		Path to options file used to load additional ExaGO configuration options (type: flag)
+
+[source: exago dcopflow --help | binary: dcopflow | version: ExaGO 2.0.0 built on Sep  5 2026 | harvested: 2026-09-07 | auto-generated, review before trusting]
+Please enter a valid application name.
