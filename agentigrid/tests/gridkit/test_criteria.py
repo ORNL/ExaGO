@@ -67,8 +67,10 @@ class TestDampingRatio:
 
 class TestAngleStability:
     def test_within_limit(self):
+        # 100 deg apart in steady state, no change: passes with 0 deg change
         r = c.check_angle_stability(T15, {"a": _flat(0.0), "b": _flat(math.radians(100))})
-        assert r.status == "pass" and r.value == pytest.approx(100)
+        assert r.status == "pass" and r.value == pytest.approx(0)
+        assert r.data["initial_spread_deg"] == pytest.approx(100)
 
     def test_loss_of_synchronism(self):
         slip = [math.radians(20 * ti) for ti in T15]  # 300 deg by 15 s

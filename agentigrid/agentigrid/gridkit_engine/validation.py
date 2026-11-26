@@ -100,13 +100,13 @@ def validate_fault_study(
     if study.clearing_cycles <= 0 or study.margin_cycles < 0:
         errors.append("clearing_cycles must be positive and margin_cycles not negative")
     if clear >= study.tmax_s:
-        errors.append(f"Fault clears at {clear:.3f} s, not before tmax_s = {study.tmax_s} s")
+        errors.append(f"Fault clears at {criteria.num(clear, '.3f', ' s')}, not before tmax_s = {study.tmax_s} s")
     if study.dt_monitor_s <= 0:
         errors.append("dt_monitor_s must be positive")
     elif study.dt_monitor_s > duration / 2:
         warnings.append(
             f"dt_monitor_s = {study.dt_monitor_s} s records fewer than two points during the "
-            f"{duration:.3f} s fault"
+            f"{criteria.num(duration, '.3f', ' s')} fault"
         )
 
     unknown = sorted(set(study.checks) - set(CHECKS))

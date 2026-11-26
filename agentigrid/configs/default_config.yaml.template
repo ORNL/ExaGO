@@ -38,8 +38,24 @@ llm:
   ollama_host: "http://localhost:11434"
   ollama_cloud_host: null
   # Generation parameters
-  temperature: 0.3
+  temperature: 0.3              # null: no temperature is sent (some reasoning models reject it)
   max_tokens: 4096
+  # Reasoning effort, sent only when set: reasoning_effort for openai (incl. Gemini:
+  # low|medium|high), think for ollama ("none" -> off); not supported for anthropic.
+  # null: nothing is sent, the provider default applies.
+  reasoning_effort: null
+  # Retries of transient API errors (HTTP 5xx, timeouts, connection errors, 429 rate
+  # limits that are not quota exhaustion), logged in the journal. Quota exhaustion is not
+  # retried (session ends "quota_exhausted", exit 4); other API errors end it "api_error" (exit 3).
+  retry:
+    max_retries: 5
+    backoff_s: [10, 30, 60, 120, 240]   # wait before retry 1, 2, ...; the last value repeats
+  # Gemini via Google's OpenAI-compatible endpoint
+  # backend: "openai"
+  # model: "gemini-3.8-flash"
+  # openai_base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  # api_key_env: "GEMINI_API_KEY"
+  # reasoning_effort: "medium"
 
 # Search settings
 search:
@@ -82,6 +98,11 @@ gridkit:
   binary_dir: "./applications/gridkit"  # links to GridKit/build/bin
   dynamicsimulation_binary: null        # defaults to {binary_dir}/DynamicSimulation
   timeout: 600                          # seconds per GridKit run
+  threads: 1                            # OPENBLAS_NUM_THREADS/OMP_NUM_THREADS per run (runs go
+                                        #   in parallel); null = leave the environment as is
+  damping_in_verdict: true              # false: damping is computed and reported as "info" only,
+                                        #   outside the verdict (peak-decay estimate unreliable on
+                                        #   multi-mode responses)
 
   # Written into each run's solver .json; keys are GridKit's own
   # (GridKit/application/PhasorDynamics/README.md)

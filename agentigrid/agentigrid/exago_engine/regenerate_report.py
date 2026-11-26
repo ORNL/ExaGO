@@ -17,7 +17,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from agentigrid.backends.retry import LLMCallFailed, complete_with_retry
 from agentigrid.config import AppConfig
+from agentigrid.token_usage import TokenLedger
 from agentigrid.exago_engine.goal_classifier import (
     build_classification_prompts,
     parse_goal_classification,
@@ -56,7 +58,8 @@ def load_journal_export(path: Path) -> SearchJournal:
     Rebuilds every current :class:`JournalEntry` field (dict.get with dataclass
     defaults, so older exports still load), the :class:`ObjectiveRegistry` (with
     its saved preference history), and the optional
-    ``benchmark_result`` / ``session_best`` / ``load_factor`` fields.
+    ``benchmark_result`` / ``session_best`` / ``load_factor`` / ``token_usage`` /
+    ``llm_settings`` fields.
 
     Raises:
         ValueError: If *path* looks like a ``session.json`` (has ``format_version``
@@ -133,6 +136,10 @@ def load_journal_export(path: Path) -> SearchJournal:
         journal.session_best = raw["session_best"]
     if raw.get("load_factor") is not None:
         journal.load_factor = raw["load_factor"]
+    if raw.get("token_usage") is not None:     # absent in journals before token accounting
+        journal.token_usage = raw["token_usage"]
+    if raw.get("llm_settings") is not None:    # absent in journals before settings recording
+        journal.llm_settings = raw["llm_settings"]
 
     logger.info("Loaded journal export %s (%d entries)", path, len(journal.entries))
     return journal
@@ -145,17 +152,21 @@ def build_session_stub(
     termination_reason: str = "regenerated",
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
+    token_ledger: Optional[TokenLedger] = None,
 ) -> Any:
     """Build a :class:`SearchSession` carrying exactly what ``generate()`` reads.
 
     ``SearchSession`` is a plain dataclass constructible offline (no controller,
-    no ExaGO), so the real object is used. Token counters are zeroed; timestamps
-    default to now(); ``benchmark_result`` is carried over from the journal.
+    no ExaGO), so the real object is used. Token counters come from
+    *token_ledger*, else from the journal's ``token_usage`` (zero when the journal
+    predates token accounting); timestamps default to now(); ``benchmark_result``
+    is carried over from the journal.
     """
     # Imported lazily so this module has no import-time coupling to the loop.
     from agentigrid.exago_engine.agent_loop import SearchSession
 
     now = datetime.now().isoformat()
+    ledger = token_ledger if token_ledger is not None else TokenLedger.from_dict(journal.token_usage)
     return SearchSession(
         goal=goal,
         application=config.search.application,
@@ -165,8 +176,9 @@ def build_session_stub(
         start_time=start_time or now,
         end_time=end_time or now,
         termination_reason=termination_reason,
-        total_prompt_tokens=0,
-        total_completion_tokens=0,
+        total_prompt_tokens=ledger.total_prompt,
+        total_completion_tokens=ledger.total_completion,
+        token_ledger=ledger,
         objective_registry_data=journal.objective_registry.to_dict_list(),
         preference_history=journal.objective_registry.history,
         benchmark_result=journal.benchmark_result,
@@ -198,6 +210,8 @@ def regenerate_from_journal(
         Path to the written PDF.
     """
     journal = load_journal_export(journal_json_path)
+    # The session's own calls (if recorded), plus the regeneration call below.
+    ledger = TokenLedger.from_dict(journal.token_usage)
 
     analysis_text: Optional[str] = None
     gc: Optional[dict] = None
@@ -216,11 +230,21 @@ def regenerate_from_journal(
             near_optimal_abs_tol=config.report.near_optimal_abs_tol,
         )
         try:
-            resp = backend.complete(sys_p, user_p)
+            # Transient API errors are retried (llm.retry); a terminal error raises
+            # LLMCallFailed, which is not recorded in the ledger.
+            resp = complete_with_retry(backend, sys_p, user_p, config.llm.retry)
+            ledger.record("report", resp, prompt_chars=len(sys_p) + len(user_p))
             analysis_text = resp.raw_text
             gc = parse_goal_classification(
                 analysis_text, {e.iteration for e in journal.entries}
             )
+        except LLMCallFailed as exc:
+            logger.warning(
+                "Analysis regeneration failed (%s after %d attempt(s): %s); "
+                "rendering PDF without it.", exc.termination, exc.attempts, exc.message[:300]
+            )
+            analysis_text = None
+            gc = None
         except Exception as exc:  # noqa: BLE001 — best-effort; PDF still renders
             logger.warning(
                 "Analysis regeneration failed (%s); rendering PDF without it.", exc
@@ -228,7 +252,7 @@ def regenerate_from_journal(
             analysis_text = None
             gc = None
 
-    session = build_session_stub(journal, config, goal)
+    session = build_session_stub(journal, config, goal, token_ledger=ledger)
 
     # Imported here (not at module top) so the deterministic --no-analysis path
     # and unit tests don't pay the ReportLab/Plotly import cost unless rendering.

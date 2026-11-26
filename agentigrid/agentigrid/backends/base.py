@@ -18,6 +18,36 @@ class LLMResponse:
     backend: str
     prompt_tokens: Optional[int]
     completion_tokens: Optional[int]
+    # Usage details, when the provider reports them (see derive_reasoning_tokens).
+    reasoning_tokens: Optional[int] = None
+    api_total_tokens: Optional[int] = None      # the provider's own usage.total_tokens
+    reasoning_tokens_derived: bool = False      # True: reasoning is outside completion_tokens
+    # Set when the call failed (raw_text then holds the error message):
+    # "transient", "quota" or "fatal" (agentigrid.backends.retry.classify_error).
+    error_kind: Optional[str] = None
+    retry_after_s: Optional[float] = None       # retry delay the provider suggested, if any
+
+
+def derive_reasoning_tokens(
+    prompt_tokens: Optional[int],
+    completion_tokens: Optional[int],
+    reported_reasoning: Optional[int],
+    api_total_tokens: Optional[int],
+) -> tuple[Optional[int], bool]:
+    """Return ``(reasoning_tokens, derived)`` for one response.
+
+    A reported count (OpenAI ``completion_tokens_details.reasoning_tokens``, a
+    sub-count of ``completion_tokens``) is used as is. Otherwise, when the
+    provider total exceeds prompt + completion (Gemini's OpenAI-compatible
+    endpoint counts thinking only in ``total_tokens``), the difference is the
+    reasoning count and lies *outside* ``completion_tokens`` (``derived=True``).
+    """
+    if reported_reasoning is not None:
+        return reported_reasoning, False
+    if prompt_tokens is None or completion_tokens is None or api_total_tokens is None:
+        return None, False
+    extra = api_total_tokens - prompt_tokens - completion_tokens
+    return (extra, True) if extra > 0 else (None, False)
 
 
 class LLMBackend(ABC):
@@ -51,3 +81,11 @@ class LLMBackend(ABC):
     def supports_json_mode(self) -> bool:
         """Whether this backend supports a native JSON output mode."""
         ...
+
+    def endpoint(self) -> Optional[str]:
+        """URL the requests go to (for the run's settings record), if known."""
+        return None
+
+    def reasoning_param(self) -> dict:
+        """The reasoning parameter actually sent with each request ({} if none)."""
+        return {}

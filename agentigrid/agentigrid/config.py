@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 import os
 import re
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+
+from agentigrid.gridkit_engine.criteria import DAMPING_METHODS
 
 logger = logging.getLogger("agentigrid.config")
 
@@ -41,8 +43,13 @@ DEFAULTS: dict[str, Any] = {
         "openai_base_url": None,
         "ollama_host": "http://localhost:11434",
         "ollama_cloud_host": None,
-        "temperature": 0.3,
+        "temperature": 0.3,          # null: no temperature is sent
         "max_tokens": 4096,
+        "reasoning_effort": None,    # null: nothing is sent (provider default)
+        "retry": {
+            "max_retries": 5,                       # transient API errors (5xx, timeouts, connection, 429 rate limit)
+            "backoff_s": [10, 30, 60, 120, 240],    # wait before retry 1, 2, ...; the last value repeats
+        },
     },
     "search": {
         "max_iterations": 20,
@@ -103,6 +110,14 @@ DEFAULTS: dict[str, Any] = {
         "binary_dir": "./applications/gridkit",
         "dynamicsimulation_binary": None,
         "timeout": 600,
+        "threads": 1,
+        "damping_in_verdict": True,
+        "damping_method": "peak",
+        "final_voltage_window_s": 0.0,
+        "final_voltage_margin_pu": 0.0,
+        "short_circuit_info": False,
+        "weak_bus_percentile": 5.0,
+        "final_voltage_pre_fault_delta_pu": 0.0,
         "study": {
             "tmax": 15.0,
             "dt_monitor": 0.01,
@@ -150,6 +165,20 @@ class DataConfig:
 
 
 @dataclass(frozen=True)
+class RetryConfig:
+    """Retries of transient LLM API errors (agentigrid.backends.retry)."""
+
+    max_retries: int = 5
+    backoff_s: tuple[float, ...] = (10.0, 30.0, 60.0, 120.0, 240.0)
+
+    def wait_s(self, retry_index: int) -> float:
+        """Seconds to wait before retry *retry_index* (0-based); the last value repeats."""
+        if not self.backoff_s:
+            return 0.0
+        return float(self.backoff_s[min(retry_index, len(self.backoff_s) - 1)])
+
+
+@dataclass(frozen=True)
 class LLMConfig:
     backend: str
     model: str
@@ -157,8 +186,12 @@ class LLMConfig:
     openai_base_url: Optional[str]
     ollama_host: str
     ollama_cloud_host: Optional[str]
-    temperature: float
+    temperature: Optional[float]          # None: the parameter is not sent
     max_tokens: int
+    # Sent as reasoning_effort (OpenAI-compatible, incl. Gemini) or think (Ollama);
+    # None: nothing is sent and the provider default applies.
+    reasoning_effort: Optional[str] = None
+    retry: RetryConfig = field(default_factory=RetryConfig)
 
 
 @dataclass(frozen=True)
@@ -264,6 +297,14 @@ class GridkitConfig:
     binary_dir: Path = Path("./applications/gridkit")
     dynamicsimulation_binary: Optional[Path] = None   # defaults to {binary_dir}/DynamicSimulation
     timeout: float = 600        # seconds per GridKit run
+    threads: Optional[int] = 1  # OPENBLAS/OMP_NUM_THREADS per run; None = leave the environment as is
+    damping_in_verdict: bool = True   # False: damping is reported as "info", outside the verdict
+    damping_method: str = "peak"      # "modal": robust matrix pencil instead of the peak method
+    final_voltage_window_s: float = 0.0    # > 0: final voltage = mean of the last window_s seconds
+    final_voltage_margin_pu: float = 0.0   # > 0: final-voltage band widened by this (e.g. 1e-5)
+    short_circuit_info: bool = False       # true: report Ssc of the faulted buses (information only)
+    weak_bus_percentile: float = 5.0       # weak bus = weakest p % of the buses at the same voltage
+    final_voltage_pre_fault_delta_pu: float = 0.0   # > 0: final voltage relative to the pre-fault value (e.g. 1e-3)
     study: GridkitStudyConfig = field(default_factory=GridkitStudyConfig)
     fault: GridkitFaultConfig = field(default_factory=GridkitFaultConfig)
 
@@ -383,7 +424,10 @@ def load_config(
 
     data = _build_section(DataConfig, merged["data"], config_root, {"data_dir"})
 
-    llm = _build_section(LLMConfig, merged["llm"], config_root, set())
+    llm_raw = dict(merged["llm"])
+    llm = replace(_build_section(LLMConfig, {k: v for k, v in llm_raw.items() if k != "retry"},
+                                 config_root, set()),
+                  retry=_build_retry(llm_raw.get("retry")))
 
     search_path_fields = {"base_case", "gic_file", "ctgc_file", "pload_profile", "qload_profile", "wind_profile", "scenario_file"}
     search = _build_section(SearchConfig, merged["search"], config_root, search_path_fields)
@@ -421,7 +465,30 @@ def _build_gridkit(raw: dict, root: Path) -> GridkitConfig:
              for name, cls in nested.items()}
     return GridkitConfig(binary_dir=base.binary_dir,
                          dynamicsimulation_binary=base.dynamicsimulation_binary,
-                         timeout=base.timeout, **parts)
+                         timeout=base.timeout, threads=base.threads,
+                         damping_in_verdict=bool(base.damping_in_verdict),
+                         damping_method=str(base.damping_method),
+                         final_voltage_window_s=float(base.final_voltage_window_s),
+                         final_voltage_margin_pu=float(base.final_voltage_margin_pu),
+                         short_circuit_info=bool(base.short_circuit_info),
+                         weak_bus_percentile=float(base.weak_bus_percentile),
+                         final_voltage_pre_fault_delta_pu=float(base.final_voltage_pre_fault_delta_pu), **parts)
+
+
+def _build_retry(raw: Optional[dict]) -> RetryConfig:
+    """The ``llm.retry`` section; an empty or null section keeps the defaults."""
+    base = DEFAULTS["llm"]["retry"]
+    raw = {**base, **(raw or {})}
+    unknown = set(raw) - {f.name for f in fields(RetryConfig)}
+    if unknown:
+        logger.warning("Unknown key(s) in llm.retry: %s (ignored)", sorted(unknown))
+    backoff = raw.get("backoff_s")
+    if backoff is None:
+        backoff = base["backoff_s"]
+    elif not isinstance(backoff, (list, tuple)):
+        backoff = [backoff]
+    return RetryConfig(max_retries=max(0, int(raw.get("max_retries") or 0)),
+                       backoff_s=tuple(float(b) for b in backoff))
 
 
 def _validate(cfg: AppConfig) -> None:
@@ -543,6 +610,22 @@ def _validate(cfg: AppConfig) -> None:
         )
 
     study, fault = cfg.gridkit.study, cfg.gridkit.fault
+    if cfg.gridkit.damping_method not in DAMPING_METHODS:
+        raise ValueError(f"gridkit.damping_method must be {' or '.join(repr(m) for m in DAMPING_METHODS)}, "
+                         f"not '{cfg.gridkit.damping_method}'")
+    if cfg.gridkit.final_voltage_window_s < 0 or cfg.gridkit.final_voltage_margin_pu < 0:
+        raise ValueError("gridkit.final_voltage_window_s and final_voltage_margin_pu must be >= 0")
+    if cfg.gridkit.final_voltage_pre_fault_delta_pu < 0:
+        raise ValueError("gridkit.final_voltage_pre_fault_delta_pu must be >= 0")
+    if cfg.gridkit.final_voltage_pre_fault_delta_pu > 0.01:
+        logger.warning("gridkit.final_voltage_pre_fault_delta_pu=%s pu is large; it is meant for tiny "
+                       "post-fault movements of buses held at a limit (e.g. 1e-3).",
+                       cfg.gridkit.final_voltage_pre_fault_delta_pu)
+    if not 0 < cfg.gridkit.weak_bus_percentile < 100:
+        raise ValueError("gridkit.weak_bus_percentile must be between 0 and 100")
+    if cfg.gridkit.final_voltage_window_s >= study.tmax:
+        logger.warning("gridkit.final_voltage_window_s=%s s is not shorter than the run (%s s).",
+                       cfg.gridkit.final_voltage_window_s, study.tmax)
     if not 1 <= study.max_order <= 5:
         logger.warning("gridkit.study.max_order=%s is outside 1-5; GridKit will refuse to run.",
                        study.max_order)

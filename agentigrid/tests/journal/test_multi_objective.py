@@ -293,6 +293,11 @@ class TestMetricExtractor:
         val = extract_metric(sample_opflow_result, "voltage_range")
         assert val == pytest.approx(1.04 - 0.95)
 
+    def test_voltage_at_bus(self, sample_opflow_result):
+        assert extract_metric(sample_opflow_result, "voltage_at_bus_2") == 0.95
+        assert extract_metric(sample_opflow_result, "voltage_at_bus_99") is None
+        assert extract_metric(sample_opflow_result, "voltage_at_bus_2x") is None
+
     def test_extract_max_line_loading_pct(self, sample_opflow_result):
         val = extract_metric(sample_opflow_result, "max_line_loading_pct")
         assert val == pytest.approx(80.0)

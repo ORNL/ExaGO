@@ -36,6 +36,10 @@ _GOAL_TYPE_DEFS = (
 )
 
 
+# Bound on the latest results summary in the prompt (sweep views can be long).
+MAX_LATEST_RESULTS_CHARS = 12000
+
+
 def build_classification_prompts(
     goal: str,
     termination_reason: str,
@@ -46,6 +50,8 @@ def build_classification_prompts(
     preference_history: list[dict] | None = None,
     application: str = "opflow",
     near_optimal_abs_tol: float | None = None,
+    latest_results_text: str | None = None,
+    final_findings: dict | None = None,
 ) -> tuple[str, str]:
     """Build the (system_prompt, user_prompt) pair for post-search goal classification.
 
@@ -58,7 +64,8 @@ def build_classification_prompts(
         termination_reason: How the search ended (completed, max_iterations, etc.).
         stats: dict from ``SearchJournal.summary_stats()`` (before any override).
         journal_formatted: Output of ``SearchJournal.format_detailed()``.
-        total_tokens: Total prompt + completion tokens used during the search.
+        total_tokens: Prompt + completion tokens of every LLM call made before this
+            one (all phases; the classification call cannot count itself).
         objective_registry: Optional list of tracked objective dicts.
         preference_history: Optional list of preference change dicts.
         application: ExaGO application name (e.g., "opflow", "tcopflow", "sopflow").
@@ -66,6 +73,10 @@ def build_classification_prompts(
             candidates ranked by a scalar are statistically tied. Threaded from
             ``config.report.near_optimal_abs_tol``; when None the guidance refers
             to "the solver tolerance" generically.
+        latest_results_text: Optional results summary of the last simulation the
+            search saw (the journal digest has no per-bus values); cut to
+            ``MAX_LATEST_RESULTS_CHARS``.
+        final_findings: Optional findings the search reported when it completed.
 
     Returns:
         Tuple of (system_prompt, user_prompt) strings.
@@ -138,11 +149,25 @@ def build_classification_prompts(
         f"\n"
         f"Lowest-cost feasible: {stats['best_objective']} "
         f"({_best_loc})\n"
-        f"Tokens used: ~{total_tokens:,}\n"
+        f"Tokens used before this analysis: ~{total_tokens:,}\n"
         f"\n"
         f"=== Detailed Journal ===\n"
         f"{journal_formatted}\n"
     )
+
+    if final_findings:
+        user_prompt += (
+            f"\n=== Final Findings (reported by the search at completion) ===\n"
+            f"{json.dumps(final_findings, indent=2)}\n"
+        )
+    if latest_results_text:
+        text = latest_results_text
+        if len(text) > MAX_LATEST_RESULTS_CHARS:
+            text = text[:MAX_LATEST_RESULTS_CHARS] + "\n[... cut]"
+        user_prompt += (
+            f"\n=== Latest Results (the last simulation output the search saw) ===\n"
+            f"{text}\n"
+        )
 
     if objective_registry:
         user_prompt += (

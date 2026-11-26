@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from agentigrid.backends import create_backend
+from agentigrid.backends.retry import LLMCallFailed, complete_with_retry
 from agentigrid.config import load_config
 from agentigrid.exago_engine.agent_loop import AgentLoopController, SearchSession
 from agentigrid.exago_engine.goal_classifier import build_classification_prompts, parse_goal_classification
@@ -238,7 +239,16 @@ class SessionManager:
                 near_optimal_abs_tol=session.config.report.near_optimal_abs_tol,
             )
 
-            response = backend.complete(system_prompt, user_prompt)
+            # Transient API errors are retried (llm.retry); a terminal error raises
+            # LLMCallFailed and nothing is recorded in the ledger.
+            response = complete_with_retry(backend, system_prompt, user_prompt,
+                                           session.config.llm.retry)
+            # Same ledger as the session the analysis belongs to.
+            session.token_ledger.record("analysis", response,
+                                        prompt_chars=len(system_prompt) + len(user_prompt))
+            session.total_prompt_tokens = session.token_ledger.total_prompt
+            session.total_completion_tokens = session.token_ledger.total_completion
+            session.journal.token_usage = session.token_ledger.to_dict()
             raw_text = response.raw_text
 
             valid_iters = {e.iteration for e in session.journal.entries}
@@ -246,6 +256,10 @@ class SessionManager:
 
             return raw_text
 
+        except LLMCallFailed as exc:
+            logger.warning("Summary analysis call failed (%s after %d attempt(s)): %s",
+                           exc.termination, exc.attempts, exc.message[:300])
+            return f"Summary analysis could not be generated: {exc}"
         except Exception as exc:
             logger.warning("Failed to generate summary analysis: %s", exc)
             return f"Summary analysis could not be generated: {exc}"
@@ -398,6 +412,7 @@ class SessionManager:
                 current_network=None,
                 total_prompt_tokens=self._session.total_prompt_tokens,
                 total_completion_tokens=self._session.total_completion_tokens,
+                token_usage=self._session.token_ledger.to_dict(),
                 last_iteration=len(self._session.journal) - 1,
                 termination_reason=self._session.termination_reason,
             )
